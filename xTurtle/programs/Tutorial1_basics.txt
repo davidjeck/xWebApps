@@ -1,0 +1,79 @@
+{ xTurtle Tutorial Example #1: Basics.
+  
+  This file demos some of the built-in
+  commands of the xTurtle language.
+  
+  First lesson:  This is a comment,
+  since it is enclosed between { and }.
+  Comments are ignored by the computer.  
+}
+  
+forward(5)  { Move turtle forward 5 units,
+              drawing a line as it goes. }
+
+turn(90)  { Rotate turtle 90 degrees,
+            counterclockwise. }
+            
+green  { Change drawing color to green.
+         Color names include red, green,
+         blue, cyan, magenta, yellow,
+         black, gray. }
+         
+forward(2)  { Move forward 2. }
+back(4)     { Move backwards 4. }
+
+{ The net result of the preceding commands
+  is to draw a red and green T-shape.
+  Red is the default drawing color.
+}
+
+PenUp  { When pen is up, turtle doesn't
+         draw anything as it moves. }
+         
+MoveTo(-5,3)  { Move directly to the point
+                with coordinates (-5,3) }
+  
+PenDown { Start drawing again. }
+
+rgb(1,0.5,0.5) { Changes drawing color to
+                 the color with red, green,
+                 blue components given by
+                 1, 0.5, 0.5.  This will
+                 be sort-of-pink. }
+
+face(0)  { Set turtle's heading to 0 degrees,
+           meaning face to the right. }
+           
+circle(3)   { Draw a circle of radius 3. 
+              The circle is drawn to the
+              left of the turtle's current
+              position. }
+              
+PenUp
+MoveTo(-3,-7)  { Move again. }
+PenDown
+
+Magenta { Change drawing color to magenta. }
+
+Arc(2,90)  { Draw a 90-degree arc of a
+             radius-2 circle. }
+forward(3) 
+Arc(2,90)
+forward(3)
+Arc(2,90)
+forward(3)
+Arc(2,90)  
+forward(3) { A box with rounded corners has
+             been drawn. }
+             
+PenUp
+MoveTo(5,-5)  { Move again. }
+PenDown
+
+black  { Draw in black. }
+DrawText("Hello")  { Write the message Hello
+                     at current cursor position. }
+
+DrawText("World!")  { This lines up under
+                      the Hello. }
+

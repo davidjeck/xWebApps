@@ -1,0 +1,30 @@
+{ A multitasking program in which six turtles all do
+  "random walks", using six different colors.  A random walk
+  in this case means selecting a direction at random and
+  moving forward a small amount, and repeating that forever.
+  If a turtle moves of the screen, it jumps back to the
+  center.
+   
+  SUGGESTED: Run at "Fastest" speed with "Hide Turtles" enabled.
+}
+
+fork(6)                { create six turtles }
+hsb(forknumber/6,1,1)  { since forknumber is different for each
+                         turtle, this lets each turtle draw with
+                         a different color.}
+
+loop
+
+   exit if 1=2  { Never exit; this is an infinite loop. }
+   
+   forward(0.2)
+   face( 360*random )  { Face in a random direction,
+                        from 0 to 360 degrees. }
+   
+   if abs(xcoord) > 10 or abs(ycoord) > 10 then
+      { turtle has moved outside the drawing area,
+        so move it back to the center }
+      home
+   end if
+   
+end loop

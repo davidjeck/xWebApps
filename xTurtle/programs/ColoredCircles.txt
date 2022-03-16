@@ -1,0 +1,19 @@
+
+{ This program draws some randomly colored
+  circles, all intersecting at the center
+  of the turtle graphics area.  After each
+  circle is drawn, the turtle rotates by
+  5 degrees.  It stops when its heading is
+  zero, that is, when it is facing to the
+  right. 
+  
+  By the way, { and } enclose a comment,
+  which is ignored by the computer.  }
+
+
+LOOP
+   hsb(random,1,1)
+   circle(4)  
+   turn(5)
+   EXIT IF heading = 0
+END LOOP

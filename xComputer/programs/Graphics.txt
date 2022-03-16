@@ -1,0 +1,36 @@
+
+; This is a very simple program that is meant to demonstrate the
+; graphical memory display that is shown on the right edge of
+; the xComputer below. Each pixel in the the graphics display
+; represents one bit in memory.  The pixel is white if that bit 
+; is zero and is black if that bit is one.   Each row of dots
+; represents the numbers in four 16-bit memory locations.  As 
+; the computer executes a program, you can watch the dots change 
+; as memory is modified.  This can be particularly nice if you 
+; set the run speed pop-up menu to "Fastest Run Speed".
+
+; The program simply stores the numbers 1, 2, 3, ... in
+; consecutive memory locations, starting at location 20.
+
+; (Note: This is a self-modifying program, an old-fashioned
+; but cute idea.  The commands in locations 2 and 4 are
+; changed as the program runs so that they load and store
+; into different locations each time they are executed.)
+
+lod-c 1   ; Put the starting number in location 20
+sto 20
+
+lod 20    ; Add 1 to the number in location 20 and put the
+inc       ;     result into location 21
+sto 21
+
+lod 2     ; Modify the instruction in location 2 so it
+inc       ;   loads from the next location.
+sto 2
+
+lod 4     ; Modify the instruction in location 4 so it
+inc       ;   stores into the next location.
+sto 4
+
+jmp 2     ; Go back to the "LOD" instruction in
+          ;     location 2.

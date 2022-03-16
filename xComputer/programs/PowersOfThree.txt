@@ -1,0 +1,138 @@
+; This fiendishly-difficult-to-write program computes powers of
+; three up to "any" number of digits.  It starts with N1=3,
+; copies N1 to N2, then adds N2 to N1 twice and repeats this
+; forever.  Note that this program is NOT restricted to 16-bit
+; numbers; it can work with numbers with many more bits than
+; that spread out over a long sequence of memory locations.
+; This program uses two such multi-location numbers, one
+; at location 500 and one at location 1000.  The program
+; itself loads starting at location 0.
+
+; The main point of giving you this computation is to let
+; you "see" what a real computation might look like.  Watch
+; this at "Fastest Run Speed" speed and watch the graphical
+; memory display.  The program is a random scattering of bits
+; at the top of the memory.  Several locations just after the
+; program hold data that is used continually during the
+; computation.  You will see the bits in these locations
+; dancing the whole time the program is running.  You will
+; also see the multi-location number at the bottom of the
+; screen fill up more and more locations as it grows larger
+; and larger.
+
+1024# 0  ; The notation "1024#" tells the assembler to
+         ; repeat the next item 1024 times in memory.
+         ; In this case, 1024 zeros are stored in memory,
+         ; effectively clearing out anything that might
+         ; have been there before.
+
+
+@0       ; Start loading instructions at location 0
+
+       lod-c 3
+       sto N1
+       lod-c 1
+       sto ct1
+
+copy:  lod ct1
+       sto ct2
+       sto ct
+       lod-c N1
+       sto src
+       lod-c N2
+       sto dest
+c1:    lod-i src
+       sto-i dest
+       lod ct
+       dec
+       jmz sum
+       sto ct
+       lod src
+       dec
+       sto src
+       lod dest
+       dec
+       sto dest
+       jmp c1
+
+sum:   lod ct2
+       sto ct
+       lod-c N2
+       sto src
+       lod-c N1
+       sto dest
+       lod-c 0
+       sto carryQ
+s1:    lod-i dest
+       add-i src
+       sto-i dest
+       jmf cr1
+s2:    lod-i dest
+       add-i src
+       sto-i dest
+       jmf cr2
+s3:    lod ct
+       dec
+       jmz copy
+       sto ct
+       lod src
+       dec
+       sto src
+       lod dest
+       dec
+       sto dest
+       jmp s1
+
+cr1:   lod-c s2
+       sto return
+       jmp add1
+
+cr2:   lod-c s3
+       sto return
+       jmp add1
+
+add1:  lod ct
+       sto aCt
+       lod dest
+       sto aDest
+a1:    lod aDest
+       dec
+       sto aDest
+       lod aCt
+       dec
+       sto aCt
+       jmz advnc
+       lod-i aDest
+       add-c 1
+       sto-i aDest
+       jmf a1
+       jmp-i return
+advnc: lod carryQ
+       jmz adv1
+       lod-i aDest
+       add-c 1
+       sto-i aDest
+       jmp-i return
+adv1:  lod ct1
+       inc
+       sto ct1
+       lod-c 1
+       sto-i aDest
+       lod-c 1
+       sto carryQ
+       jmp-i return
+
+return:data
+ct1:   data
+ct2:   data
+ct:    data
+src:   data
+dest:  data
+aCt:   data
+aDest: data
+carryQ:data
+
+@500
+N1: data
+@1000
+N2: data

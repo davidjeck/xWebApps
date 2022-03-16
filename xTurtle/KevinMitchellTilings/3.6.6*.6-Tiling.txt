@@ -1,0 +1,31 @@
+{
+ Semi-regular 3.6.6*.6 uniform tiling
+ using rgular star polygons. Constructed
+ from overlapping hexagons.}
+
+declare side
+side:=3
+declare perp
+perp:=side*sin(60)
+
+sub motif(side)
+face(0)
+penDown
+declare ct
+ct:=0
+  loop
+   forward(side)
+   turn(60)
+   ct:= ct+1
+   exit if ct=6
+  end loop
+end sub
+
+penUp
+fork(8)
+move((forkNumber-5)*4*side/3,0)
+fork(6)
+move(0,(forkNumber-4)*8*perp/3)
+fork(2)
+move((forkNumber-1)*2*side/3,(forkNumber-1)*4*perp/3)
+motif(side)

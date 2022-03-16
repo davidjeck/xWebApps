@@ -1,0 +1,40 @@
+{
+ Semi-regular 9.9.6* uniform tiling
+ using rgular star polygons.}
+
+declare side
+side:=1.5
+declare perp
+perp:=side*cot(20)/2
+declare rad
+rad:=side*csc(20)/2
+
+sub motif(side)
+face(90)
+penDown
+declare ct
+ct:=0
+  loop
+   forward(side)
+   turn(40)
+   ct:= ct+1
+   exit if ct=9
+  end loop
+turn(-140)
+ct:=0
+  loop
+   forward(side)
+   turn(40)
+   ct:= ct+1
+   exit if ct=8
+  end loop
+end sub
+
+penUp
+fork(5)
+move(0,(forkNumber-3)*4*perp*sin(60))
+fork(5)
+move((forkNumber-3)*4*perp*(1+cos(60)),0)
+fork(2)
+move((forkNumber-1)*2*perp*(1+cos(60)),(forkNumber-1)*2*perp*sin(60))
+motif(side)

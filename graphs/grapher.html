@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<!--
+    Web page written by David Eck, http://math.hws.edu/eck/index.html
+    This page depends on JavaScritp files xfunctions-jan2014.js.
+    You can do anything you like with this web page and with the code, but
+    if you use a substantial portion of it, you should include attribution.
+-->
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Graph Demo</title>
+
+<script src="xfunctions-jan2014.js" type="text/javascript"></script>
+<script type="text/javascript">
+    
+var canvas, graphics, parser, variable;
+
+var coords, axes, graph;
+
+function graphIt() {
+    document.getElementById("message").innerHTML = "&nbsp;";
+    document.getElementById("definition").style.backgroundColor = "white";
+    var expstr = document.getElementById("definition").value;
+    graph.setExpression(null);
+    var expression;
+    try {
+        expression = parser.parse(expstr);
+    }
+    catch (e) {
+        document.getElementById("message").innerHTML =
+            "<span style='color:red'>Error in function definition:<br>" + e + "</span>";
+        coords.draw(graphics,0,0,canvas.width,canvas.height);
+        document.getElementById("definition").style.backgroundColor = "pink";
+        return;
+    }
+    graph.setExpression(expression);
+    coords.draw(graphics,0,0,canvas.width,canvas.height);
+}
+
+function doApplyLimits() {
+    var error = null;
+    document.getElementById("limiterror").innerHTML = "&nbsp;";
+    var xmin = Number( document.getElementById("xmin").value.trim() );   
+    var xmax = Number( document.getElementById("xmax").value.trim() );   
+    var ymin = Number( document.getElementById("ymin").value.trim() );   
+    var ymax = Number( document.getElementById("ymax").value.trim() );
+    if (isNaN(xmin))
+        error = "The data entered for xmin is not a legal number";
+    else if (isNaN(xmax))
+        error = "The data entered for xmax is not a legal number";
+    else if (isNaN(ymin))
+        error = "The data entered for ymin is not a legal number";
+    else if (isNaN(ymax))
+        error = "The data entered for ymax is not a legal number";
+    else if (xmax <= xmin)
+        error = "The value of xmax must be greater than the value of xmin";
+    else if (ymax <= ymin)
+        error = "The value of ymax must be greater than the value of ymin";
+    if (error) {
+        document.getElementById("limiterror").innerHTML = "Error in limits!";
+        document.getElementById("message").innerHTML = 
+            "<span style='color:red'>" + error + "</span>";
+        graph.setExpression(null);
+        coords.draw(graphics,0,0,canvas.width,canvas.height);
+    }
+    else {
+        coords.setLimits(xmin,xmax,ymin,ymax);
+        if (document.getElementById("equalize").checked)
+            coords.equalizeAxes();
+        graphIt();
+    }
+}
+
+function init() {
+    canvas = document.getElementById("canvas");
+    graphics = canvas.getContext("2d");
+    if (graphics == null) {
+        document.getElementById("message").innerHTML = 
+            "Your browser does not have canvas support, which is required by this page!";
+        return;
+    }
+    parser = new xfunctions.Parser();
+    variable = parser.defineVariable("x");
+    coords = new xfunctions.CoordinateRect();
+    coords.setLimits(-5,5,-5,5);
+    axes = new xfunctions.Axes("x","y");
+    graph = new xfunctions.Graph1D(null,variable);
+    document.getElementById("equalize").checked = true;
+    document.getElementById("xmin").value="-5";
+    document.getElementById("xmax").value="5";
+    document.getElementById("ymin").value="-5";
+    document.getElementById("ymax").value="5";
+    document.getElementById("definition").value = "3*sin(x) + cos(3*x)";
+    document.getElementById("definition").onchange = graphIt;
+    coords.draw(graphics,0,0,canvas.width,canvas.height);
+    coords.borderWidth = 2;
+    coords.add(axes);
+    coords.add(graph);
+    coords.equalizeAxes();
+    graphIt();
+}
+
+</script>
+<head>
+<body onload="init()" style="background-color: lightGray">
+
+<h2>A Simple Function Grapher</h2>
+
+<noscript><p style="color:red">Sorry, but this page requires JavaScript.</p></noscript>
+
+<p style="text-indent:1cm">This page lets you graph a function of one variable, x.  Your function can use the<br>
+mathematical constants pi and e; it can use operators +, -, *, /, and ^ where ^ represents<br>
+raising to a power; it can use the functions sqrt, cubert, sin, cos, tan, arctan, arcsin, ln,<br>
+log2, log10, abs, round, trunc, floor, and ceiling.  A function's argument must be enclosed<br>
+in parentheses.  (The C-style ternary operator ?: is also supported, using boolean operators<br>
+==, !=, &lt;, &gt;, &lt;=, &gt;=, not, or, and.) The grapher attempts to draw vertical asymptotes and jump <br>
+discontinuities correctly, but it doesn't always work.  "Equalize axes" sets the scales on the<br>
+x- and y-axes to be the same; the specified limits will be adjusted to enforce this.</p>
+
+<div style="float:left; margin-right:1cm;">
+<canvas id="canvas" width=640 height=480 style="background-color: white"></canvas>
+</div>
+
+<div style="float:left">
+<p>
+xmin:<br><input type=text size=12 style="margin-left:0.5cm" id="xmin">
+</p>
+<p>
+xmax:<br><input type=text size=12 style="margin-left:0.5cm" id="xmax">
+</p>
+<p>
+ymin:<br><input type=text size=12 style="margin-left:0.5cm" id="ymin">
+</p>
+<p>
+ymax:<br><input type=text size=12 style="margin-left:0.5cm" id="ymax">
+</p>
+<p><button onclick="doApplyLimits()">Apply Limits</button></p>
+<p style="color:red;" id="limiterror">&nbsp;</p>
+<p><input type="checkbox" id="equalize" onchange="doApplyLimits()"><label for="equalize">Equalize Axes</label></p>
+</div>
+
+<br clear=all>
+<p><b>f(x) =</b> <input type="text" size="50" id="definition">
+<button onclick="graphIt()">Graph It</button></p>
+<p style="font-weight:bold" id="message">&nbsp;</p>
+
+
+
+</body>
+</html>

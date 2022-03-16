@@ -1,0 +1,36 @@
+declare x
+x:=2*cot(67.5)
+declare n
+
+sub octagon(side,r)
+  declare ct
+  ct := 0
+  face(-45)
+  loop
+    forward(side)
+     turn(45)
+   ct := ct+1
+    exit if ct=7
+  end loop
+		if r=0 then 
+				forward(side)
+		end if
+end sub
+
+
+
+sub tiling(n,r,x)
+	fork(n)
+	penUp
+	moveTo(-n+2*r,-n+2*(forkNumber-1)+1-x/2)
+ penDown
+	octagon(x,r)
+end sub
+
+
+AskUser("What size do you want for your floor (2-9)?",n)
+if n>9 then n:=9 end if
+if n<2 then n:=2 end if 
+fork(n)
+tiling(n,forkNumber-1,x)
+

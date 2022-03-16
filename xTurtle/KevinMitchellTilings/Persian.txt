@@ -1,0 +1,52 @@
+{
+Designed by the Persian artist Mirza Akbar 
+ early 19th century.}
+
+sub rArrow
+penDown
+move(1,0)
+move(0,.5)
+move(1,1)
+move(.5,0)
+move(0,1)
+move(-1,0)
+move(0,-.5)
+move(-1,-1)
+move(-.5,0)
+move(0,-1)
+end sub
+
+sub lArrow
+penDown
+move(0,-1)
+move(.5,0)
+move(1,-1)
+move(0,-.5)
+move(1,0)
+move(0,1)
+move(-.5,0)
+move(-1,1)
+move(0,.5)
+move(-1,0)
+end sub
+
+sub upArrows
+fork(10)
+penUp
+moveTo(3*(forkNumber-5),0)
+fork(10)
+move(0,3*(forkNumber-5))
+rArrow
+end sub
+
+sub downArrows
+fork(10)
+penUp
+moveTo(3*(forkNumber-5)+1.5,1)
+fork(10)
+move(0,3*(forkNumber-5))
+lArrow
+end sub
+
+upArrows
+downArrows

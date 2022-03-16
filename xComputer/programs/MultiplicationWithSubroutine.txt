@@ -1,0 +1,73 @@
+
+; This file uses a subroutine to multiply two numbers.
+; There is also a simple main program that calls the subroutine
+; to multiply 13 by 56.  When the main program ends, the 
+; answer will be in the accumulator.  To multiply different
+; numbers, change the values in the lod-c commands at the start
+; of the main program.
+
+
+; *********************** Main Program ********************
+
+      lod-c 13         ; Set up to call the subroutine with
+      sto N1           ;   N1 = 13, N2 = 56, and ret_addr = back.
+      lod-c 56
+      sto N2
+      lod-c back
+      sto ret_addr
+      jmp Multiply     ; Call the subroutine.
+      
+back: lod Answer       ; When the subroutine ends, it returns
+                       ;    control to this location, and the
+                       ;    product of N1 and N2 is in Answer.
+                       ;    This LOD instruction puts the answer
+                       ;    in the accumulator.
+                       
+      hlt              ; Terminate the program by halting the computer.
+
+
+
+; ---------------------- Multiply subroutine -------------------
+;
+; This is a subroutine for multiplying two integers.  (The algorithm
+; that is used is similar to what you do when you multiply two
+; two numbers by hand.  But you don't need to understand how it works.)
+; To use the subroutine, do the following steps:
+;
+;     (1)  Store the numbers to be multiplied into memory
+;          locations N1 and N2.
+;     (2)  Store the return address into memory location
+;          ret_addr.  When the subroutine ends, it will
+;          jump to this location.
+;     (3)  Jump to the start of the subroutine with a "JMP Multiply"
+;          instruction.
+;     (4)  At the return address, put a "LOD Answer" instruction
+;          to retrieve the answer computed by the subroutine.
+;
+
+@100   ; The subroutine will be loaded starting at location 100.
+
+ret_addr:   data    ; Return address for the subroutine.
+N1:         data    ; The first number to be multiplied.
+N2:         data    ; The second number to be multiplied.
+Answer:     data    ; When the subroutine ends, this will be the
+                    ;    product of N1 and N2.
+
+Multiply:   lod-c 0      ; STARTING POINT OF SUBROUTINE
+            sto Answer   ;
+loop_m:     lod N1       ;   (You don't need to understand
+            jmz done_m   ;    how this works.)
+            shr
+            sto N1
+            jmf add_m
+shift_m:    lod N2
+            shl
+            jmz done_m
+            sto N2
+            jmp loop_m
+add_m:      lod N2
+            add Answer
+            sto Answer
+            jmp shift_m
+done_m:     jmp-i ret_addr  ; Jump back to return address.
+

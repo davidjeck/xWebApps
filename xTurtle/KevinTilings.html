@@ -1,0 +1,3190 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+
+<style type="text/css">
+   body {
+       background-color: #D8D8D8;
+   }
+   canvas {
+       display: block;
+       background-color: #BBBBBB;
+   }
+   #canvas-holder {
+       display: inline-block;
+       border: 2px solid black;
+       margin: 0;
+       padding: 0;
+   }
+   #controls {
+       display: inline-block;
+       background-color:white;
+       border-left: 2px solid black;
+       border-right: 2px solid black;
+       border-top: 2px solid black;
+       padding: 0;
+       margin: 0;
+   }
+   #controls p {
+       margin: 12px 0;
+       white-space: nowrap;
+   }
+   div.group {
+       padding: 0 8px;
+       border-bottom: 2px solid black;
+   }
+   #imagediv p {
+       margin: 4px 0;
+       white-space: nowrap;
+   }
+   #turtlediv {
+       margin: 0 0 0 20px;
+       padding: 0;
+       position: relative;
+   }
+   .dialog, #errorreport {
+       display: none;
+       z-index: 10; 
+       position: absolute;
+       left: 50px;
+       top: 150px;
+       width: 500px;
+       border-radius: 16px;
+       box-shadow: 5px 5px 8px black;
+   }
+   .dialog {
+       border: 2px solid #000099;
+       background-color: #D8D8FF;
+   }
+   #errorreport {
+       border: 2px solid #AA0000;
+       background-color: #444444;
+       color: white;
+   }
+   .dialog p, #errorreport p {
+      padding: 0 10pt;
+   }
+   
+   #status {
+       white-space: nowrap;
+       font-weight: bold;
+       color: #AA0000;
+   }
+   textarea {
+     white-space: pre;
+     word-wrap: normal;
+     overflow-x: scroll;
+   }
+</style>
+
+<script>
+
+const maxProcessCount = 1000;
+const maxRecursionDepth = 2000;
+const maxForkCount = 100;
+
+var canvas, graphics, OSC, OSG;
+
+var turtles;
+
+var programs;
+var programsToLoad = null;
+var programInEditor;
+
+var /*TProgram*/ loadedProgram = null;
+var loadedProgramSymbols = null;
+var loadedProgramName = null;
+var loadedProgramTurtle = null;
+
+var alwaysHideTurtles = false;
+
+function TError( message, pos ) {
+   this.message = message;
+   this.pos = pos;
+}
+
+//-------------------------------- Running a program --------------------------------
+
+   var /*TProgram*/ prog;
+   var /* BitSet */ Semaphore;
+   var /*boolean*/ randomScheduling = false;
+   var /*boolean*/ running = false;
+   var countDownFrames;
+   var /*boolean*/ paused = false;
+   var /*double*/ userInput;
+   var userInputLoc;
+   
+   var /*Turtle*/ proc, topProc, activeProcessList;
+   var runSpeed = 1;
+   var countDownFramesForRunSpeed = [0,0,2,5,13,30];
+   
+   var /*int*/ totalNumberOfProcesses;
+   
+   var currentInputDialog = null;
+   
+   function startRunningProgram(theProgram, theTurtle) {
+      prog = theProgram;
+      proc = theTurtle;
+      Semaphore = 0;
+      topProc = proc;
+      activeProcessList = proc;
+      proc.recursionDepth = 0;
+      totalNumberOfProcesses = 0;
+      running = true;
+      countDownFrames = 15;
+      document.getElementById("doit").disabled = true;
+      document.getElementById("command").disabled = true;
+      document.getElementById("run").disabled = true;
+      document.getElementById("pause").disabled = false;
+      document.getElementById("stop").disabled = false;
+      document.getElementById("status").innerHTML = "xTurtle Status: Running";
+      requestAnimationFrame(doInstructions);
+   }
+   
+   function stopRunning() {
+      if (!running)
+         return;
+      if (currentInputDialog) {
+         currentInputDialog.style.display = "none";
+         currentInputDialog = null;
+      }
+      running = false;
+      paused = false;
+      proc = topProc;
+      proc.prev = proc.next = proc;
+      proc.children = null;
+      activeProcessList = proc;
+      document.getElementById("doit").disabled = false;
+      document.getElementById("command").disabled = false;
+      document.getElementById("run").disabled = true;
+      document.getElementById("pause").disabled = true;
+      document.getElementById("stop").disabled = true;
+      document.getElementById("status").innerHTML = "xTurtle Status: Finished " + loadedProgramName;
+      doDraw();
+      document.getElementById("command").focus();
+      document.getElementById("command").select();
+   }
+   
+   function pauseRunning() {
+      if (!running || paused)
+         return;
+      document.getElementById("run").disabled = false;
+      document.getElementById("pause").disabled = true;
+      paused = true;
+   }
+   
+   function resumeRunning() {
+      if (!running || !paused)
+         return;
+      document.getElementById("run").disabled = true;
+      document.getElementById("pause").disabled = false;
+      paused = false;
+      countDownFrames = 0;
+      requestAnimationFrame(doInstructions);
+   }
+   
+   function gotInput() {
+      currentInputDialog.style.display = "none";
+      console.log("got input " + userInputLoc + " " + userInput);
+      if (currentInputDialog == document.getElementById("askuser") ||
+               currentInputDialog == document.getElementById("yesorno") )
+         proc.store(userInputLoc,userInput);
+      currentInputDialog = null;
+      if (running && !paused)
+         requestAnimationFrame(doInstructions);
+   }
+   
+   function waitForInput(command, message) {
+      if ( command == TTokenizer.AskUser_ ) {
+         currentInputDialog = document.getElementById("askuser");
+         document.getElementById("aumessage").innerHTML = message;
+         document.getElementById("auinput").value = "";
+         document.getElementById("auinput").focus();
+      }
+      else if ( command == TTokenizer.TellUser_ ) {
+         currentInputDialog = document.getElementById("telluser");
+         document.getElementById("tumessage").innerHTML = message;
+      }
+      else {
+         currentInputDialog = document.getElementById("yesorno");
+         document.getElementById("ynmessage").innerHTML = message;
+      }
+      currentInputDialog.style.display = "block";
+   }
+   
+   function showErrorDialog(message) {
+       document.getElementById("errorreport").style.display = "block";
+       document.getElementById("errormessage").innerHTML = message;
+   }
+   
+   function doError(message) {
+      throw new TError(message,-1);
+   }
+   
+   function doInstructions() {
+       if (!running || paused || currentInputDialog)
+          return;
+       if (countDownFrames > 0) {
+          countDownFrames--;
+          requestAnimationFrame(doInstructions);
+          return;
+       }
+       try {
+         countDownFrames = countDownFramesForRunSpeed[runSpeed-1];
+         var numberExecuted = 0;
+         var drawCommands = 0;
+         var insCt = randomScheduling? 3 + Math.floor(7*Math.random()) : 1;
+         while (true) {
+            let draw = doInstruction();
+            insCt--;
+            if (insCt <= 0) {
+                proc = proc.next;
+                insCt = randomScheduling? 5 + Math.floor(10*Math.random()) : 1;
+            }
+            if (draw) {
+                drawCommands++;
+                if (runSpeed > 1 || drawCommands == 5) {   
+                    break;
+                }
+            }
+            if (!running || currentInputDialog)
+               break;
+            numberExecuted++;
+            if (numberExecuted == 1000) {
+                countDownFrames = 0;
+                break;
+            }
+         }
+         if (drawCommands > 0) {
+            doDraw();
+         }
+         if (running && !paused && !currentInputDialog) {
+            requestAnimationFrame(doInstructions);
+         }
+       }
+       catch (e) {
+           stopRunning();
+           if (e instanceof TError) {
+               showErrorDialog("Runtime error: " + e.message);
+           }
+           else {
+               showErrorDialog("Internal error (this is a bug): " + e);
+               if (e.stack) console.log(e.stack);
+           }
+       }
+   }
+      
+   function doInstruction() {  // returns needsRedraw
+      var loc = proc.programCounter;
+      proc.programCounter++;
+      var kind = prog.ins[loc];
+      //console.log("Execute " + kind + " at " + loc);
+      if (kind >= TTokenizer.sin_ && kind <= TTokenizer.EQ_) {
+         doComputation(kind);
+         return false;
+      }
+      var needsRedraw = false;
+      var str;
+      var p1 = 0, p2 = 0, p3 = 0, addr = 0;
+      if (kind >= TTokenizer.Fork_ && kind <= TTokenizer.hsb_) {
+        p1 = proc.pop();
+        if (isNaN(p1))
+          doError("Uninitialized value used as subroutine parameter.");
+        if (kind >= TTokenizer.Move_) {
+          p2 = proc.pop();
+          if (isNaN(p2))
+              doError("Uninitialized value used as subroutine parameter.");
+          if (kind >= TTokenizer.rgb_) {
+             p3 = proc.pop();
+             if (isNaN(p3))
+                doError("Uninitialized value used as subroutine parameter.");
+          }
+        }
+      }
+      switch (kind) {
+       case TTokenizer.Jump_: 
+         proc.programCounter = prog.data[loc];
+         break;
+       case TTokenizer.JumpToSubroutine_:
+         proc.recursionDepth++;
+         if (proc.recursionDepth > maxRecursionDepth)
+            doError("Your program has exceeded the maximum allowed subroutine call depth of " + maxRecursionDepth + ".  Check for 'infinite recursion.'");
+         proc.programCounter = prog.data[loc];
+         proc.stackRef = proc.stackTop - 1;
+         break;
+       case TTokenizer.SubroutineSetup_:
+       case TTokenizer.FunctionSetup_:
+         if (kind == TTokenizer.FunctionSetup_)
+           proc.push(NaN);
+         proc.push(proc.stackRef);
+         proc.push(proc.programCounter);
+         break;
+       case TTokenizer.AdjustSavedPC_: 
+         proc.stack[proc.stackTop - proc.stackStart - prog.data[loc] - 1] = proc.programCounter + 1;
+         break;
+       case TTokenizer.SetStackRef_:
+         proc.stackRef = proc.stackTop - prog.data[loc] - 1;
+         break;
+       case TTokenizer.Reserve_: 
+         for (i = 1; i<= prog.data[loc] - topProc.stackTop; i++)
+           proc.push(NaN);
+         break;
+       case TTokenizer.HideTurtle_:
+         needsRedraw = true;
+         proc.turtleIsVisible = false;
+         break;
+       case TTokenizer.ShowTurtle_:
+         needsRedraw = true;
+         proc.turtleIsVisible = true;
+         break;
+       case TTokenizer.Clear_: 
+         OSG.fillStyle = "white";
+         OSG.fillRect(0,0,canvas.width,canvas.height);
+         needsRedraw = true;
+         break;
+       case TTokenizer.Home_: 
+         proc.turtleX = proc.turtleY = proc.turtleHeading = 0;
+         needsRedraw = true;
+         break;
+       case TTokenizer.PenUp_: 
+         proc.turtleIsDrawing = false;
+         break;
+       case TTokenizer.PenDown_: 
+         proc.turtleIsDrawing = true;
+         break;
+       case TTokenizer.red_:
+         proc.color = "red";
+         break;
+       case TTokenizer.blue_:
+         proc.color = "blue";
+         break;
+       case TTokenizer.green_:
+         proc.color = "green";
+         break;
+       case TTokenizer.cyan_:
+         proc.color = "cyan";
+         break;
+       case TTokenizer.magenta_:
+         proc.color = "magenta";
+         break;
+       case TTokenizer.yellow_:
+         proc.color = "yellow";
+         break;
+       case TTokenizer.gray_:
+         proc.color = "gray";
+         break;
+       case TTokenizer.darkGray_:
+         proc.color = "darkGray";
+         break;
+       case TTokenizer.lightGray_:
+         proc.color = "lightGray";
+         break;
+       case TTokenizer.black_:
+         proc.color = "black";
+         break;
+       case TTokenizer.white_:
+         proc.color = "white";
+         break;
+       case TTokenizer.Die_:
+         needsRedraw = !alwaysHideTurtles;
+         doKillProcess();
+         break;
+       case TTokenizer.Halt_:
+         stopRunning();
+         break;
+       case TTokenizer.return_:
+       case TTokenizer.returnFromFunction_: 
+         doReturn(prog.data[loc]);
+         break;
+       case TTokenizer.Fork_: 
+         needsRedraw = !alwaysHideTurtles;
+         doFork(Math.round(p1));
+         break;
+       case TTokenizer.JumpIf_: 
+         if (p1 == 1)
+           proc.programCounter = prog.data[loc];
+         break;
+       case TTokenizer.Pop_: 
+         proc.store(prog.data[loc], p1);
+         break;
+       case TTokenizer.PopRefParam_:
+         addr = proc.fetch(prog.data[loc]);
+         proc.store(addr, p1);
+         break;
+       case TTokenizer.PopFunctionValue_: 
+         proc.store(-(proc.stackRef - 2), p1);
+         break;
+       case TTokenizer.Grab_: 
+         if ( (Semaphore & (1 << prog.data[loc])) == 0 ) {
+           Semaphore = Semaphore | (1 << prog.data[loc]);
+           proc.programCounter++; // bypass jump instruction
+         }
+         break;
+       case TTokenizer.endGrab_: 
+         Semaphore = Semaphore & ~(1 << prog.data[loc]);
+         break;
+       case TTokenizer.Forward_: 
+         needsRedraw = true;
+         proc.forward(p1);
+         break;
+       case TTokenizer.Back_: 
+         needsRedraw = true;
+         proc.forward(-p1);
+         break;
+       case TTokenizer.Turn_: 
+         needsRedraw = proc.turtleIsVisible && !alwaysHideTurtles;
+         proc.face(proc.turtleHeading + p1);
+         break;
+       case TTokenizer.Face_: 
+         needsRedraw = proc.turtleIsVisible && !alwaysHideTurtles;
+         proc.face(p1);
+         break;
+       case TTokenizer.Circle_: 
+         needsRedraw = true;
+         proc.circle(p1);
+         break;
+       case TTokenizer.Move_: 
+         needsRedraw = true;
+         proc.moveTo(p2 + proc.turtleX, p1 + proc.turtleY);
+         break;
+       case TTokenizer.MoveTo_: 
+         needsRedraw = true;
+         proc.moveTo(p2, p1);
+         break;
+       case TTokenizer.Arc_:
+         needsRedraw = true;
+         if (Math.abs(p2) > 360)
+            p2 = 360;
+         proc.arc(p2, p1);
+         break;
+       case TTokenizer.DrawText_:
+         needsRedraw = true;
+         str = makeString(prog.data[loc]);
+         proc.text(str);
+         break;
+       case TTokenizer.rgb_:
+         var a1 = Math.round(255*Math.max(0.0,Math.min(p1,1.0)));
+         var a2 = Math.round(255*Math.max(0.0,Math.min(p2,1.0)));
+         var a3 = Math.round(255*Math.max(0.0,Math.min(p3,1.0)));
+         proc.color = "rgb(" + a3 + "," + a2 + "," + a1 + ")";
+         break;
+       case TTokenizer.hsb_:
+         var value = Math.max(0.0,Math.min(p1,1.0));
+         var saturation = Math.max(0.0,Math.min(p2,1.0));
+         var l = value*(1-saturation/2);
+         var s = (l == 0 || l == 1)? 0 : (value-l)/Math.min(l,1-l);
+         l = Math.round(100*l);
+         s = Math.round(100*s);
+         var h = Math.round(360*Math.max(0.0,Math.min(p3,1.0)));
+         proc.color = "hsl(" + h + "," + s + "%," + l + "%)";
+         break;
+       case TTokenizer.Push_:
+         p1 = proc.fetch(prog.data[loc]);
+         proc.push(p1);
+         break;
+       case TTokenizer.PushRefParam_:
+         addr = proc.fetch(prog.data[loc]);
+         p1 = proc.fetch(Math.round(addr));
+         proc.push(p1);
+         break;
+       case TTokenizer.PushAbsoluteReference_: 
+         if (prog.data[loc] < 0)
+           proc.push(prog.data[loc]);
+         else
+           proc.push(-(proc.stackRef + prog.data[loc]));
+         break;
+       case TTokenizer.PushConstant_: 
+         proc.push(prog.constantStore[prog.data[loc]]);
+         break;
+       case TTokenizer.PushDummy_: 
+         proc.push(NaN);
+         break;
+       case TTokenizer.YesOrNo_:
+       case TTokenizer.AskUser_:
+         str = makeString(prog.data[loc]);
+         waitForInput(kind,str);
+         userInputLoc = p1;
+         break;
+       case TTokenizer.TellUser_:
+         str = makeString(prog.data[loc]);
+         waitForInput(kind,str);
+         break;
+       case TTokenizer.Random_: 
+         proc.push(Math.random());
+         break;
+       case TTokenizer.turtleX_: 
+         proc.push(Math.round(10000 * proc.turtleX) / 10000.0);
+         break;
+       case TTokenizer.turtleY_: 
+         proc.push(Math.round(10000 * proc.turtleY) / 10000.0);
+         break;
+       case TTokenizer.turtleHeading_: 
+         proc.push(Math.round(10000 * proc.turtleHeading) / 10000);
+         break;
+       case TTokenizer.TurtleIsVisible_: 
+         proc.push( proc.turtleIsVisible? 1 : 0 );
+         break;
+       case TTokenizer.TurtleIsDrawing_: 
+         proc.push( proc.turtleIsDrawing? 1 : 0 );
+         break;
+       case TTokenizer.forkNumber_: 
+         proc.push(proc.forkNumber);
+      }
+      return needsRedraw;
+      function makeString (loc) {
+         var s = "";
+         var str = prog.stringStore[loc];
+         var numCt = 0;
+         for (let i = 0; i< str.length; i++) {
+           if (str.charAt(i) == String.fromCharCode(255))
+              numCt++;
+         }
+         var nums = new Array(numCt);
+         for (let i = numCt-1; i>= 0; i--)
+            nums[i] = proc.pop();
+         numCt = 0;
+         for (let i = 0; i < str.length; i++) {
+           let ch = str.charAt(i);
+           if (ch == String.fromCharCode(255)) {
+             if ( ! isFinite(nums[numCt]) )
+                s += "(undefined)";
+             else
+                s = s + niceNum(nums[numCt]);
+             numCt++;
+           }
+           else
+             s += ch;
+         }
+         return s;
+      }
+      function niceNum(num) {
+         if (num == 0)
+            return 0;
+         if (Math.abs(num) < 0.00005 || Math.abs(num) > 50000)
+            return num.toExponential(7);
+         var str = num.toPrecision(8);
+         if (str.indexOf('.') < 0)
+            return str;
+         while (str.charAt(str.length-1) == '0') {
+            str = str.substring(0,str.length-1);
+         }
+         if (str == '.' || str == "+." || str == "-.")
+            return "0";
+         if (str.charAt(str.length-1) == '.')
+            str = str.substring(0,str.length-1);
+         return str;
+      }
+      function doKillProcess() {
+          if (activeProcessList == proc && proc.next == proc) {
+            stopRunning();
+            return;
+          }
+          var newproc = proc.prev;
+          if (activeProcessList == proc)
+            activeProcessList = newproc;
+          proc.next.prev = proc.prev;
+          proc.prev.next = proc.next;
+          do {
+            let parent = proc.parent;
+            for (let i = 0; i < parent.children.length; i++) {
+              if (parent.children[i] == proc) {
+                 totalNumberOfProcesses--;
+                 if (parent.children.length == 1)
+                    parent.children = null;
+                 else
+                    parent.children.splice(i,1);
+                 break;
+              }
+            }
+            proc = parent;
+          } while (proc.children == null);
+          proc = newproc;
+      }
+      function doFork (processCt) {
+          if (processCt < 1)
+            doError("The number of processes in a fork command must be positive.");
+          if (processCt > maxForkCount)
+            doError("The number of processes created by a fork command is limited to " + maxForkCount + ".");
+          if (processCt == 1)
+            return;
+          totalNumberOfProcesses += processCt;
+          console.log("Processes " + totalNumberOfProcesses);
+          if (totalNumberOfProcesses > maxProcessCount)
+             doError("Your program has created more than the permitted maximum of " + maxProcessCount + " processes.");
+          proc.children = [];
+          for (let i = 1; i<= processCt; i++) {
+            let newProc = new Turtle(proc.programCounter, proc);
+            proc.children.push(newProc);
+            newProc.programCounter = proc.programCounter;
+            newProc.stackTop = proc.stackTop;
+            newProc.stackStart = proc.stackTop;
+            newProc.stackRef = proc.stackRef;
+            newProc.turtleX = proc.turtleX;
+            newProc.turtleY = proc.turtleY;
+            newProc.turtleHeading = proc.turtleHeading;
+            newProc.turtleIsVisible = proc.turtleIsVisible;
+            newProc.turtleIsDrawing = proc.turtleIsDrawing;
+            newProc.recursionDepth = proc.recursionDepth;
+            newProc.color = proc.color;
+            newProc.forkNumber = i;
+            insertProcess(newProc);
+          }
+          if (activeProcessList == proc)
+            activeProcessList = proc.next;
+          proc.next.prev = proc.prev;
+          proc.prev.next = proc.next;
+          proc.prev = proc;
+          proc.next = proc;
+          proc = proc.children[0].prev;
+      }
+     function doReturn (stackItems) {
+          var newTop = proc.stackTop - stackItems;
+          while (newTop <= proc.stackStart) {
+            let parent = proc.parent;
+            for (let i = 0; i < parent.children.length; i++) {
+               if (parent.children[i] == proc) {
+                  totalNumberOfProcesses--;
+                  if (parent.children.length == 1)
+                     parent.children = null;
+                  else
+                     parent.children.splice(i,1);
+                  break;
+               }
+            }
+            if (parent.children != null) { // all children must return before caller resumes
+              let nextProc = proc.prev;
+              if (activeProcessList == proc) {
+                 activeProcessList = proc.prev;
+              }
+              proc.next.prev = proc.prev;
+              proc.prev.next = proc.next;
+              proc = nextProc;
+              needsRedraw = !alwaysHideTurtles;
+              return;
+            }
+            insertProcess(parent);
+            proc.next.prev = proc.prev;
+            proc.prev.next = proc.next;
+            if (activeProcessList == proc)
+              activeProcessList = parent;
+            proc = parent;
+          }
+          proc.stackTop = newTop;
+          proc.programCounter = proc.pop();
+          proc.stackRef = proc.pop();
+          proc.recursionDepth--;
+      }
+      function insertProcess (newproc) {
+        newproc.next = proc;
+        newproc.prev = proc.prev;
+        proc.prev = newproc;
+        newproc.prev.next = newproc;
+      }
+  }
+
+  function doComputation(kind) {
+    var p1=0, p2=0, ans=0;
+    p1 = proc.pop();
+    if (isNaN(p1))
+      doError("Uninitialized value used as subroutine parameter.");
+    if (kind >= TTokenizer.plus_) {
+      p2 = proc.pop();
+      if (isNaN(p2))
+          doError("Uninitialized value used as subroutine parameter.");
+    }
+    switch (kind) {
+     case TTokenizer.not_: 
+       ans = (p1 == 0)? 1 : 0;
+       break;
+     case TTokenizer.sin_: 
+       ans = Math.sin(p1 / 180 * Math.PI);
+       break;
+     case TTokenizer.cos_: 
+       ans = Math.cos(p1 / 180 * Math.PI);
+       break;
+     case TTokenizer.tan_:
+       ans = Math.tan(p1 / 180 * Math.PI);
+       break;
+     case TTokenizer.sec_:
+       ans = 1 / Math.cos(p1 / 180 * Math.PI);
+       break;
+     case TTokenizer.cot_:
+       ans = Math.cos(p1 / 180 * Math.PI) / Math.sin(p1 / 180 * Math.PI);
+       break;
+     case TTokenizer.csc_:
+       ans = 1 / Math.sin(p1 / 180 * Math.PI);
+       break;
+     case TTokenizer.arctan_: 
+       ans = Math.atan(p1) * 180 / Math.PI;
+       break;
+     case TTokenizer.arcsin_:
+       ans = Math.asin(p1) * 180 / Math.PI;
+       break;
+     case TTokenizer.arccos_: 
+       ans = Math.acos(p1) * 180 / Math.PI;
+       break;
+     case TTokenizer.abs_: 
+       ans = Math.abs(p1);
+       break;
+     case TTokenizer.sqrt_: 
+       if (p1 < 0)
+         doError("Illegal attempt to take the square root of a negative number.");
+       else
+         ans = Math.sqrt(p1);
+       break;
+     case TTokenizer.exp_: 
+       ans = Math.exp(p1);
+       break;
+     case TTokenizer.ln_: 
+       if (p1 < 0)
+         doError("Illegal attempt to take the logartihm of a negative number.");
+       else
+         ans = Math.log(p1);
+       break;
+     case TTokenizer.round_: 
+       ans = Math.round(p1);
+       break;
+     case TTokenizer.trunc_: 
+       ans = Math.floor(p1);
+       break;
+     case TTokenizer.RandomInt_: 
+       ans = Math.floor(Math.random()*p1) + 1;
+       break;
+     case TTokenizer.UnaryMinus_: 
+       ans = -p1;
+       break;
+     case TTokenizer.plus_: 
+       ans = p1 + p2;
+       break;
+     case TTokenizer.minus_: 
+       ans = p2 - p1;
+       break;
+     case TTokenizer.times_: 
+       ans = p1 * p2;
+       break;
+     case TTokenizer.divide_: 
+       if (p1 == 0)
+         doError("Illegal attempt to divide by zero.");
+       else
+         ans = p2 / p1;
+       break;
+     case TTokenizer.power_:
+        ans = Math.pow(p2, p1);
+        break;
+     case TTokenizer.and_: 
+       ans = (p1 == 1 && p2 == 1)? 1 : 0;
+       break;
+     case TTokenizer.or_: 
+       ans = (p1 == 1 || p2 == 1)? 1 : 0;
+       break;
+     case TTokenizer.LT_: 
+       ans = (p2 < p1)? 1: 0;
+       break;
+     case TTokenizer.GT_: 
+       ans = (p2 > p1)? 1: 0;
+       break;
+     case TTokenizer.LE_: 
+       ans = (p2 <= p1)? 1: 0;
+       break;
+     case TTokenizer.GE_: 
+       ans = (p2 >= p1)? 1: 0;
+       break;
+     case TTokenizer.NE_: 
+       ans = (Math.abs(p2 - p1) > 5e-12 * (Math.abs(p2) + Math.abs(p1)))? 1: 0;
+       break;
+     case TTokenizer.EQ_: 
+       ans = (Math.abs(p2 - p1) <= 5e-12 * (Math.abs(p2) + Math.abs(p1)))? 1: 0;
+       break;
+    }
+    if ( ! isFinite(ans) )
+       doError("Undefined computation result, or number too big.");
+     proc.push(ans);
+   }
+
+//--------------------------------- Graphics----------------------------------------
+
+function Turtle(start, parent) {  // Represents a turtle and its execution environment, mostly from TStack in Java vertsion
+   this.parent = parent;
+   this.turtleX = 0;
+   this.turtleY = 0;
+   this.turtleHeading = 0;
+   this.turtleIsVisible = true;
+   this.turtleIsDrawing = true;
+   this.forkNumber = 0;
+   this.programCounter = start;
+   this.stackStart = 0;
+   this.stackTop = 0;
+   this.stackRef = 0;
+   this.next = this;
+   this.prev = this;
+   this.children = null;
+   this.color = "red";
+   this.turtleRef = null;
+   this.recursionDepth = 0;
+   this.stack = [];
+}
+Turtle.prototype.draw = function() {
+   if ( ! this.turtleIsVisible )
+       return;
+   let cx = (this.turtleX+10)/20 * canvas.width;
+   let cy = canvas.height*(1-(this.turtleY+10)/20);
+   if (cx >= -10 && cx <= canvas.width + 10 && cy >= -10 && cy <= canvas.height + 10) {
+      graphics.save();
+      graphics.translate(cx,cy);
+      graphics.rotate(-this.turtleHeading/180*Math.PI);
+      graphics.beginPath();
+      graphics.moveTo(0,-10);
+      graphics.lineTo(25,0);
+      graphics.lineTo(0,10);
+      graphics.closePath();
+      graphics.stroke();
+      graphics.globalAlpha = 0.33;
+      graphics.fill();
+      graphics.restore();
+   }
+};
+Turtle.prototype.forward = function(dist) {
+   var rad = this.turtleHeading/180 * Math.PI;
+   this.moveTo( this.turtleX + dist*Math.cos(rad), this.turtleY + dist*Math.sin(rad) );
+};
+Turtle.prototype.moveTo = function(x,y) {
+    var a = (this.turtleX+10)/20 * canvas.width;
+    var b = (1-(this.turtleY+10)/20) * canvas.height;
+    this.turtleX = x;
+    this.turtleY = y;
+    var a1 = (this.turtleX+10)/20 * canvas.width;
+    var b1 = (1-(this.turtleY+10)/20) * canvas.height;
+    if (this.turtleIsDrawing) {
+       OSG.strokeStyle = this.color;
+       OSG.beginPath();
+       OSG.moveTo(a,b);
+       OSG.lineTo(a1,b1);
+       OSG.stroke();
+    }
+};
+Turtle.prototype.arc = function(radius,angle) {
+    if (Math.abs(angle) >= 360) {
+       this.circle(radius);
+    }
+    var perp =  (radius > 0 ? this.turtleHeading + 90 : this.turtleHeading - 90)/180 * Math.PI;
+    var cx = this.turtleX + Math.cos(perp) * Math.abs(radius);
+    var cy = this.turtleY + Math.sin(perp) * Math.abs(radius);
+    if (radius > 0) {
+       this.face(this.turtleHeading + angle);
+       this.turtleX = cx + radius*Math.cos(Math.PI + perp + angle/180*Math.PI);
+       this.turtleY = cy + radius*Math.sin(Math.PI + perp + angle/180*Math.PI);
+    }
+    else {
+       this.face(this.turtleHeading - angle);
+       this.turtleX = cx - radius*Math.cos(Math.PI + perp - angle/180*Math.PI);
+       this.turtleY = cy - radius*Math.sin(Math.PI + perp - angle/180*Math.PI);
+    }
+    if (Math.abs(angle) < 360 && this.turtleIsDrawing) {
+       OSG.strokeStyle = this.color;
+       cx = (cx+10)/20*canvas.width;
+       cy = (1 - (cy+10)/20)*canvas.height;
+       radius = radius/20 * canvas.width;
+       angle = angle/180*Math.PI;
+       OSG.beginPath();
+       if (radius > 0) {
+          OSG.arc(cx,cy,radius,Math.PI-perp,Math.PI-perp-angle,angle>0);
+       }
+       else {
+          OSG.arc(cx,cy,-radius,Math.PI-perp,Math.PI-perp+angle,angle<0);
+       }
+       OSG.stroke();
+    }
+};
+Turtle.prototype.circle = function(radius) {
+    if (!this.turtleIsDrawing)
+        return;
+    var perp =  (radius > 0 ? this.turtleHeading + 90 : this.turtleHeading - 90)/180 * Math.PI;
+    radius = Math.abs(radius);
+    var cx = this.turtleX + Math.cos(perp)*radius;
+    var cy = this.turtleY + Math.sin(perp)*radius;
+    cx = (cx+10)/20 * canvas.width;
+    cy = (1-(cy+10)/20)*canvas.height;
+    radius = Math.abs(radius)/20 * canvas.width;
+    OSG.beginPath();
+    OSG.arc(cx,cy,radius,0,Math.PI*2);
+    OSG.strokeStyle = this.color;
+    OSG.stroke();
+}
+Turtle.prototype.text = function(str) {
+    var a = (this.turtleX+10)/20 * canvas.width;
+    var b = (1-(this.turtleY+10)/20) * canvas.height;
+    OSG.fillStyle = this.color;
+    OSG.fillText(str,a,b);
+    this.turtleY -= 20/canvas.height * 20;
+};
+Turtle.prototype.face = function(angle) {
+   if (Math.abs(angle) > 180) {
+    angle = angle % 360;
+    if (angle > 180)
+     angle = angle - 360;
+    else if (angle < -180)
+     angle = angle + 360;
+   }
+   proc.turtleHeading = angle;
+};
+Turtle.prototype.reinit = function(globalCt) {
+  stackTop = globalCt;
+  next = this;
+  prev = this;
+};
+Turtle.prototype.push = function(x) {
+   var loc = this.stackTop - this.stackStart;
+   this.stack[loc] = x;
+   this.stackTop++;
+};
+Turtle.prototype.pop = function() {
+   this.stackTop--;
+   var loc = this.stackTop - this.stackStart;
+   if (loc < 0)
+      throw new TError("Internal xTurtle error! Attempt to pop past process start.",0);
+   return this.stack[loc];
+};
+Turtle.prototype.store = function(offset, x) {
+ if (offset <= 0)
+   offset = -offset;
+ else
+   offset = this.stackRef + offset;
+ var proc = this;
+ while (offset < proc.stackStart)
+   proc = proc.parent;
+ var loc = offset - proc.stackStart;
+ proc.stack[loc] = x;
+};
+Turtle.prototype.fetch = function(offset) {
+ if (offset <= 0)
+   offset = -offset;
+ else
+   offset = this.stackRef + offset;
+ var proc = this;
+ while (offset < proc.stackStart)
+   proc = proc.parent;
+ var loc = offset - proc.stackStart;
+ return proc.stack[loc];
+};
+
+function doDraw() {
+   graphics.drawImage(OSC,0,0);
+   if (activeProcessList && ! alwaysHideTurtles) {
+      var first = activeProcessList;
+      var turtle = activeProcessList;
+      do {
+         turtle.draw();
+         turtle = turtle.next;
+      } while (turtle != first);
+   }
+}
+
+//-------------------------- Programs ----------------------------------
+
+function TProgram() {
+  this.ins = [];
+  this.data = [];
+  this.pos = [];
+  this.constantStore = [];
+  this.stringStore = [];
+  this.insCt = 0;
+  this.stringCt = 0;
+  this.constantCt = 0;
+  this.globalOffsetCt = 0;
+  this.appendStart = 0;
+  this.GrabCount = 0;
+}
+TProgram.prototype.addInstruction = function(/*int*/ insCode, /*int*/ dataVal, /*int*/ position) {
+  this.ins.push(insCode);
+  this.data.push(dataVal);
+  this.pos.push(position);
+  this.insCt++;
+};
+TProgram.prototype.setInsCt = function(ct) {
+    this.insCt = ct;
+    this.ins.length = ct;
+    this.data.length = ct;
+    this.pos.length = ct;
+};
+TProgram.prototype.addString = function(str) {
+  this.stringStore.push(str);
+  this.stringCt++;
+  return this.stringCt - 1;
+};
+TProgram.prototype.addConstant = function(val) {
+  for (let i = 0; i < this.constantCt; i++)
+     if (val == this.constantStore[i])
+        return i;
+  this.constantStore.push(val);
+  this.constantCt++;
+  return this.constantCt - 1;
+};
+
+//----------------------------- Parsing ---------------------------------------
+
+function TTokenizer( /* string */ data, /* TSymbolTable */ ST) {
+   this.data = data;
+   this.ST = ST;
+   this.pos = 0;
+   this.NextTok = null;
+   this.tokenReady = false;
+}
+TTokenizer.prototype.NextCh = function() {
+  if (this.pos >= this.data.length)
+     return String.fromCharCode(0);
+  else
+     return this.data.charAt(this.pos);
+};
+TTokenizer.prototype.GetCh = function() {
+  if (this.pos >= this.data.length)
+     return String.fromCharCode(0);
+  else {
+     var ch = this.data.charAt(this.pos);
+     this.pos++;
+     return ch;
+  }
+};
+TTokenizer.prototype.Skip = function() {
+   var nesting = 0;
+   var start = 0;
+   var ch = this.NextCh();
+   while (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '{') {
+     this.pos++;
+     if (ch == '{') {
+       nesting = 1;
+       start = this.pos;
+       do {
+          ch = this.GetCh();
+          if (ch == '{')
+             nesting++;
+          else if (ch == '}')
+             nesting--;
+          else if (ch == '\x00')
+             throw new TError("End of program occurred before matching '}' found for this comment.", start);
+       } while (nesting != 0);
+     }
+     ch = this.NextCh();
+   }
+};
+TTokenizer.prototype.ReadWord = function() {
+   var name = "";
+   var ch = this.NextCh();
+   while (ch.match(/[a-zA-Z0-9_]/)) {
+     ch = this.GetCh();
+     if (ch >='A' && ch <= 'Z')
+        ch = ch.toLowerCase();
+     name += ch;
+     ch = this.NextCh();
+   }
+   var loc = this.ST.findSymbol(name);
+   if (loc == -1) {
+     this.NextTok = { name: name, kind: TTokenizer.undeclaredName_ };
+     return;
+   }
+   var kind = this.ST.get(loc).kind;
+   if (kind == TSymbolTable.keyWordSymb) {
+      this.NextTok = { name: name, kind: this.ST.get(loc).token };
+      return;
+   }
+   this.NextTok = { name: name, symbolLocation: loc };
+   if (kind == TSymbolTable.variableSymb)
+      this.NextTok.kind = TTokenizer.variableName_;
+   else if (kind == TSymbolTable.paramSymb)
+      this.NextTok.kind = TTokenizer.paramName_;
+   else if (kind == TSymbolTable.subSymb)
+      this.NextTok.kind = TTokenizer.subName_;
+   else if (kind == TSymbolTable.functionSymb)
+      this.NextTok.kind = TTokenizer.functionName_;
+   else if (kind == TSymbolTable.refParamSymb)
+      this.NextTok.kind = TTokenizer.refParamName_;
+};
+TTokenizer.prototype.ReadString = function() {
+   var ch = this.GetCh();
+   var str = "";
+   ch = this.GetCh();
+   var done = false;
+   do {
+    if (ch == '"' && this.NextCh() == '"')
+     ch = this.GetCh();
+    else if (ch == '"')
+     done = true;
+    if (!done)
+     if (ch == '\n' || ch == '\r')
+        throw new TError("End-of-line occured inside a string.  String must be closed before end-of-line.", this.pos);
+     else if (ch === '\x00')
+        throw new TError("End of data found in the middle of a string.", this.pos);
+     else {
+        str += ch;
+        ch = this.GetCh();
+     }
+   } while (!done);
+   this.NextTok = { name: "<a string>", kind: TTokenizer.string_, str: str };
+};
+TTokenizer.prototype.ReadNumber = function() {
+   var s = "";
+   while (this.NextCh().match(/[0-9]/))
+      s += this.GetCh();
+   if (this.NextCh() == '.') {
+      s += this.GetCh();
+      while (this.NextCh().match(/[0-9]/))
+        s += this.GetCh();
+   }
+   if (this.NextCh() == 'e' || this.NextCh() == 'E') {
+     s += this.GetCh();
+     if (this.NextCh() == '+' || this.NextCh() == '-') 
+       s += this.GetCh();
+     if ( ! this.NextCh().match(/[0-9]/) )
+       throw new TError("Illegal number '" + s + "' encountered in program.", this.pos);
+     while (this.NextCh().match(/[0-9]/))
+       s += this.GetCh();
+   }
+   var d = parseFloat(s);
+   if (isNaN(d) || !isFinite(d))
+      throw new TError("Illegal number '" + s + "' encountered in program.", this.pos);
+   this.NextTok = { name: "<a constant>", kind: TTokenizer.number_, value: d };
+};
+TTokenizer.prototype.ReadPunctuation = function() {
+   var ch = this.GetCh();
+   this.NextTok = { name: ch };
+   switch (ch) {
+    case '(': 
+       this.NextTok.kind = TTokenizer.leftParen_;
+       break;
+    case ')': 
+       this.NextTok.kind = TTokenizer.rightParen_;
+       break;
+    case ':': 
+       if (this.NextCh() == '=') {
+         this.NextTok.kind = TTokenizer.assign_;
+         ch = this.GetCh();
+         this.NextTok.name = ":=";
+       }
+       else
+         this.NextTok.kind = TTokenizer.colon_;
+       break;
+    case ',': 
+       this.NextTok.kind = TTokenizer.comma_;
+       break;
+    case '+': 
+       this.NextTok.kind = TTokenizer.plus_;
+       break;
+    case '-': 
+       this.NextTok.kind = TTokenizer.minus_;
+       break;
+    case '*': 
+       this.NextTok.kind = TTokenizer.times_;
+       break;
+    case '/': 
+       this.NextTok.kind = TTokenizer.divide_;
+       break;
+    case '^': 
+       this.NextTok.kind = TTokenizer.power_;
+       break;
+    case '>':
+       ch = this.NextCh();
+       if (ch == '=' || ch == '>' || ch == '<') {
+          ch = this.GetCh();
+          if (ch == '=')
+             this.NextTok.kind = TTokenizer.GE_;
+          else if (ch == '<')
+             this.NextTok.kind = TTokenizer.NE_;
+          else
+             throw new TError(">> is not a legal operator.",this.pos);
+          this.NextTok.name += ch;
+       }
+       else
+          this.NextTok.kind = TTokenizer.GT_;    
+       break;
+    case '<':
+       ch = this.NextCh();
+       if (ch == '=' || ch == '>' || ch == '<') {
+          ch = this.GetCh();
+          if (ch == '=')
+             this.NextTok.kind = TTokenizer.LE_;
+          else if (ch == '>')
+             this.NextTok.kind = TTokenizer.NE_;
+          else
+             throw new TError("<< is not a legal operator.",this.pos);
+          this.NextTok.name += ch;
+       }
+       else
+          this.NextTok.kind = TTokenizer.LT_;    
+       break;
+    case '=':
+       ch = this.NextCh();
+       if (ch == '=' || ch == '>' || ch == '<') {
+          ch = this.GetCh();
+          if (ch == '<')
+             this.NextTok.kind = TTokenizer.LE_;
+          else if (ch == '>')
+             this.NextTok.kind = TTokenizer.GE_;
+          else
+             throw new TError("== is not a legal operator.", this.pos);
+          this.NextTok.name += ch;
+       }
+       else
+          this.NextTok.kind = TTokenizer.EQ_;    
+       break;
+    case '&': 
+       this.NextTok.kind = TTokenizer.and_;
+       break;
+    case '|': 
+       this.NextTok.kind = TTokenizer.or_;
+       break;
+    case '~': 
+       this.NextTok.kind = TTokenizer.not_;
+       break;
+    default:
+       throw new TError("Illegal character '" + ch + "' found in input.", this.pos);
+   }
+};
+TTokenizer.prototype.ReadToken = function() {
+   this.Skip();
+   var ch = this.NextCh();
+   if (ch === '\x00') {
+      this.NextTok = { kind: TTokenizer.endOfData_ };
+   }
+   else if (ch.match(/[a-zA-Z_]/)) {
+     this.ReadWord();
+     if (this.NextTok.kind == TTokenizer.end_) {
+       this.Skip();
+       if (this.NextCh().match(/[a-zA-Z]/)) {
+         this.ReadWord();
+         if (this.NextTok.kind == TTokenizer.if_) {
+            this.NextTok.kind = TTokenizer.endif_;
+            this.NextTok.name = "ENDIF";
+         }
+         else if (this.NextTok.kind == TTokenizer.loop_) {
+            this.NextTok.kind = TTokenizer.endloop_;
+            this.NextTok.name = "ENDLOOP";
+         }
+         else if (this.NextTok.kind == TTokenizer.sub_) {
+            this.NextTok.kind = TTokenizer.endsub_;
+            this.NextTok.name = "ENDSUB";
+         }
+         else if (this.NextTok.kind == TTokenizer.function_) {
+            this.NextTok.kind = TTokenizer.endfunction_;
+            this.NextTok.name = "ENDFUNCTION";
+         }
+         else if (this.NextTok.kind == TTokenizer.Grab_) {
+            this.NextTok.kind = TTokenizer.endGrab_;
+            this.NextTok.name = "ENDGRAB";
+         }
+         else
+            throw new TError("The word 'END' can only be used in combinations like 'END IF' and 'END SUB'.", this.pos);
+       }
+       else
+          throw new TError("The word 'END' can only be used in combinations like 'END IF' and 'END SUB'.", this.pos);
+     }
+     else if (this.NextTok.kind == TTokenizer.exit_) {
+        this.Skip();
+        let savePos = this.pos; 
+        if (this.NextCh().match(/[a-zA-Z]/)) {
+           this.ReadWord(); 
+           if (this.NextTok.kind == TTokenizer.if_) {
+              this.NextTok.kind = TTokenizer.exitif_;
+              this.NextTok.name = "EXITIF";
+           }
+           else if (this.NextTok.kind == TTokenizer.unless_) {
+              this.NextTok.kind = TTokenizer.exitunless_;
+              this.NextTok.name = "EXITUNLESS";
+          }
+          else {
+             this.NextTok.kind = TTokenizer.exit_;
+             this.NextTok.name = "EXIT";
+             this.pos = savePos;
+          }
+       }
+       else
+          this.pos = savePos;
+     }
+     else if (this.NextTok.kind == TTokenizer.or_) {
+       let savePos = this.pos;
+       this.Skip();
+       if (this.NextCh().match(/[a-zA-Z]/)) {
+          this.ReadWord();
+          if (this.NextTok.kind == TTokenizer.if_) {
+             this.NextTok.kind = TTokenizer.elseif_;
+             this.NextTok.name = "ORIF";
+          }
+          else {
+             this.NextTok.kind = TTokenizer.or_;
+             this.NextTok.name = "OR";
+             this.pos = savePos;
+          }
+       }
+       else
+          this.pos = savePos;
+     }
+   }
+   else if (ch.match(/[0-9.]/))
+      this.ReadNumber();
+   else if (ch == '"') 
+      this.ReadString();
+   else 
+      this.ReadPunctuation();
+   this.NextTok.position = this.pos;
+   this.tokenReady = true;
+};
+TTokenizer.prototype.LookToken = function() {
+   if (!this.tokenReady)
+     this.ReadToken();
+   return this.NextTok;
+};
+TTokenizer.prototype.GetToken = function() {
+   var tok = this.LookToken();
+   this.tokenReady = false;
+   return tok;
+};
+TTokenizer.Jump_ = 1;   // subs with zero params
+TTokenizer.JumpToSubroutine_ = 2; 
+TTokenizer.SubroutineSetup_ = 3; 
+TTokenizer.FunctionSetup_ = 4; 
+TTokenizer.AdjustSavedPC_ = 5; 
+TTokenizer.SetStackRef_ = 6; 
+TTokenizer.Reserve_ = 7 ;
+TTokenizer.TellUser_ = 8; 
+TTokenizer.DrawText_ = 9;
+TTokenizer.HideTurtle_ = 10; 
+TTokenizer.ShowTurtle_ = 11; 
+TTokenizer.Clear_ = 12;
+TTokenizer.Home_ = 13;
+TTokenizer.PenUp_ = 14; 
+TTokenizer.PenDown_ = 15; 
+TTokenizer.Fill_ = 16; 
+TTokenizer.Halt_ = 17; 
+TTokenizer.Grab_ = 18; 
+TTokenizer.endGrab_ = 19;
+TTokenizer.return_ = 20; 
+TTokenizer.returnFromFunction_ = 21;
+TTokenizer.red_ = 22;
+TTokenizer.blue_ = 23;
+TTokenizer.green_ = 24;
+TTokenizer.cyan_ = 25;
+TTokenizer.magenta_ = 26;
+TTokenizer.yellow_ = 27;
+TTokenizer.gray_ = 28;
+TTokenizer.lightGray_ = 29;
+TTokenizer.darkGray_ = 30;
+TTokenizer.black_ = 31;
+TTokenizer.white_ = 32;
+TTokenizer.Die_ = 33;
+TTokenizer.Fork_ = 34;  // subs with one param
+TTokenizer.JumpIf_ = 35; 
+TTokenizer.AskUser_ = 36; 
+TTokenizer.YesOrNo_ = 37; 
+TTokenizer.Pop_ = 38; 
+TTokenizer.PopRefParam_ = 39; 
+TTokenizer.PopFunctionValue_ = 40;
+TTokenizer.Forward_ = 41; 
+TTokenizer.Back_ = 42; 
+TTokenizer.Turn_ = 43; 
+TTokenizer.Face_ = 44; 
+TTokenizer.Circle_ = 45;
+TTokenizer.Move_ = 46;  // subs with two params 
+TTokenizer.MoveTo_ = 47; 
+TTokenizer.Arc_ = 48;
+TTokenizer.rgb_ = 49;  // with three params
+TTokenizer.hsb_ = 50; 
+TTokenizer.Push_ = 51; // functions with 0 params
+TTokenizer.PushRefParam_ = 52; 
+TTokenizer.PushAbsoluteReference_ = 53; 
+TTokenizer.PushConstant_ = 54; 
+TTokenizer.PushDummy_ = 55; 
+TTokenizer.Random_ = 56; 
+TTokenizer.turtleX_ = 57; 
+TTokenizer.turtleY_ = 58; 
+TTokenizer.turtleHeading_ = 59; 
+TTokenizer.TurtleIsVisible_ = 60; 
+TTokenizer.TurtleIsDrawing_ = 61;
+TTokenizer.forkNumber_ = 62;
+TTokenizer.sin_ = 63; // functions with one param
+TTokenizer.cos_ = 64; 
+TTokenizer.tan_ = 65; 
+TTokenizer.sec_ = 66; 
+TTokenizer.cot_ = 67; 
+TTokenizer.csc_ = 68; 
+TTokenizer.arctan_ = 69; 
+TTokenizer.arcsin_ = 70; 
+TTokenizer.arccos_ = 71; 
+TTokenizer.not_ = 72;
+TTokenizer.abs_ = 73; 
+TTokenizer.sqrt_ = 74; 
+TTokenizer.exp_ = 75; 
+TTokenizer.ln_ = 76; 
+TTokenizer.round_ = 77; 
+TTokenizer.trunc_ = 78; 
+TTokenizer.RandomInt_ = 79; 
+TTokenizer.UnaryMinus_ = 80;
+TTokenizer.plus_ = 81; // functions with two params
+TTokenizer.minus_ = 82; 
+TTokenizer.times_ = 83; 
+TTokenizer.divide_ = 84; 
+TTokenizer.power_ = 85;
+TTokenizer.and_ = 86; 
+TTokenizer.or_ = 87; 
+TTokenizer.LT_ = 88; 
+TTokenizer.GT_ = 89; 
+TTokenizer.LE_ = 90; 
+TTokenizer.GE_ = 91; 
+TTokenizer.NE_ = 92; 
+TTokenizer.EQ_ = 93; 
+TTokenizer.leftParen_ = 94; // Other tokens; not commands 
+TTokenizer.rightParen_ = 95; 
+TTokenizer.colon_ = 96; 
+TTokenizer.assign_ = 97; 
+TTokenizer.comma_ = 98;
+TTokenizer.if_ = 99; 
+TTokenizer.then_ = 100; 
+TTokenizer.else_ = 101; 
+TTokenizer.elseif_ = 102; 
+TTokenizer.endif_ = 103; 
+TTokenizer.end_ = 104;
+TTokenizer.loop_ = 105; 
+TTokenizer.endloop_ = 106; 
+TTokenizer.exit_ = 107; 
+TTokenizer.exitif_ = 108; 
+TTokenizer.unless_ = 109; 
+TTokenizer.exitunless_ = 110;
+TTokenizer.sub_ = 111; 
+TTokenizer.endsub_ = 112;
+TTokenizer.function_ = 113; 
+TTokenizer.endfunction_ = 114; 
+TTokenizer.ref_ = 115;
+TTokenizer.declare_ = 116; 
+TTokenizer.predeclare_ = 117; 
+TTokenizer.import_ = 118;
+TTokenizer.variableName_ = 119; // tokens with values 
+TTokenizer.paramName_ = 120; 
+TTokenizer.refParamName_ = 121; 
+TTokenizer.subName_ = 122; 
+TTokenizer.functionName_ = 123; 
+TTokenizer.undeclaredName_ = 124; 
+TTokenizer.number_ = 125; 
+TTokenizer.string_ = 126; 
+TTokenizer.endOfData_ = 127;
+
+function TSymbolTable() {
+   this.symbolSearchStart = 0;
+   this.symbols = [
+      {  name: "red", kind: TSymbolTable.keyWordSymb, token: TTokenizer.red_ },
+      {  name: "green", kind: TSymbolTable.keyWordSymb, token: TTokenizer.green_ },
+      {  name: "blue", kind: TSymbolTable.keyWordSymb, token: TTokenizer.blue_ },
+      {  name: "cyan", kind: TSymbolTable.keyWordSymb, token: TTokenizer.cyan_ },
+      {  name: "magenta", kind: TSymbolTable.keyWordSymb, token: TTokenizer.magenta_ },
+      {  name: "yellow", kind: TSymbolTable.keyWordSymb, token: TTokenizer.yellow_ },
+      {  name: "black", kind: TSymbolTable.keyWordSymb, token: TTokenizer.black_ },
+      {  name: "white", kind: TSymbolTable.keyWordSymb, token: TTokenizer.white_ },
+      {  name: "gray", kind: TSymbolTable.keyWordSymb, token: TTokenizer.gray_ },
+      {  name: "lightgray", kind: TSymbolTable.keyWordSymb, token: TTokenizer.lightGray_ },
+      {  name: "darkgray", kind: TSymbolTable.keyWordSymb, token: TTokenizer.darkGray_ },
+      {  name: "rgb", kind: TSymbolTable.keyWordSymb, token: TTokenizer.rgb_ },
+      {  name: "hsb", kind: TSymbolTable.keyWordSymb, token: TTokenizer.hsb_ },
+      {  name: "hideturtle", kind: TSymbolTable.keyWordSymb, token: TTokenizer.HideTurtle_ },
+      {  name: "showturtle", kind: TSymbolTable.keyWordSymb, token: TTokenizer.ShowTurtle_ },
+      {  name: "clear", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Clear_ },
+      {  name: "home", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Home_ },
+      {  name: "penup", kind: TSymbolTable.keyWordSymb, token: TTokenizer.PenUp_ },
+      {  name: "pendown", kind: TSymbolTable.keyWordSymb, token: TTokenizer.PenDown_ },
+      {  name: "telluser", kind: TSymbolTable.keyWordSymb, token: TTokenizer.TellUser_ },
+      {  name: "askuser", kind: TSymbolTable.keyWordSymb, token: TTokenizer.AskUser_ },
+      {  name: "yesorno", kind: TSymbolTable.keyWordSymb, token: TTokenizer.YesOrNo_ },
+      {  name: "drawtext", kind: TSymbolTable.keyWordSymb, token: TTokenizer.DrawText_ },
+      {  name: "fork", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Fork_ },
+      {  name: "halt", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Halt_ },
+      {  name: "killprocess", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Die_ },
+      {  name: "forward", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Forward_ },
+      {  name: "back", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Back_ },
+      {  name: "turn", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Turn_ },
+      {  name: "face", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Face_ },
+      {  name: "circle", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Circle_ },
+      {  name: "move", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Move_ },
+      {  name: "moveto", kind: TSymbolTable.keyWordSymb, token: TTokenizer.MoveTo_ },
+      {  name: "arc", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Arc_ },
+      {  name: "random", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Random_ },
+      {  name: "xcoord", kind: TSymbolTable.keyWordSymb, token: TTokenizer.turtleX_ },
+      {  name: "ycoord", kind: TSymbolTable.keyWordSymb, token: TTokenizer.turtleY_ },
+      {  name: "heading", kind: TSymbolTable.keyWordSymb, token: TTokenizer.turtleHeading_ },
+      {  name: "isvisible", kind: TSymbolTable.keyWordSymb, token: TTokenizer.TurtleIsVisible_ },
+      {  name: "isdrawing", kind: TSymbolTable.keyWordSymb, token: TTokenizer.TurtleIsDrawing_ },
+      {  name: "forknumber", kind: TSymbolTable.keyWordSymb, token: TTokenizer.forkNumber_ },
+      {  name: "sin", kind: TSymbolTable.keyWordSymb, token: TTokenizer.sin_ },
+      {  name: "cos", kind: TSymbolTable.keyWordSymb, token: TTokenizer.cos_ },
+      {  name: "tan", kind: TSymbolTable.keyWordSymb, token: TTokenizer.tan_ },
+      {  name: "sec", kind: TSymbolTable.keyWordSymb, token: TTokenizer.sec_ },
+      {  name: "cot", kind: TSymbolTable.keyWordSymb, token: TTokenizer.cot_ },
+      {  name: "csc", kind: TSymbolTable.keyWordSymb, token: TTokenizer.csc_ },
+      {  name: "arctan", kind: TSymbolTable.keyWordSymb, token: TTokenizer.arctan_ },
+      {  name: "arcsin", kind: TSymbolTable.keyWordSymb, token: TTokenizer.arcsin_ },
+      {  name: "arccos", kind: TSymbolTable.keyWordSymb, token: TTokenizer.arccos_ },
+      {  name: "abs", kind: TSymbolTable.keyWordSymb, token: TTokenizer.abs_ },
+      {  name: "sqrt", kind: TSymbolTable.keyWordSymb, token: TTokenizer.sqrt_ },
+      {  name: "exp", kind: TSymbolTable.keyWordSymb, token: TTokenizer.exp_ },
+      {  name: "ln", kind: TSymbolTable.keyWordSymb, token: TTokenizer.ln_ },
+      {  name: "round", kind: TSymbolTable.keyWordSymb, token: TTokenizer.round_ },
+      {  name: "trunc", kind: TSymbolTable.keyWordSymb, token: TTokenizer.trunc_ },
+      {  name: "randomint", kind: TSymbolTable.keyWordSymb, token: TTokenizer.RandomInt_ },
+      {  name: "and", kind: TSymbolTable.keyWordSymb, token: TTokenizer.and_ },
+      {  name: "or", kind: TSymbolTable.keyWordSymb, token: TTokenizer.or_ },
+      {  name: "not", kind: TSymbolTable.keyWordSymb, token: TTokenizer.not_ },
+      {  name: "if", kind: TSymbolTable.keyWordSymb, token: TTokenizer.if_ },
+      {  name: "then", kind: TSymbolTable.keyWordSymb, token: TTokenizer.then_ },
+      {  name: "else", kind: TSymbolTable.keyWordSymb, token: TTokenizer.else_ },
+      {  name: "orif", kind: TSymbolTable.keyWordSymb, token: TTokenizer.elseif_ },
+      {  name: "endif", kind: TSymbolTable.keyWordSymb, token: TTokenizer.endif_ },
+      {  name: "end", kind: TSymbolTable.keyWordSymb, token: TTokenizer.end_ },
+      {  name: "loop", kind: TSymbolTable.keyWordSymb, token: TTokenizer.loop_ },
+      {  name: "endloop", kind: TSymbolTable.keyWordSymb, token: TTokenizer.endloop_ },
+      {  name: "exit", kind: TSymbolTable.keyWordSymb, token: TTokenizer.exit_ },
+      {  name: "exitif", kind: TSymbolTable.keyWordSymb, token: TTokenizer.exitif_ },
+      {  name: "exitunless", kind: TSymbolTable.keyWordSymb, token: TTokenizer.exitunless_ },
+      {  name: "unless", kind: TSymbolTable.keyWordSymb, token: TTokenizer.unless_ },
+      {  name: "sub", kind: TSymbolTable.keyWordSymb, token: TTokenizer.sub_ },
+      {  name: "endsub", kind: TSymbolTable.keyWordSymb, token: TTokenizer.endsub_ },
+      {  name: "function", kind: TSymbolTable.keyWordSymb, token: TTokenizer.function_ },
+      {  name: "endfunction", kind: TSymbolTable.keyWordSymb, token: TTokenizer.endfunction_ },
+      {  name: "return", kind: TSymbolTable.keyWordSymb, token: TTokenizer.return_ },
+      {  name: "ref", kind: TSymbolTable.keyWordSymb, token: TTokenizer.ref_ },
+      {  name: "declare", kind: TSymbolTable.keyWordSymb, token: TTokenizer.declare_ },
+      {  name: "predeclare", kind: TSymbolTable.keyWordSymb, token: TTokenizer.predeclare_ },
+      {  name: "import", kind: TSymbolTable.keyWordSymb, token: TTokenizer.import_ },
+      {  name: "grab", kind: TSymbolTable.keyWordSymb, token: TTokenizer.Grab_ },
+      {  name: "endgrab", kind: TSymbolTable.keyWordSymb, token: TTokenizer.endGrab_ }
+   ];
+}
+TSymbolTable.prototype.addSymbol = function( /*int*/ kind, /*String*/ name) {  // returns int
+   var sym = { name: name, kind: kind };
+   if ( kind == TSymbolTable.refParamSymb || kind == TSymbolTable.paramSymb || kind == TSymbolTable.variableSymb ) {
+       sym.grabNum = -1;
+       sym.trueSymbolLoc = this.symbols.length;
+   }
+   this.symbols.push(sym);
+   return this.symbols.length - 1;
+};
+TSymbolTable.prototype.get = function(loc) {
+      return this.symbols[loc];
+};
+TSymbolTable.prototype.setSubroutineData = function (/*int*/ loc,
+          /*int*/ start,
+          /*int*/ paramCount,
+          /*int representing BitSet*/ paramTypes) {
+   var sym = this.symbols[loc];
+   sym.start = start;
+   sym.paramCount = paramCount;
+   sym.paramTypes = paramTypes;
+};
+TSymbolTable.prototype.setVariableData = function (/*int*/ loc, /*int*/ offset) {
+   var sym = this.symbols[loc];
+   sym.offset = offset;
+};
+TSymbolTable.prototype.findSymbol = function (/*String*/ name) {
+   for (let i = this.symbols.length - 1; i >= 0; i--) {
+      var sym = this.symbols[i];
+      if (sym.name == name && (i >= this.symbolSearchStart || 
+                sym.kind == TSymbolTable.keyWordSymb || sym.kind == TSymbolTable.subSymb || sym.kind == TSymbolTable.functionSymb)) {
+         return i;
+      }
+   }
+   return -1;
+};
+TSymbolTable.prototype.findGlobalSymbol = function (/*String*/ name) {
+   for (let i = 0; i < this.symbols.length; i++) {
+      if (this.symbols[i].name == name) {
+         return i;
+      }
+   }
+   return -1;
+};
+TSymbolTable.prototype.startSubroutineSymbols = function() {
+   this.symbolSearchStart = this.symbols.length;
+};
+TSymbolTable.prototype.endSubroutineSymbols = function() {
+   this.symbols.length = this.symbolSearchStart;
+   this.symbolSearchStart = 0;
+};
+TSymbolTable.prototype.checkPredeclarations = function() {
+   for (let i = 0; i < this.symbols.length; i++) {
+      var sym = this.symbols[i];
+      if ( (sym.kind == TSymbolTable.subSymb || sym.kind == TSymbolTable.functionSymb) &&
+                       (sym.paramTypes & (1 << 31)) != 0 )
+         return i;
+   }
+   return -1;
+};
+TSymbolTable.undefinedSymb = 0;
+TSymbolTable.keyWordSymb = 1;
+TSymbolTable.subSymb = 2;
+TSymbolTable.functionSymb = 3;
+TSymbolTable.variableSymb = 4; 
+TSymbolTable.paramSymb = 5;
+TSymbolTable.refParamSymb = 6;
+
+var parser = (function() {
+   var /*TTokenizer*/ tokenizer;
+   var /*TProgram*/ prog;
+   var /*TSymbolTable*/ ST;
+   var /*int*/ saveGlobalOffsetCt;
+   var /*int*/ saveSymbolCt;
+   var /*int*/ saveInsCt;
+   var /*boolean*/ parsingSubroutine, parsingFunction, returnFound;
+   var /*int*/ offsetCt;
+   var /*int*/ currentLoopLoc;
+   var /*int*/ grabBeingParsed;
+   function Error(message) {
+     ST.symbols.length = saveSymbolCt;
+     prog.globalOffsetCt = saveGlobalOffsetCt;
+     prog.setInsCt(saveInsCt);
+     var pos = tokenizer.pos;
+     tokenizer = null;
+     prog = null;
+     ST = null;
+     throw new TError(message, pos);
+   }
+   function doParse() {
+      var /*TToken*/ tok;
+      var /*int*/ undeclared;
+      saveGlobalOffsetCt = prog.globalOffsetCt;
+      saveSymbolCt = ST.symbols.length;
+      ST.symbolSearchStart = 0;
+      currentLoopLoc = -1;
+      parsingSubroutine = false;
+      parsingFunction = false;
+      grabBeingParsed = 0;
+      do {
+       tok = tokenizer.LookToken();
+       if (tok.kind == TTokenizer.sub_ || tok.kind == TTokenizer.function_)
+         ParseSubroutine();
+       else if (tok.kind == TTokenizer.endloop_ ||
+                tok.kind ==  TTokenizer.endif_ ||
+                tok.kind ==  TTokenizer.endsub_ ||
+                tok.kind ==  TTokenizer.endfunction_ ||
+                tok.kind ==  TTokenizer.else_ || 
+                tok.kind == TTokenizer.elseif_)
+        Error("Expecting a statement or declaration.  (CheckNesting)");
+       else if (tok.kind == TTokenizer.predeclare_)
+        ParseForwardDeclaration();
+       else if (tok.kind != TTokenizer.endOfData_)
+        ParseStatement();
+      } while (tok.kind != TTokenizer.endOfData_);
+      prog.addInstruction(TTokenizer.Die_, 0, tokenizer.pos);
+      undeclared = ST.checkPredeclarations();
+      if (undeclared != -1) {
+       var sym = ST.symbols[undeclared];
+       if (sym.kind == TSymbolTable.subSymb)
+        Error("The predeclared subroutine, '" + sym.name+ "', has never actually been declared.");
+       else
+        Error("The predeclared function, '" + sym.name+ "', has never actually been declared.");
+      }
+      prog.appendStart = saveInsCt;
+   }
+   function ParseDeclaration() {
+       var /*TToken*/ firstTok, tok;
+       var /*boolean*/ done;
+       var /*int*/ loc, offset;
+       var /*int*/ skind; // SymbolKinds
+       var /*String*/ name;
+       var /*int*/ trueSymbolLoc;
+       if (grabBeingParsed > 0)
+          Error("Declarations cannot occur inside GRAB statements.");
+       firstTok = tokenizer.GetToken();
+       if (firstTok.kind == TTokenizer.import_ && !(parsingSubroutine || parsingFunction))
+        Error("An import statement can only occur in a subroutine or function definition.");
+       done = false;
+       do {
+            tok = tokenizer.GetToken();
+            if (tok.kind == TTokenizer.endOfData_)
+             Error("Enexpected end of data while reading the list of items for a declaration statemet.");
+            else if (tok.kind == TTokenizer.string_ || tok.kind == TTokenizer.number_ || (tok.kind >= TTokenizer.leftParen_ && tok.kind <= TTokenizer.comma_))
+             Error("An unexpected illegal item '" + tok.name + "' found in list of items being declared.");
+            else if (tok.kind < TTokenizer.variableName_)
+             Error("'" +  tok.name + "' is a reserved word.  A reserved word can't be redefined.");
+            else if ((tok.kind == TTokenizer.subName_ || tok.kind == TTokenizer.functionName_) && !(parsingSubroutine || parsingFunction))
+             Error("The identifier '" + tok.name + "' has already been defined as a subroutine or function name.");
+            else if ((tok.kind == TTokenizer.subName_ || tok.kind == TTokenizer.functionName_) && (firstTok.kind == TTokenizer.import_))
+             Error("Subroutines and functions do not need to be imported to be used.");
+            else if (tok.kind == TTokenizer.paramName_ || tok.kind == TTokenizer.variableName_ || tok.kind == TTokenizer.refParamName_) {
+               if (parsingSubroutine || parsingFunction)
+                 Error("The Identifier '" + tok.name + "' is already defined in this subroutine.");
+               else
+                 Error("The Identifier '" + tok.name + "' is already defined.");
+            }
+            else if (tok.kind == TTokenizer.endOfData_)
+             Error("Unexpected end of data while reading the list of items for a declaration statement.");
+            else if (!(tok.kind == TTokenizer.undeclaredName_ || tok.kind == TTokenizer.subName_ || tok.kind == TTokenizer.functionName_))
+             Error("An unexpected illegal item '" + tok.name + "' found in list of items being declared.");
+            if (firstTok.kind == TTokenizer.declare_) {
+                 if (parsingSubroutine || parsingFunction) {
+                  offsetCt++;
+                  offset = offsetCt;
+                 }
+                 else {
+                  offset = -prog.globalOffsetCt;
+                  prog.globalOffsetCt++;
+                 }
+                 if (tok.kind == TTokenizer.undeclaredName_) 
+                  loc = ST.addSymbol(TSymbolTable.variableSymb, tok.name);
+                 else {
+                  loc = tok.symbolLocation;
+                  name = ST.symbols[loc].name;
+                  loc = ST.addSymbol(TSymbolTable.variableSymb, name);
+                 }
+                 ST.setVariableData(loc, offset);
+                 prog.addInstruction(TTokenizer.PushDummy_, 0, tokenizer.pos);
+            }
+            else {
+              loc = ST.findGlobalSymbol(tok.name);
+              if (loc == -1) 
+                Error("'" + tok.name + "' cannot be imported because it is undefined.  Only global variables can be imported.");
+              skind = ST.get(loc).kind;
+              if (skind != TSymbolTable.variableSymb)
+               Error("The identifier, '" + tok.name + "', is not a global variable.  Only global variables can be imported.");
+              offset = ST.get(loc).offset;
+              trueSymbolLoc = loc;
+              loc = ST.addSymbol(TSymbolTable.variableSymb, tok.name);
+              ST.setVariableData(loc, offset);
+              ST.get(loc).trueSymbolLoc = trueSymbolLoc;
+            }
+            tok = tokenizer.LookToken();
+            if (tok.kind != TTokenizer.comma_)
+             done = true;
+            else
+             tok = tokenizer.GetToken();
+       } while (!done);
+   }
+   function ParseFunctionCall (/*int*/ symbLoc) {
+      var /*int*/ paramCt;
+      var /*BitSet*/ paramTypes;
+      var /*String*/ name;
+      prog.addInstruction(TTokenizer.FunctionSetup_, 0, tokenizer.pos);
+      paramCt = ST.get(symbLoc).paramCount;
+      paramTypes = ST.get(symbLoc).paramTypes;
+      name = ST.get(symbLoc).name;
+      ParseActualParams(paramCt, paramTypes, name);
+      prog.addInstruction(TTokenizer.AdjustSavedPC_, paramCt, tokenizer.pos);
+      prog.addInstruction(TTokenizer.JumpToSubroutine_, ST.get(symbLoc).start, tokenizer.pos);
+   }
+   function ParsePrimary() {
+      var /*boolean*/ logical;
+      var /*TToken*/ tok;
+      tok = tokenizer.GetToken();
+      logical = false;
+      switch (tok.kind) {
+       case TTokenizer.leftParen_:
+         logical = ParseExpression();
+         tok = tokenizer.GetToken();
+         if (tok.kind != TTokenizer.rightParen_)
+           Error("Found '" +  tok.name + "' while expecting right parenthesis to match previous left parenthesis.");
+         break;
+       case TTokenizer.functionName_: 
+         ParseFunctionCall(tok.symbolLocation);
+         break;
+       case TTokenizer.variableName_:
+       case TTokenizer.paramName_: 
+         prog.addInstruction(TTokenizer.Push_, ST.get(tok.symbolLocation).offset, tok.position);
+         break;
+       case TTokenizer.refParamName_: 
+         prog.addInstruction(TTokenizer.PushRefParam_, ST.get(tok.symbolLocation).offset, tok.position);
+         break;
+       case TTokenizer.number_:
+         prog.addInstruction(TTokenizer.PushConstant_, prog.addConstant(tok.value), tok.position);
+         break;
+       case TTokenizer.Random_:
+       case TTokenizer.turtleX_:
+       case TTokenizer.turtleY_:
+       case TTokenizer.turtleHeading_:
+       case TTokenizer.TurtleIsVisible_:
+       case TTokenizer.TurtleIsDrawing_:
+       case TTokenizer.forkNumber_:
+         ParseActualParams(0, 0, tok.name);
+         prog.addInstruction(tok.kind, 0, tok.position);
+         break;
+       case TTokenizer.sin_:
+       case TTokenizer.cos_:
+       case TTokenizer.tan_:
+       case TTokenizer.sec_:
+       case TTokenizer.cot_:
+       case TTokenizer.csc_:
+       case TTokenizer.arctan_:
+       case TTokenizer.arcsin_:
+       case TTokenizer.arccos_:
+       case TTokenizer.abs_:
+       case TTokenizer.sqrt_:
+       case TTokenizer.exp_:
+       case TTokenizer.ln_:
+       case TTokenizer.round_:
+       case TTokenizer.trunc_:
+       case TTokenizer.RandomInt_:
+         ParseActualParams(1, null, tok.name);
+         prog.addInstruction(tok.kind, 0, tok.position);
+         break;
+       case TTokenizer.subName_: 
+         Error("Subroutine '" + tok.name + "' found while reading an expression.  (Subroutine cannot be used like a function or variable.)");
+         break;
+       case TTokenizer.undeclaredName_: 
+         Error("Undeclared identifier '" + tok.name + "' encountered in an expression.");
+         break;
+       case TTokenizer.endOfData_: 
+         Error("Unexpected end of data encountered while reading an expression.");
+         break;
+       default:
+         Error("Unexpected item '" + tok.name + "' found while reading an expression.");
+      }
+      return logical;
+   }
+   function ParseFactor (){
+      var /*TToken*/ tok;
+      var log2,logical;
+      logical = ParsePrimary();
+      tok = tokenizer.LookToken();
+      while (tok.kind == TTokenizer.power_) {
+        if (logical)
+         Error("Power operator cannot be applied to logical values.");
+        tok = tokenizer.GetToken();
+        log2 = ParsePrimary();
+        if (log2)
+         Error("Power operator  cannot be applied to logical values.");
+        prog.addInstruction(tok.kind, 0, tok.position);
+        tok = tokenizer.LookToken();
+      }
+      return logical;
+   }
+   function ParseTerm () {
+      var /*TToken*/ tok;
+      var log2,logical;
+      logical = ParseFactor();
+      tok = tokenizer.LookToken();
+      while (tok.kind == TTokenizer.times_ || tok.kind == TTokenizer.divide_) {
+        if (logical)
+         Error("Operation cannot be applied to logical values.");
+        tok = tokenizer.GetToken();
+        log2 = ParseFactor();
+        if (log2)
+         Error("Operation cannot be applied to logical values.");
+        prog.addInstruction(tok.kind, 0, tok.position);
+        tok = tokenizer.LookToken();
+      }
+      return logical;
+   }
+   function ParseExp () {
+      var /*TToken*/ tok;
+      var /*boolean*/ leadingMinus;
+      var log2, logical;
+      tok = tokenizer.LookToken();
+      leadingMinus = (tok.kind == TTokenizer.minus_);
+      if (tok.kind == TTokenizer.minus_ || tok.kind == TTokenizer.plus_)
+       tok = tokenizer.GetToken();
+      logical = ParseTerm();
+      if (leadingMinus) {
+        if (logical)
+         Error("A minus sign cannot be applied to a logical value.");
+        prog.addInstruction(TTokenizer.UnaryMinus_, 0, tok.position);
+      }
+      tok = tokenizer.LookToken();
+      while (tok.kind == TTokenizer.minus_ || tok.kind == TTokenizer.plus_) {
+        if (logical) 
+         Error("Operation cannot be applied to logical values.");
+        tok = tokenizer.GetToken();
+        log2 = ParseTerm();
+        if (log2) 
+         Error("Operation cannot be applied to logical values.");
+        prog.addInstruction(tok.kind, 0, tok.position);
+        tok = tokenizer.LookToken();
+      }
+      return logical;
+   }
+   function ParseComparison () {
+      var /*TToken*/ tok;
+      var log2, logical;
+      logical = ParseExp();
+      tok = tokenizer.LookToken();
+      if (tok.kind >= TTokenizer.LT_ && tok.kind <=TTokenizer.EQ_) {
+        if (logical)
+         Error("Comparison operator cannot be applied to a logical value.");
+        tok = tokenizer.GetToken();
+        log2 = ParseExp();
+        if (log2)
+         Error("Comparison operator cannot be applied to a logical value.");
+        prog.addInstruction(tok.kind, 0, tok.position);
+        tok = tokenizer.LookToken();
+        if (tok.kind >= TTokenizer.LT_ && tok.kind <=TTokenizer.EQ_)
+         Error("Sequences of comparison operators are not allowed.");
+        logical = true;
+      }
+      return logical;
+   }
+   function ParseLFactor () {
+      var /*int*/ notCt;
+      var /*TToken*/ tok;
+      var /*boolean*/ logical;
+      notCt = 0;
+      do {
+       tok = tokenizer.LookToken();
+       if (tok.kind == TTokenizer.not_) {
+         notCt++;
+         tok = tokenizer.GetToken();
+       }
+      } while (tok.kind == TTokenizer.not_);
+      logical = ParseComparison();
+      if (notCt > 0) {
+        if (!logical) 
+          Error("The operator NOT can only be applied to logical values.");
+        if (notCt % 2 == 1)
+          prog.addInstruction(TTokenizer.not_, 0, tok.position);
+      }
+      return logical;
+   }
+   function ParseLTerm () {
+      var /*TToken*/ tok;
+      var log2,logical;
+      logical = ParseLFactor();
+      tok = tokenizer.LookToken();
+      while (tok.kind == TTokenizer.and_) {
+        tok = tokenizer.GetToken();
+        if (!logical)
+         Error("The operator AND can only be applied to logical values.");
+        log2 = ParseLTerm();
+        if (!log2)
+         Error("The operator AND can only be applied to logical values.");
+        prog.addInstruction(TTokenizer.and_, 0, tok.position);
+        tok = tokenizer.LookToken();
+      }
+      return logical;
+   }
+   function ParseExpression () {
+     var /*TToken*/ tok;
+     var /*boolean*/ logical,log2;
+     logical = ParseLTerm();
+     tok = tokenizer.LookToken();
+     while (tok.kind == TTokenizer.or_) {
+       tok = tokenizer.GetToken();
+       if (!logical)
+        Error("The operator OR can only be applied to logical values.");
+       log2 = ParseLTerm();
+       if (!log2)
+        Error("The operator OR can only be applied to logical values.");
+       prog.addInstruction(TTokenizer.or_, 0, tok.position);
+       tok = tokenizer.LookToken();
+     }
+     return logical;
+   }
+   function ParseComputation() {
+     var /*boolean*/ logical;
+     logical = ParseExpression();
+     if (logical)
+      Error("Logical value not allowed here; numeric value or expression required.");
+   }
+   function ParseCondition() {
+     var logical;
+     logical = ParseExpression();
+     if (!logical)
+      Error("Numeric value not allowed here; logical value or expression required.");
+   }
+   function ParseAssignmentStatement() {
+     var /*TToken*/ tok, asg;
+     tok = tokenizer.GetToken();
+     asg = tokenizer.GetToken();
+     if (asg.kind != TTokenizer.assign_) {
+       if (asg.kind == TTokenizer.leftParen_)
+        Error("'" + tok.name + "' is a variable.  It looks like you are trying to use it as a subroutine.");
+       else
+        Error("Expected the assignment operator, :=, after variable name '" + tok.name + "'");
+     }
+     ParseComputation();
+     if (tok.kind == TTokenizer.refParamName_)
+       prog.addInstruction(TTokenizer.PopRefParam_, ST.get(tok.symbolLocation).offset, tok.position);
+     else
+       prog.addInstruction(TTokenizer.Pop_, ST.get(tok.symbolLocation).offset, tok.position);
+   }
+   function ParseSubroutineCall() {
+     var /*TToken*/ tok;
+     var /*int*/ paramCt;
+     var /*BitSet*/ paramTypes;
+     var /*String*/ name;
+     tok = tokenizer.GetToken();
+     prog.addInstruction(TTokenizer.SubroutineSetup_, 0, tokenizer.pos);
+     var sym = ST.get(tok.symbolLocation);
+     paramCt = sym.paramCount;
+     paramTypes = sym.paramTypes;
+     name = sym.name;
+     ParseActualParams(paramCt, paramTypes, name);
+     prog.addInstruction(TTokenizer.AdjustSavedPC_, paramCt, tokenizer.pos);
+     prog.addInstruction(TTokenizer.JumpToSubroutine_, sym.start, tokenizer.pos);
+   }
+   function ParseIfStatement() {
+     var /*TToken*/ tok;
+     var /*int*/ firstJump, prevJump, runner;
+     var /*int*/ prevJumpIf;
+     tok = tokenizer.GetToken();
+     prevJump = -1;
+     firstJump = -1;
+     prevJumpIf = -1;
+     do {
+      ParseCondition();
+      tok = tokenizer.GetToken();
+      if (tok.kind != TTokenizer.then_)
+       Error("Expected 'THEN' here as part of an IF statemen.");
+      prog.addInstruction(TTokenizer.not_, 0, tokenizer.pos);
+      prevJumpIf = prog.insCt;
+      prog.addInstruction(TTokenizer.JumpIf_, 0, tokenizer.pos);
+      do {
+       tok = tokenizer.LookToken();
+       if (tok.kind == TTokenizer.endOfData_)
+        Error("End of program encountered in the middle of an IF statement.");
+       else if (tok.kind == TTokenizer.declare_ || tok.kind == TTokenizer.import_)
+        Error("Declarations cannot occur inside IF statements; check for missing END IF.");
+       else if (!(tok.kind == TTokenizer.else_ || tok.kind == TTokenizer.elseif_ || tok.kind == TTokenizer.endif_))
+        ParseStatement();
+      }while (!(tok.kind == TTokenizer.else_ || tok.kind == TTokenizer.elseif_ || tok.kind == TTokenizer.endif_));
+      tok = tokenizer.GetToken();
+      if (tok.kind == TTokenizer.elseif_ || tok.kind == TTokenizer.else_) {
+        if (firstJump == -1)
+         firstJump = prog.insCt;
+        else
+         prog.data[prevJump] = prog.insCt;
+        prevJump = prog.insCt;
+        prog.addInstruction(TTokenizer.Jump_, 0, tokenizer.pos);
+        prog.data[prevJumpIf] = prog.insCt;
+        prevJumpIf = -1;
+      }
+     } while (!(tok.kind == TTokenizer.endif_ || tok.kind == TTokenizer.else_));
+     if (tok.kind == TTokenizer.else_) {
+       do {
+        tok = tokenizer.LookToken();
+        if (tok.kind == TTokenizer.endOfData_)
+         Error("No matching END IF for IF statement;  end of program encountered inside an IF statement.");
+        else if (tok.kind == TTokenizer.elseif_)
+         Error("In an IF statement, an OR IF clause cannot follow an ELSE clause.");
+        else if (tok.kind == TTokenizer.declare_ || tok.kind == TTokenizer.import_) 
+         Error("Declarations cannot occur inside IF statements; check for missing END IF.");
+        else if (tok.kind != TTokenizer.endif_)
+         ParseStatement();
+       } while (tok.kind != TTokenizer.endif_);
+       tok = tokenizer.GetToken();
+     }
+     if (prevJumpIf != -1)
+       prog.data[prevJumpIf] = prog.insCt;
+     if (firstJump != -1) {
+       runner = firstJump;
+       do {
+        firstJump = prog.data[runner];
+        prog.data[runner] = prog.insCt;
+        runner = firstJump;
+       } while (runner != 0);
+     }
+   }
+   function ParseLoopStatement() {
+     var /*int*/ i, saveLoopLoc;
+     var /*TToken*/ tok;
+     var /*boolean*/ exitexists;
+     saveLoopLoc = currentLoopLoc;
+     currentLoopLoc = prog.insCt;
+     tok = tokenizer.GetToken();
+     do {
+      tok = tokenizer.LookToken();
+      if (tok.kind == TTokenizer.endOfData_)
+        Error("Encountered end of program in the middle of a LOOP.");
+      else if (tok.kind  == TTokenizer.declare_ || tok.kind == TTokenizer.import_)
+       Error("Declarations cannot occur inside of loops.");
+      else if (tok.kind != TTokenizer.endloop_)
+        ParseStatement();
+     } while (tok.kind != TTokenizer.endloop_);
+     tok = tokenizer.GetToken();
+     prog.addInstruction(TTokenizer.Jump_, currentLoopLoc, tokenizer.pos);
+     exitexists = false;
+     for (i = currentLoopLoc; i < prog.insCt; i++)
+      if ((prog.ins[i] == TTokenizer.Jump_ || prog.ins[i] == TTokenizer.JumpIf_) && prog.data[i] == -currentLoopLoc - 1) {
+        prog.data[i] = prog.insCt;
+        exitexists = true;
+      }
+      else if (prog.ins[i] == TTokenizer.Halt_ || prog.ins[i] == TTokenizer.Die_ || prog.ins[i] == TTokenizer.return_)
+        exitexists = true;
+     if (!exitexists)
+       Error("No way is provided to ever exit from LOOP.");
+     currentLoopLoc = saveLoopLoc;
+   }
+   function ParseExitStatement() {
+     var /*TToken*/ tok;
+     if (currentLoopLoc == -1)
+       Error("EXIT statements can only occur inside loops.");
+     if (grabBeingParsed > 1)
+       Error("An EXIT statement cannnot occur inside a GRAB statement,  except in the ELSE part.");
+     tok = tokenizer.GetToken();
+     if (tok.kind != TTokenizer.exit_)
+       ParseCondition();
+     if (tok.kind == TTokenizer.exitunless_)
+        prog.addInstruction(TTokenizer.not_, 0, tok.position);
+     if (tok.kind == TTokenizer.exit_)
+        prog.addInstruction(TTokenizer.Jump_, -currentLoopLoc - 1, tok.position);
+     else
+        prog.addInstruction(TTokenizer.JumpIf_, -currentLoopLoc - 1, tok.position);
+   }
+   function ParseReturnStatement() {
+     var /*TToken*/ tok;
+     if (!(parsingSubroutine || parsingFunction))
+        Error("A RETURN statement can occur only in a subroutine or function definition.");
+     if (grabBeingParsed > 1)
+        Error("A RETURN statement cannot occur inside a GRAB statement, except in the ELSE part.");
+     tok = tokenizer.GetToken();
+     if (parsingFunction) {
+         ParseComputation();
+         prog.addInstruction(TTokenizer.PopFunctionValue_, 0, tokenizer.pos);
+         prog.addInstruction(TTokenizer.returnFromFunction_, offsetCt, tok.position);
+         returnFound = true;
+     }
+     else
+      prog.addInstruction(TTokenizer.return_, offsetCt, tok.position);
+   }
+   function ParseGrab() {
+     var /*TToken*/ tok, varTok;
+     var /*int*/ num, jumpLoc;
+     var /*boolean*/ elseOccurred;
+     var /*int*/ loc;
+     tokenizer.GetToken();
+     varTok = tokenizer.GetToken();
+     if (varTok.kind == TTokenizer.undeclaredName_)
+        Error("The identifier '" + varTok.name + "' has not been declared.");
+     if (varTok.kind == TTokenizer.variableName_ && ST.get(varTok.symbolLocation).offset > 0)
+        Error("The reserved work GRAB must be followed by the name of a global variable.  '" + varTok.name + "' is a local variable.");
+     if (varTok.kind != TTokenizer.variableName_)
+        Error("The reserved word GRAB must be followed by the name of a global variable.");
+     loc = ST.get(varTok.symbolLocation).trueSymbolLoc;
+     num = ST.get(loc).grabNum;
+     if (num == -1) {
+       num = prog.GrabCount;
+       if (num == 31)
+          Error("A maximum of 32 different variables are supported in all GRAB statements.");
+       prog.GrabCount++;
+       ST.get(loc).grabNum = num;
+     }
+     prog.addInstruction(TTokenizer.Grab_, num, tokenizer.pos);
+     jumpLoc = prog.insCt;
+     prog.addInstruction(TTokenizer.Jump_, jumpLoc - 1, tokenizer.pos);
+     tok = tokenizer.GetToken();
+     if (tok.kind != TTokenizer.then_)
+        Error("Expected to find the reserved word THEN, which is required in a GRAB command.");
+     elseOccurred = false;
+     grabBeingParsed = 2;
+     do {
+      tok = tokenizer.LookToken();
+      if (tok.kind == TTokenizer.endOfData_)
+       Error("Missing ENDGRAB.  End of program occurred inside a GRAB statement.");
+      else if (tok.kind == TTokenizer.Fork_ && grabBeingParsed == 2)
+       Error("A FORK statement cannot occur inside a GRAB statement, except in the ELSE part.");
+      else if (tok.kind == TTokenizer.Die_ && grabBeingParsed == 2)
+       Error("A KILLPROCESS statement cannot occur inside a GRAB statement, except in the ELSE part.");
+      else if (tok.kind == TTokenizer.else_) {
+        grabBeingParsed = 1;
+        tok = tokenizer.GetToken();
+        elseOccurred = true;
+        prog.addInstruction(TTokenizer.endGrab_, num, tokenizer.pos);
+        prog.addInstruction(TTokenizer.Jump_, 0, tokenizer.pos);
+        prog.data[jumpLoc] = prog.insCt;
+        jumpLoc = prog.insCt - 1;
+      }
+      else if (tok.kind != TTokenizer.endGrab_)
+       ParseStatement();
+     } while (tok.kind != TTokenizer.endGrab_);
+     tok = tokenizer.GetToken();
+     if (elseOccurred)
+      prog.data[jumpLoc] = prog.insCt;
+     else
+      prog.addInstruction(TTokenizer.endGrab_, num, tokenizer.pos);
+     grabBeingParsed = 0;
+   }
+   function DoVarForIOStatement (/*String*/ str, /*int*/ start) {
+      var i = start; 
+      var name = "";
+      var /*boolean*/ done;
+      var /*int*/ loc;
+      var /*int*/ kind; // SymbolKinds
+      done = false;
+      i = i + 1;
+      if (i >= str.length || !str.charAt(i).match(/[a-zA-Z]/))
+        Error("Expected a variable name following # in string.");
+      do {
+        name += str.charAt(i);
+        i = i + 1;
+      } while ( i < str.length && str.charAt(i).match(/[a-zA-Z0-9_]/));
+      loc = ST.findSymbol(name.toLowerCase());
+      if (loc == -1)
+       Error("Expected variable name after # in string; '" + name + "' is an undeclared identifier.");
+      kind = ST.get(loc).kind;
+      if (kind == TSymbolTable.refParamSymb)
+       prog.addInstruction(TTokenizer.PushRefParam_, ST.get(loc).offset, tokenizer.pos);
+      else if (kind == TSymbolTable.paramSymb || kind == TSymbolTable.variableSymb)
+       prog.addInstruction(TTokenizer.Push_, ST.get(loc).offset, tokenizer.pos);
+      else if (kind == TSymbolTable.keyWordSymb && (ST.get(loc).token >= TTokenizer.turtleX_ && ST.get(loc).token <= TTokenizer.forkNumber_))
+       prog.addInstruction(ST.get(loc).token, 0, tokenizer.pos);
+      else
+       Error("Expected variable name after # in string; '" + name + "' is not a variable name.");
+      return i;
+   }
+   function ParseIOStatement() {
+     var /*TToken*/ firstTok, tok;
+     var /*int*/ i, len;
+     var /*int*/ loc;
+     var buf = "";
+     firstTok = tokenizer.GetToken();
+     tok = tokenizer.GetToken();
+     if (tok.kind != TTokenizer.leftParen_)
+       Error("Expected left parenthesis to begin parameter list.");
+     tok = tokenizer.GetToken();
+     if (tok.kind != TTokenizer.string_)
+       Error("The first parameter for this subroutine must be a string.");
+     loc = prog.stringCt;
+     i = 0;
+     len = tok.str.length;
+     var str = tok.str;
+     while (i < len) {
+       if (str.charAt(i) == '#') {
+         if (i < len-1 && str.charAt(i + 1) == '#') {
+           buf += '#';
+           i = i + 2;
+         }
+         else {
+           buf += String.fromCharCode(255);
+           i = DoVarForIOStatement(str,i);
+         }
+       }
+       else {
+         buf += str.charAt(i);
+         i = i + 1;
+       }
+     }
+     prog.addString(buf);
+     if (firstTok.kind == TTokenizer.AskUser_ || firstTok.kind == TTokenizer.YesOrNo_) {
+       tok = tokenizer.GetToken();
+       if (tok.kind != TTokenizer.comma_)
+        Error("Expected a comman here.  (Two parameters are required.)");
+       tok = tokenizer.GetToken();
+       if (tok.kind == TTokenizer.refParamName_)
+        prog.addInstruction(TTokenizer.Push_, ST.get(tok.symbolLocation).offset, tok.position);
+       else if (tok.kind == TTokenizer.variableName_ || tok.kind == TTokenizer.paramName_)
+        prog.addInstruction(TTokenizer.PushAbsoluteReference_, ST.get(tok.symbolLocation).offset, tok.position);
+       else if (tok.kind == TTokenizer.undeclaredName_)
+        Error("Undeclared identifier '" + tok.name + "'.");
+       else
+        Error("Unexpected item found.  This is a REF parameter;  actual parameter must be a variable name.");
+     }
+     tok = tokenizer.GetToken();
+     if (tok.kind == TTokenizer.comma_)
+      Error("Too many parameters provided.");
+     else if (tok.kind != TTokenizer.rightParen_)
+      Error("Expected right parenthesis to end parameter list.");
+     prog.addInstruction(firstTok.kind, loc, firstTok.position);
+   }
+   function ParseStatement() {
+       var /*TToken*/ tok;
+       tok = tokenizer.LookToken();
+       if ((tok.kind >= TTokenizer.HideTurtle_ && tok.kind <= TTokenizer.Halt_) ||
+                   (tok.kind >= TTokenizer.red_ && tok.kind <= TTokenizer.white_)) {
+            tok = tokenizer.GetToken();
+            ParseActualParams(0, null, tok.name);
+            prog.addInstruction(tok.kind, 0, tok.position);
+       }
+       else if (tok.kind == TTokenizer.Fork_ || (tok.kind >= TTokenizer.Forward_ && tok.kind <= TTokenizer.Circle_)) {
+            tok = tokenizer.GetToken();
+            ParseActualParams(1, null, tok.name);
+            prog.addInstruction(tok.kind, 0, tok.position);
+       }
+       else if (tok.kind == TTokenizer.functionName_ ||
+                      (tok.kind >= TTokenizer.Random_ && tok.kind <= TTokenizer.forkNumber_) ||
+                      (tok.kind >= TTokenizer.sin_ && tok.kind <= TTokenizer.arcsin_) ||
+                      (tok.kind >= TTokenizer.abs_ && tok.kind <= TTokenizer.RandomInt_))
+       Error("Function name '" + tok.name + "' not legal here; functions cannot be used like subroutines or assigned values.");
+       else {
+         switch (tok.kind) {
+          case TTokenizer.variableName_:
+          case TTokenizer.refParamName_:
+          case TTokenizer.paramName_: 
+             ParseAssignmentStatement();
+             break;
+          case TTokenizer.subName_: 
+            ParseSubroutineCall();
+            break;
+          case TTokenizer.if_: 
+            ParseIfStatement();
+            break;
+          case TTokenizer.loop_: 
+            ParseLoopStatement();
+            break;
+          case TTokenizer.exit_:
+          case TTokenizer.exitif_:
+          case TTokenizer.exitunless_: 
+            ParseExitStatement();
+            break;
+          case TTokenizer.return_: 
+            ParseReturnStatement();
+            break;
+          case TTokenizer.Grab_: 
+            ParseGrab();
+            break;
+          case TTokenizer.Die_:
+            tok = tokenizer.GetToken();
+            if (grabBeingParsed == 2)
+               Error("A KillProcess command cannot occur in a GRAB statement, except in the ELSE part.");
+            if (parsingSubroutine || parsingFunction) {
+              prog.addInstruction(TTokenizer.return_, offsetCt, tok.position);
+              returnFound = true;
+            }
+            else
+              prog.addInstruction(TTokenizer.Die_, 0, tok.position);
+            break;
+          case TTokenizer.Move_:
+          case TTokenizer.MoveTo_:
+          case TTokenizer.Arc_:
+             tok = tokenizer.GetToken();
+             ParseActualParams(2, null, tok.name);
+             prog.addInstruction(tok.kind, 0, tok.position);
+             break;
+          case TTokenizer.rgb_:
+          case TTokenizer.hsb_:
+             tok = tokenizer.GetToken();
+             ParseActualParams(3, null, tok.name);
+             prog.addInstruction(tok.kind, 0, tok.position);
+             break;
+          case TTokenizer.declare_:
+          case TTokenizer.import_: 
+            ParseDeclaration();
+            break;
+          case TTokenizer.AskUser_:
+          case TTokenizer.YesOrNo_:
+          case TTokenizer.TellUser_:
+          case TTokenizer.DrawText_: 
+             ParseIOStatement();
+             break;
+          case TTokenizer.sub_:
+          case TTokenizer.function_:
+          case TTokenizer.predeclare_: 
+             Error("Subroutine and function declarations cannot be nested inside each other or inside statements.");
+             break;
+          case TTokenizer.endloop_: 
+             Error("'END LOOP' found without matching 'LOOP'.  Check nesting of statements.");
+             break;
+          case TTokenizer.else_:
+          case TTokenizer.elseif_:
+          case TTokenizer.endif_: 
+             Error("'" + tok.name + "' found without matching 'IF'.  Check nesting of statements.");
+             break;
+          case TTokenizer.endGrab_: 
+             Error("'END GRAB' found without matching 'GRAB'.  Check nesting of statements.");
+             break;
+          case TTokenizer.endsub_: 
+             Error("'END SUB' found without matching 'SUB'.  Check nesting.");
+             break;
+          case TTokenizer.endfunction_: 
+             Error("'END FUNCTION found without matching 'FUNCTION'.  Check nesting.");
+             break;
+          case TTokenizer.undeclaredName_: 
+            if (parsingSubroutine)
+              Error("The identifier '" + tok.name + "' has not been declared in this subroutine.");
+            else if (parsingFunction)
+              Error("The identifier '" + tok.name + "' has not been declared in this function.");
+            else
+              Error("The identifier '" + tok.name + "' has not been declared.");
+            break;
+          default:
+            Error("Unexpected item found; expected a statement or declaration.");
+         }
+       }
+   }
+   function ParseActualParams (paramCt, /*BitSet*/ paramTypes, subName) { 
+     var /*TToken*/ tok;
+     var /*int*/ i;
+     if (paramCt == 0) {
+       tok = tokenizer.LookToken();
+       if (tok.kind == TTokenizer.leftParen_) {
+         tokenizer.GetToken();
+         tok = tokenizer.GetToken();
+         if (tok.kind != TTokenizer.rightParen_)
+           Error("Expected right parenthesis; '" + subName + "' has no parameters.");
+       }
+       return;
+     }
+     tok = tokenizer.GetToken();
+     if (tok.kind != TTokenizer.leftParen_)
+       Error("Expected left parenthesis to begin parameter list for '" + subName + "'.");
+     for (i = 1; i <= paramCt; i++) {
+       tok = tokenizer.LookToken();
+       if (paramTypes && (paramTypes & (1 << (i-1))) != 0) {
+         tok = tokenizer.GetToken();
+         if (tok.kind == TTokenizer.refParamName_)
+           prog.addInstruction(TTokenizer.Push_, ST.get(tok.symbolLocation).offset, tok.position);
+         else if (tok.kind == TTokenizer.variableName_ || tok.kind == TTokenizer.paramName_)
+           prog.addInstruction(TTokenizer.PushAbsoluteReference_, ST.get(tok.symbolLocation).offset, tok.position);
+         else if (tok.kind == TTokenizer.undeclaredName_)
+           Error("Undeclared identifier, '" +  tok.name + "'.");
+         else
+           Error("Unexpected item found.  This is a REF parameter;  actual parameter must be a variable name.");
+         tok = tokenizer.LookToken();
+         if (tok.kind != TTokenizer.comma_ && tok.kind != TTokenizer.rightParen_) 
+         Error("Unexpected item found.  This is a REF parameter;  actual parameter must be a variable name.");
+       }
+       else {
+         ParseComputation();
+         tok = tokenizer.LookToken();
+       }
+       tok = tokenizer.GetToken();
+       if (i < paramCt) {
+         if (tok.kind == TTokenizer.rightParen_)
+           Error("Not enough parameters supplied for '" +  subName+  "'.  (" +  paramCt + " required.)");
+         else if (tok.kind != TTokenizer.comma_)
+           Error("Expected a comma here to separate parameters.");
+       }
+     }
+     if (tok.kind != TTokenizer.rightParen_)
+         Error("Expected right parenthesis here to end parameter list for '" + subName + "'.");
+   }
+   function ParseFormalParams () {
+     var /*int*/ paramCt;
+     var /*BitSet*/ paramTypes;
+     var /*TToken*/ tok;
+     var /*int*/ kind; // SymbolKinds
+     var /*int*/ loc;
+     var /*String*/ name;
+     paramCt = 0;
+     paramTypes = 0;
+     tokenizer.GetToken();  // "("
+     tok = tokenizer.LookToken();
+     if (tok.kind == TTokenizer.rightParen_) {
+       tok = tokenizer.GetToken();
+       return [0,0];
+     }
+     do {
+      tok = tokenizer.GetToken();
+      if (tok.kind == TTokenizer.ref_) {  
+        kind = TSymbolTable.refParamSymb;
+        paramTypes = paramTypes | (1 << paramCt);
+        tok = tokenizer.GetToken();
+      }
+      else
+       kind = TSymbolTable.paramSymb;
+      paramCt++;
+      if (tok.kind == TTokenizer.undeclaredName_ || tok.kind == TTokenizer.functionName_ || tok.kind == TTokenizer.subName_) {
+        if (paramCt > 30)
+          Error("Too many parameters; there is a limit of 30.");
+        if (tok.kind == TTokenizer.undeclaredName_)
+          loc = ST.addSymbol(kind, tok.name);
+        else {
+         name = ST.get(tok.symbolLocation).name;
+         loc = ST.addSymbol(kind, name);
+        }
+        offsetCt++;
+        ST.setVariableData(loc, offsetCt);
+      }
+      else if (tok.kind < TTokenizer.variableName_ && !(tok.kind >= TTokenizer.leftParen_ && tok.kind <= TTokenizer.comma_))
+       Error("A reserved word can''t be redefined as a parameter name.");
+      else if (tok.kind == TTokenizer.paramName_ || tok.kind == TTokenizer.refParamName_)
+       Error("Duplicate parameter name.");
+      else
+       Error("Unexpected item found in formal parameter list.");
+      tok = tokenizer.GetToken();
+      if (tok.kind != TTokenizer.comma_ && tok.kind != TTokenizer.rightParen_)
+       Error("Expected either a comma or a right parenthesis here, while reading a formal parameter list.");
+     } while (tok.kind != TTokenizer.rightParen_);
+     return [paramCt,paramTypes];
+   }
+   function ParseForwardDeclaration() {
+     var /*TToken*/ firstTok, nameTok, tok;
+     var /*int*/ nameLoc;
+     var /*int*/ paramCt;
+     var /*BitSet*/ paramTypes;
+     tokenizer.GetToken();  // "predeclare"
+     firstTok = tokenizer.GetToken();
+     if (firstTok.kind != TTokenizer.sub_ && firstTok.kind != TTokenizer.function_)
+      Error("The reserved word 'PREDECLARE' must be followed by either 'SUB' or 'FUNCTION'.");
+     nameTok = tokenizer.GetToken();
+     if (nameTok.kind != TTokenizer.undeclaredName_) {
+      if (nameTok.kind < TTokenizer.variableName_)
+       Error("You can't redefine a reserved word.");
+      else
+       Error("The identifier '" + nameTok.name + "' has already been defined.");
+     }
+     if (firstTok.kind == TTokenizer.sub_)
+      nameLoc = ST.addSymbol(TSymbolTable.subSymb, nameTok.name);
+     else
+      nameLoc = ST.addSymbol(TSymbolTable.functionSymb, nameTok.name);
+     prog.addInstruction(TTokenizer.Jump_, prog.insCt + 2, tokenizer.pos);
+     prog.addInstruction(TTokenizer.Jump_, 0, tokenizer.pos);
+     paramCt = 0;
+     paramTypes = 0;
+     tok = tokenizer.LookToken();
+     if (tok.kind == TTokenizer.leftParen_) {
+       tok = tokenizer.GetToken();
+       tok = tokenizer.LookToken();
+       if (tok.kind != TTokenizer.rightParen_)
+        do {
+         if (paramCt == 30)
+            Error("There is a maximum of 30 parameters for a subroutine or function.");
+         paramCt++;
+         tok = tokenizer.GetToken();
+         if (tok.kind == TTokenizer.ref_) {
+           paramTypes = paramTypes | (1 << (paramCt-1));
+           tok = tokenizer.GetToken();
+         }
+         if (tok.kind < TTokenizer.variableName_ || tok.kind == TTokenizer.string_ || tok.kind == TTokenizer.number_)
+           Error("Expected an identifier here as the name for a dummy parameter.");
+         tok = tokenizer.LookToken();
+         if (tok.kind == TTokenizer.comma_)
+            tok = tokenizer.GetToken();
+        } while (tok.kind == TTokenizer.comma_);
+       if (tok.kind != TTokenizer.rightParen_)
+        Error("Expected a right parenthesis to end parameter list or a comma to separate parameters.");
+       tok = tokenizer.GetToken();
+     }
+     paramTypes = paramTypes | (1 << 31);  // this sub is predeclared
+     ST.setSubroutineData(nameLoc, prog.insCt - 1, paramCt, paramTypes);
+   }
+   function ParseSubroutine() {
+     var /*TToken*/ tok, nameTok, firstTok;
+     var /*int*/ nameLoc, i;
+     var /*int*/ paramCt;
+     var /*int*/ codeStart;
+     var /*BitSet*/ paramTypes;
+     var /*boolean*/ predeclared;
+     var sym;
+     offsetCt = 0;
+     firstTok = tokenizer.GetToken();
+     if (firstTok.kind == TTokenizer.sub_)
+      parsingSubroutine = true;
+     else {
+       parsingFunction = true;
+       returnFound = false;
+     }
+     nameTok = tokenizer.GetToken();
+     predeclared = false;
+     if (nameTok.kind == TTokenizer.subName_ || nameTok.kind == TTokenizer.functionName_) {
+       sym = ST.get(nameTok.symbolLocation);
+       if ( (sym.paramTypes & (1 << 31)) == 0 )
+        Error("The identifier '" + nameTok.name + "' has already been defined.");
+       else if (nameTok.kind == TTokenizer.subName_ && firstTok.kind == TTokenizer.function_)
+        Error("This was previously predeclared as a subroutine; it cannot be redefined as a function.");
+       else if (nameTok.kind == TTokenizer.functionName_ && firstTok.kind == TTokenizer.sub_)
+        Error("This was previously predeclared as a function; it cannot be redefined as a subroutine.");
+       else
+        predeclared = true;
+     }
+     else if (nameTok.kind != TTokenizer.undeclaredName_) {
+      if (nameTok.kind < TTokenizer.variableName_)
+       Error("You can't use a reserved word or a symbol as the name of a subroutine or function.");
+      else
+       Error("The identifier '" + nameTok.name + "' has already been defined.");
+     }
+     if (predeclared)
+      nameLoc = nameTok.symbolLocation;
+     else if (firstTok.kind == TTokenizer.sub_)
+      nameLoc = ST.addSymbol(TSymbolTable.subSymb, nameTok.name);
+     else
+      nameLoc = ST.addSymbol(TSymbolTable.functionSymb, nameTok.name);
+     ST.startSubroutineSymbols();
+     codeStart = prog.insCt;
+     prog.addInstruction(TTokenizer.Jump_, 0, tokenizer.pos);
+     if (predeclared) {
+       sym = ST.get(nameLoc);
+       sym.paramTypes = sym.paramTypes & ~(1<<31);
+       prog.data[sym.start] = prog.insCt;
+     }
+     tok = tokenizer.LookToken();
+     if (tok.kind != TTokenizer.leftParen_) {
+       paramCt = 0;
+       paramTypes = 0;
+     }
+     else {
+       var subdata = ParseFormalParams();
+       paramCt = subdata[0];
+       paramTypes = subdata[1];
+       tok = tokenizer.LookToken();
+     }
+     if (predeclared) {
+       sym = ST.get(nameLoc);
+       if (paramCt != sym.paramCount)
+        Error("The number of parameters given here does not agree with the number in the predeclaration of this subroutine.");
+       for (i = 0; i < paramCt; i++)
+         if ( (paramTypes & (1<<i)) != (sym.paramTypes & (1<<i)) )
+           Error("The type of parameter number " + (i + 1) + "(REF or non-REF) does not agree with its type in the predeclaration of this subroutine.");
+     }
+     else
+      ST.setSubroutineData(nameLoc, codeStart + 1, paramCt, paramTypes);
+     prog.addInstruction(TTokenizer.SetStackRef_, paramCt, tokenizer.pos);
+     do {
+      if (tok.kind == TTokenizer.endfunction_ && parsingSubroutine)
+       Error("Unexpected 'END FUNCTION' -- expecting END SUB or a statement or declaration.");
+      else if (tok.kind == TTokenizer.endsub_ && parsingFunction)
+       Error("Unexpected 'END SUB' -- expecting END FUNCTION or a statement or declaration.");
+      else if (tok.kind == TTokenizer.endif_ || tok.kind == TTokenizer.endloop_ || tok.kind == TTokenizer.else_ || tok.kind == TTokenizer.elseif_) {
+       if (parsingSubroutine)
+        Error("Expecting END SUB or a statement or declaration.  (CheckNesting)");
+       else
+        Error("Expecting END FUNCTION or a statement or declaration.  (CheckNesting)");
+      }
+      ParseStatement();
+      tok = tokenizer.LookToken();
+     } while (tok.kind != TTokenizer.endsub_ && tok.kind != TTokenizer.endfunction_);
+     if (parsingFunction && !returnFound)
+      Error("No return statement in function; it has no way to return a value.");
+     if (tok.kind == TTokenizer.endsub_) {
+       if (firstTok.kind == TTokenizer.function_)
+        Error("END FUNCTION is required to end a function definition.");
+     }
+     else if (firstTok.kind == TTokenizer.sub_)
+      Error("END SUB is required to end a subroutine definition.");
+     tok = tokenizer.GetToken();
+     prog.addInstruction(TTokenizer.return_, offsetCt, tokenizer.pos);
+     ST.endSubroutineSymbols();
+     prog.data[codeStart] = prog.insCt;
+     parsingSubroutine = false;
+     parsingFunction = false;
+   }
+   return {
+      parse: function(/*String*/ str, /*TSymbolTable*/ symbs) {
+         if (str == null || str.trim().length == 0)
+            throw new TError("Data is empty; no program available for compilation.",-1);
+         saveInsCt = 0;
+         ST = symbs;
+         tokenizer = new TTokenizer(str,ST);
+         prog = new TProgram();
+         doParse();
+         var temp = prog;
+         prog = null;
+         tokenizer = null;
+         return temp;
+      },
+      parseAppend: function(/*String*/ str, /*TSymbolTable*/ symbs, /*TProgram*/ program) {
+         if (str == null || str.trim().length == 0)
+            throw new TError("Data is empty; no program available for compilation.",-1);
+         saveInsCt = program.insCt;
+         ST = symbs;
+         prog = program;
+         tokenizer = new TTokenizer(str,ST);
+         doParse();
+         tokenizer = null;
+         prog = null;
+         ST = null;
+      }
+   };
+})();
+
+//------------------------------------------------------------------------
+
+function indent(str) {
+     var oldText = str;
+     var len = oldText.length;
+     var newText = "";
+     var pos = 0;
+     var indentCt = 0;
+     var NewindentCt = 0;
+     var previousWord = "";
+     var line = "";
+     while (pos < len) {
+        let ch = oldText.charAt(pos);
+        if (ch == '"')
+         CopyString();
+        else if (ch == '{')
+         CopyComment();
+        else if (ch.match(/[a-zA-Z_]/))
+         CopyWord();
+        else {
+          if (ch == '\n' || ch == '\r') {
+             putEOL();
+             if (ch == '\r' && pos+1 < len && oldText.charAt(pos+1) == '\n')
+                pos++;
+             pos++;
+             while (pos < len && (oldText.charAt(pos) == ' ' || oldText.charAt(pos) == '\t'))
+                pos++;
+          }
+          else {
+             PutCh(ch);
+             pos++;
+          }
+        }
+     }
+     if (line.length != 0)
+        Put(line);
+     return newText;
+     function Put(s) {
+       newText += s;
+     }     
+     function PutCh(ch) {
+       line += ch;
+     }     
+     function putEOL() {
+         line += '\n';
+         if (line.charAt(0) != '\r' && line.charAt(0) != '\n') {
+          for (let i = 0; i < indentCt; i++)
+             Put(" ");
+         }
+         Put(line);
+         line = "";
+         indentCt = NewindentCt;
+     }
+     function CopyString() {
+       do {
+            let ch = oldText.charAt(pos);
+            if (ch == '\n')
+               putEOL();
+            else if (ch == '\r') {
+               putEOL();
+               if (pos+1 < len && oldText.charAt(pos) == '\n')
+                  pos++;
+            }
+            else
+               PutCh(oldText.charAt(pos));
+            pos = pos + 1;
+       } while (pos < len && oldText.charAt(pos) != '"');
+       if (pos < len) {
+          PutCh(oldText.charAt(pos));
+          pos = pos + 1;
+       }
+     }
+     function CopyComment() {
+       var nesting = 0;
+       do {
+        let ch = oldText.charAt(pos);
+        if (ch == '{') {
+           PutCh('{');
+           nesting ++;
+        }
+        else if (ch == '}') {
+           PutCh('}');
+           nesting --;
+        }
+        else if (ch == '\n')
+           putEOL();
+        else if (ch == '\r') {
+           putEOL();
+           if (pos+1 < len && oldText.charAt(pos+1) == '\n')
+              pos++;
+        }
+        else
+          PutCh(ch);
+        pos = pos + 1;
+       } while (pos < len && nesting > 0);
+     }
+     function NextWordIsIf() {
+       var p = pos;
+       while (p < len && !oldText.charAt(p.match(/[a-zA-Z]/))) {
+        if (oldText.charAt(p) == '{') {
+          let nesting = 0;
+          do {
+            if (oldText.charAt(p) == '{')
+               nesting++;
+            else if (oldText.charAt(p) == '}')
+               nesting--;
+            p = p + 1;
+          } while (p < len && nesting > 0);
+          if (p < len)
+           p = p + 1;
+        }
+        else
+         p = p + 1;
+       }
+       return (p + 1 < len) && 
+              (oldText.charAt(p) == 'i'|| oldText.charAt(p) == 'I') &&
+              (oldText.charAt(p + 1) == 'f' || oldText.charAt(p + 1) == 'F') &&
+              ((p + 2 == len) || 
+                      !(oldText.charAt(p + 2) == '_' || oldText.charAt(p+2).match(/[a-zA-Z_]/)));
+     }
+     function CopyWord() {
+       var w = "";
+       do {
+          w += oldText.charAt(pos);
+          pos++;
+       } while (pos < len && 
+                  (oldText.charAt(pos) == '_' || oldText.charAt(pos).match(/[a-zA-Z0-9]/)));
+       if (w.length > 11) {
+         for (let i = 0; i < w.length; i++)
+            PutCh(w.charAt(i));
+         previousWord = w;
+         return;
+       }
+       let lcw = w.toLowerCase();
+       if (lcw == "end") {
+         if (line.length == 0)
+          indentCt = indentCt - 3;
+         NewindentCt = NewindentCt - 3;
+       }
+       else if (lcw == "orif" || lcw == "else" ||
+                      (lcw == "or" && NextWordIsIf())) {
+         if (line.length == 0)
+           indentCt = indentCt - 3;
+       }
+       else {
+         if (lcw == "if" && (previousWord == "or" || previousWord == "exit")) { }
+         else if ((lcw == "sub" || lcw == "function") && previousWord == "predeclare") { }
+         else if (lcw == "sub" || lcw == "if" || lcw == "loop" || 
+                      lcw == "grab" || lcw == "function") {
+           if (previousWord != "end")
+             NewindentCt = NewindentCt + 3;
+         }
+         else if (lcw == "endsub" || lcw == "endif" || lcw == "endloop" || 
+                         lcw == "endgrab" || lcw == "endfunction") {
+           if (line.length == 0)
+             indentCt = indentCt - 3;
+           NewindentCt = NewindentCt - 3;
+         }
+       }
+       previousWord = lcw;
+       for (let i = 0; i < w.length; i++)
+         PutCh(w.charAt(i));
+     }
+}
+
+function doIndent() {
+   var program = document.getElementById("program").value;
+   var indented = indent(program);
+   document.getElementById("program").value = indented;
+}
+
+function startProgramLoad(program) {  
+   if (program.status != "not started")
+      return;
+   program.status = "loading";
+   program.text = "Waiting for program '" + program.name + "' to load from url " + program.url;
+   if (program.position == programInEditor) {
+       document.getElementById("program").value = program.text;
+       document.getElementById("program").disabled = true;
+   }
+   var ajaxTimeout;
+   var ajax = new XMLHttpRequest();
+   ajax.open("GET",program.url);
+   ajax.overrideMimeType("text/plain");
+   ajax.addEventListener("error",function() {
+       clearTimeout(ajaxTimeout);
+       program.text = "Error: Program could not be loaded from " + program.url;
+       program.status = "error";
+       doneLoad();
+   });
+   ajax.addEventListener("load",function() {
+       clearTimeout(ajaxTimeout);
+       program.text = ajax.responseText;
+       program.status = "loaded";
+       doneLoad();
+   });
+   ajaxTimeout = setTimeout(function() {
+       ajax.abort();
+       program.text = "Error: Request timed out while trying to load from " + program.url;
+       program.status = "error";
+       doneLoad();
+   }, 30000);
+   try {
+      ajax.send();
+   } catch(e) {
+       clearTimeout(ajaxTimeout);
+       program.status = "error";
+       program.text = "Error while trying to send request for example: " + program.url;
+       doneLoad();
+   }
+   function doneLoad() {
+      if (program.position == programInEditor) {
+          document.getElementById("program").value = program.text;
+          document.getElementById("program").disabled = false;
+      }
+   }
+}
+
+
+function doProgramChange() {
+   let currentProg = programs[programInEditor];
+   currentProg.text = document.getElementById("program").value;
+   let p = document.getElementById("selectprogram").value;
+   if (p == "new") {
+       untitledCount++;
+       let pos = programs.length;
+       let prog = { name: "User Program " + untitledCount, text: "",
+                    position: pos, status: "user" };
+        programs.push(prog);
+        document.getElementById("program").value = "";
+        let option = document.createElement("option");
+        option.value = "" + (pos+1);
+        option.innerHTML = prog.name;
+        document.getElementById("selectprogram").appendChild(option);
+        document.getElementById("selectprogram").value = "" + (pos+1);
+        document.getElementById("program").disabled = false;
+        programInEditor = pos;
+   }
+   else {
+       p = Number(p) - 1;
+       let prog = programs[p];
+       programInEditor = prog.position;
+       if (prog.status == "not started") {
+          startProgramLoad(prog);
+       }
+       else {
+           document.getElementById("program").value = prog.text;
+           document.getElementById("program").disabled = (prog.status == "loading");
+       }
+   }
+}
+
+function doFinishAskUser() {
+    var ans = parseFloat(document.getElementById("auinput").value.trim());
+    if (isFinite(ans) ) {
+        userInput = ans;
+        gotInput();
+    }
+    else {
+        alert("Your input for AskUser is not a number.  Please enter a number before continuing.");
+        document.getElementById("auinput").focus();
+        document.getElementById("auinput").select();
+    }
+}
+
+function doClear() {
+   stopRunning();
+   activeProcessList = new Turtle();
+   loadedProgram = null;
+   loadedProgramName = null;
+   OSG.fillStyle = "white";
+   OSG.fillRect(0,0,canvas.width,canvas.height);
+   doDraw();
+   document.getElementById("doit").disabled = false;
+   document.getElementById("command").disabled = false;
+   document.getElementById("run").disabled = true;
+   document.getElementById("pause").disabled = true;
+   document.getElementById("stop").disabled = true;
+   if (currentInputDialog)
+      currentInputDialog.style.display = "none";
+   document.getElementById("errorreport").style.display = "none";
+   document.getElementById("programerror").innerHTML = "&nbsp;";
+   document.getElementById("status").innerHTML = "xTurtle Status: Idle";
+}
+
+function doUserCommands() {
+   var commands = document.getElementById("command").value.trim();
+   if (commands.length == 0) {
+       showErrorDialog("Enter some commands in the input box before trying to execute them!");
+       return;
+   }
+   document.getElementById("programerror").innerHTML = "&nbsp;";
+   try {
+      if (loadedProgram) {
+         let start = loadedProgram.insCt;
+         parser.parseAppend(commands,loadedProgramSymbols,loadedProgram);
+         loadedProgramTurtle.programCounter = start;
+      }
+      else {
+         let ST = new TSymbolTable();
+         let prog = parser.parse(commands,ST);
+         loadedProgram = prog;
+         loadedProgramSymbols = ST;
+         loadedProgramIncludesUserCommands = true;
+         loadedProgramTurtle = new Turtle(0,null);
+      }
+   }
+   catch (e) {
+      if (e instanceof TError) {
+         showErrorDialog("Compilation error: " + e.message);
+         document.getElementById("command").setSelectionRange(e.pos,e.pos);
+         document.getElementById("command").focus();
+      }
+      else {
+         showErrorDialog("Internal error (this is a bug): " + e);
+      }
+      document.getElementById("command").focus();
+      document.getElementById("command").select();
+      return;
+   }
+   loadedProgramName = "&lt;User Commands&gt;";
+   document.getElementById("errorreport").style.display = "none";
+   startRunningProgram(loadedProgram,loadedProgramTurtle);
+}
+
+function doRunProgram() {
+   stopRunning();
+   var text = document.getElementById("program").value;
+   try {
+      var ST = new TSymbolTable();
+      var prog = parser.parse(text,ST);
+      doClear();
+      loadedProgram = prog;
+      loadedProgramSymbols = ST;
+      loadedProgramIncludesUserCommands = false;
+      loadedProgramTurtle = new Turtle(0,null);
+      loadedProgramName = '"' + programs[programInEditor].name + '"';
+      startRunningProgram(prog,loadedProgramTurtle);
+      window.scrollTo(0,window.pageYOffset+document.getElementById("status").getBoundingClientRect().top);   }
+   catch (e) {
+      if ( e instanceof TError ) {
+         document.getElementById("programerror").innerHTML = "Syntax error: " + e.message;
+         document.getElementById("program").setSelectionRange(e.pos,e.pos);
+         document.getElementById("program").focus();
+      }
+      else {
+         document.getElementById("programerror").innerHTML = "Internal error (this is a bug): " + e;
+      }
+   }
+}
+
+function init() {
+    try {
+        canvas = document.getElementById("canvas");
+        graphics = canvas.getContext("2d");
+        graphics.strokeStyle = "blue";
+        OSC = document.createElement("canvas");
+        OSC.width = canvas.width;
+        OSC.height = canvas.height;
+        OSG = OSC.getContext("2d");
+        OSG.lineWidth = 2;
+        OSG.font = "15px Serif";
+    }
+    catch (e) {
+         document.getElementById("message").innerHTML =
+             "Sorry, this page requires canvas graphics support, which is not available in your browser.";
+         return;
+    }
+    document.getElementById("selectprogram").onchange = doProgramChange;
+    if (programsToLoad && programsToLoad.length > 0) {
+       untitledCount = 0;
+       programs = programsToLoad;
+       let options = "<option value='new'>[New Program]</option>";
+       for (let i = 0; i < programs.length; i++) {
+          options += "<option value='" + (i+1) +"'>" + programs[i].name + "</option>";
+          programs[i].position = i;
+          programs[i].status = "not started";
+       }
+       document.getElementById("selectprogram").innerHTML = options;
+       programInEditor = 0;
+       startProgramLoad(programs[0]);
+    }
+    else {
+       document.getElementById("selectprogram").innerHTML =
+                 "<option value='new'>[New Program]</option>" +
+                 "<option value='1'>User Program 1</option>";
+       untitledCount = 1;
+       programs = [
+          { name: "User Program 1", text: "", position: 0, status: "user" }
+       ];
+       programInEditor = 0;
+    }
+    document.getElementById("selectprogram").value = "1";
+    document.getElementById("reset").onclick = doClear;
+    document.getElementById("pause").onclick = pauseRunning;
+    document.getElementById("stop").onclick = stopRunning;
+    document.getElementById("run").onclick = resumeRunning;
+    document.getElementById("doit").onclick = doUserCommands;
+    document.getElementById("command").onkeydown = function(evt) { if (evt.keyCode == 13) doUserCommands(); };
+    document.getElementById("command").value = "";
+    document.getElementById("speedselect").onchange = function() {runSpeed = document.getElementById("speedselect").value;};
+    document.getElementById("speedselect").value = "" + runSpeed;
+    document.getElementById("hideturtles").onchange = function() {alwaysHideTurtles = document.getElementById("hideturtles").checked;};
+    document.getElementById("hideturtles").checked = alwaysHideTurtles;
+    document.getElementById("lockstep").onchange = function() {randomScheduling = !document.getElementById("lockstep").checked;};
+    document.getElementById("lockstep").checked = !randomScheduling;
+    document.getElementById("tuok").onclick = gotInput;
+    document.getElementById("ynyes").onclick = function() { userInput = 1; gotInput(); };
+    document.getElementById("ynno").onclick = function() { userInput = 0; gotInput(); };
+    document.getElementById("auok").onclick = doFinishAskUser;
+    document.getElementById("runprog").onclick = doRunProgram;
+    document.getElementById("indent").onclick = doIndent;
+    document.getElementById("errorreport").onmousedown = function() { document.getElementById("errorreport").style.display = "none"; };
+    doClear();
+}
+
+programsToLoad = [  // Programs available for loading from web site; delete to disable all loading.
+   { name: "3.4.6.4-Tiling", url: "KevinMitchellTilings/3.4.6.4-Tiling.txt" },
+   { name: "3.6.6*.6-Tiling", url: "KevinMitchellTilings/3.6.6*.6-Tiling.txt" },
+   { name: "4.6*.4.6*.4.6*-Tiling", url: "KevinMitchellTilings/4.6*.4.6*.4.6*-Tiling.txt" },
+   { name: "4.8.8-Tiling", url: "KevinMitchellTilings/4.8.8-Tiling.txt" },
+   { name: "6.6*.6.6*-Tiling", url: "KevinMitchellTilings/6.6*.6.6*-Tiling.txt" },
+   { name: "9.9.6*-Tiling", url: "KevinMitchellTilings/9.9.6*-Tiling.txt" },
+   { name: "Bows-n-Arrows", url: "KevinMitchellTilings/Bows-n-Arrows.txt" },
+   { name: "Mongolian-E", url: "KevinMitchellTilings/Mongolian-E.txt" },
+   { name: "Pentagons", url: "KevinMitchellTilings/Pentagons.txt" },
+   { name: "Persian", url: "KevinMitchellTilings/Persian.txt" }
+]
+
+
+</script>
+</head>
+<body onload="init()">
+
+<noscript>
+   <p style="font-weight: bold; color:red">This page requires Javascript.<br>
+   Without Javascript, nothing on this page will be functional.</p>
+</noscript>
+
+
+<p style="border-bottom: 1.5pt solid black;"><span style="font-size:200%; font-weight:bold;margin: 5pt 0 5pt 0;">xTurtle Turtle Graphics</span>
+<span style="margin-left: 50pt"><b>Click for: <a href="info.html">information and instructions</a>.</b></span></p>
+
+<p style="margin:0 0 0 20pt; padding:0">
+    Select Program: <select id="selectprogram" title="Sets the contents of the program editor.  To start a new, empty program, select '[New Program]'. To change to an existing program, select its name.">
+       <option value="1">User Program 1</option>
+    </select>
+</p>
+<p style="padding: 0; margin: 5pt 2pt 5pt 20pt">
+   <textarea spellcheck="false" placeholder="Input or paste your xTurtle program here." id="program" wrap="off" rows=20 cols=80></textarea></p>
+<p style="margin:0; padding:0"><button style="margin-left:20pt;" id="runprog"
+    title="Compile the program and, if no error is found, load it and run it.  If an error is found, it will be reported below.">Run the program!</button>
+  <button style="margin-left:72pt" id="indent"
+    title="Fix the indentation of the lines of the program to show its structure. This can be useful to check for proper nesting when writing a program.">Indent the program</button> </p>
+<p style="color: #AA0000; font-weight: bold" id="programerror">&nbsp;</p>
+<hr>
+
+  <p id="status">xTurtle status: Idle.</p>
+
+
+<table border=0 cellpadding=0 cellspacing=0>
+<tr valign="top"><td>
+<div id="controls">
+   <div class="group">
+       <p><button id="reset" title="Clear the drawing, forget any subroutines and variables that have been declared, and return the turtle to its default location and properties.">Reset</button>
+   </div>
+   <div class="group">
+       <p><label title="When checked, all turtles are forced to be hidden and only the lines that they draw are shown."><input type="checkbox" id="hideturtles"> Hide Turtles</label></p>
+       <p><label title="When checked, in a multitasking program all turtles get exactly equal amounts of processing time.  Only affects program that use the 'Fork' command."><input type="checkbox" id="lockstep"> Lockstep</label></p>
+   </div>
+   <div class="group">
+      <p>Run Speed:</p>
+      <p style="margin-left: 20pt"><select id="speedselect" title="Set the speed at which the turtle progresses as a program runs.">
+          <option value="1">Fastest</option>
+          <option value="2">Faster</option>
+          <option value="3">Fast</option>
+          <option value="4">Moderate</option>
+          <option value="5">Slow</option>
+          <option value="6">Slowest</option>
+      </select></p>
+   </div>
+   <div class="group">
+      <p><button id="pause" title="Pause execution of the running program.">Pause</button></p>
+      <p><button id="run" title="Resume running the program.  Enabled only when the program has been paused.">Continue</button></p>
+      <p><button id="stop" title="Stop the execution of the current program; the execution cannot then be resumed.">Abort</button></p>
+   </div>
+</div>
+</td><td>
+<div id="turtlediv">
+  <p style="margin:0; padding:0">
+      <input type="text" size="50" id="command" spellcheck="false" placeholder="Enter xTurtle commands here">
+      <button id="doit" title="Run the command or commands in the input box.  You can also just press return while typing in the input box.">Do It!</button></p>
+  <p><div id="canvas-holder">
+     <canvas id="canvas" width="600" height="600"></canvas>  <!-- NOTE: CANVAS MUST BE SQUARE -->
+  </div></p>
+  <div class="dialog" id="telluser">
+     <p style="text-align: center">(from TellUser)</p>
+     <hr>
+     <p id="tumessage"></p>
+     <p style="text-align: right"><button id="tuok">OK</button></p>
+  </div>
+  <div class="dialog" id="askuser">
+     <p style="text-align: center">(from TellUser; response must be a number)</p>
+     <hr>
+     <p id="aumessage"></p>
+     <p style="text-align: right"><input type="text" size="12" id="auinput"> <button id="auok">OK</button></p>
+  </div>
+  <div class="dialog" id="yesorno">
+     <p style="text-align: center">(from YesOrNo)</p>
+     <hr>
+     <p id="ynmessage"></p>
+     <p style="text-align: right"><button id="ynyes">Yes</button> <button id="ynno">No</button></p>
+  </div>
+  <div id="errorreport">
+     <p style="text-align: center">ERROR</p>
+     <hr>
+     <p id="errormessage"></p>
+  </div>
+</div>
+</td></tr></table>
+
+</body>
+</html>

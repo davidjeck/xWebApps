@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Conversion</title>
+<style>
+   body {
+       background-color: #E8E8E8;
+   }
+   canvas {
+       display: block;
+       background-color: black;
+   }
+   #canvas-holder {
+       float:left;
+       border: 5px solid gray;
+   }
+</style>
+<script>
+
+var graphics;  // A graphics context used for drawing on the canvas.
+var rows, cols;
+var SIZE = 15;
+var animating = true;
+var speed = 2;
+var conversionsPerFrame = [1,10,50,250,1500];
+
+var colors;
+
+function frame() {
+    if (!animating) {
+        return;
+    }
+    var ct = conversionsPerFrame[speed];
+    for (var i = 0; i < ct; i++) {
+        convert();
+    }
+    requestAnimationFrame(frame);
+}
+
+function convert() {
+    var r = Math.floor(rows*Math.random());
+    var c = Math.floor(cols*Math.random());
+    var rn = r,cn = c;
+    switch (Math.floor(4*Math.random())) {
+        case 0:
+           rn = r + 1;
+           if (rn >= rows) {
+               rn = 0;
+           }
+           break;
+        case 1:
+           rn = r - 1;
+           if (rn < 0) {
+               rn = rows-1;
+           }
+           break;
+        case 2:
+           cn = c + 1;
+           if (cn >= cols) {
+               cn = 0;
+           }
+           break;
+        case 3:
+           cn = cn - 1;
+           if (cn < 0) {
+               cn = cols-1;
+           }
+           break;
+    }
+    colors[r][c] = colors[rn][cn];
+    putSquare(r,c);
+}
+
+function putSquare(row,col) {
+    graphics.fillStyle = colors[row][col];
+    graphics.fillRect(col*SIZE,row*SIZE,SIZE,SIZE);
+}
+
+function restart() {
+    graphics.clearRect(0,0,canvas.width,canvas.height);
+    for (var row = 0; row < rows; row++) {
+        for (var col = 0; col < cols; col++) {
+            var r = Math.floor(256*Math.random());
+            var g = Math.floor(256*Math.random());
+            var b = Math.floor(256*Math.random());
+            colors[row][col] = "rgb(" + r + "," + g + "," + b + ")";
+            putSquare(row,col);
+        }
+    }
+}
+
+function init() {
+   var canvas = document.getElementById("canvas");
+   var pictures = [];
+   if ( ! canvas || ! canvas.getContext ) {
+      document.getElementById("message").innerHTML =
+                 "Sorry, your browser doesn't support the canvas element.";
+      return;
+   }
+   else {
+       graphics = canvas.getContext("2d");
+   }
+   width = canvas.width;  // width and height should must divisble by 20!
+   height = canvas.height;
+   document.getElementById("anim").checked = animating;
+   document.getElementById("anim").onchange = function() {  
+       var old = animating;
+       animating = document.getElementById("anim").checked;    
+       if (animating && !old)
+           frame();
+   }
+   document.getElementById("speed").value = "" + speed;
+   document.getElementById("speed").onchange = function() { 
+      speed = Number(document.getElementById("speed").value);
+   }
+   document.getElementById("restart").onclick = restart;
+   rows = Math.floor(canvas.width/SIZE);  // width and height should be divisible by SIZE
+   cols = Math.floor(canvas.height/SIZE);
+   colors = new Array(rows);
+   for (var i = 0; i < rows; i++) {
+       colors[i] = new Array(cols);
+   }
+   restart();
+   frame();
+}
+
+</script>
+</head>
+<body onload="init()">
+
+   <noscript><p style="color:red">Sorry, this page requires JavaScript.</p></noscript>
+   
+   <h2>Color conversion</h2>
+   
+   <p id="message">
+   Start with randomly colored squares.  Pick two neighboring square at random,<br>
+   and change the color of the second square to match the color of the first.<br>
+   Do this many times per second.  What happens in the long run?
+   </p>
+
+   <p>
+       <input type="checkbox" id="anim"> <label for="anim">Run</label>
+       <label style="margin-left: 60px">Speed:&nbsp;<select id="speed">
+           <option value="0">Slower</option>
+           <option value="1">Slow</option>
+           <option value="2">Fast</option>
+           <option value="3">Faster</option>
+           <option value="4">Fastest</option>
+       </select></label>
+       <button style="margin-left:60px" id="restart">Restart</button>
+   </p>
+  
+   <div id=canvas-holder> 
+        <canvas id="canvas" width="600" height="600" style="background-color: black"></canvas>
+   </div>
+   
+</body>
+
+</html>

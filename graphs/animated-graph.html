@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Animated Graphhs</title>
+<style>
+   canvas.slider {
+       display:block;
+   }
+   body {
+       background-color: #D8D8D8;
+       margin-left: 15px;
+   }
+   #message {
+      font-weight: bold;
+      color: #AA0000
+   }
+   td p {
+      white-space: pre;
+   }
+</style>
+<script src="xfunctions-jan2014.js"></script>
+<script>
+    
+var canvas, graphics, parser, variable;
+
+var parameter;
+
+var nmin, nmax;
+
+var examples = null;
+
+var coords, axes, graph;
+
+var animationType;
+
+function graphIt() {
+   parameter.setValue(frameNum);
+   document.getElementById("ninput").value = "" + frameNum;
+   graph.points = null;
+   coords.draw(graphics,0,0,canvas.width,canvas.height);
+   graphics.fillStyle = "black";
+   graphics.fillText("n = " + frameNum, 40,20);
+}
+
+function newFunction() {
+    pause();
+    document.getElementById("message").innerHTML = "&nbsp;";
+    document.getElementById("definition").style.backgroundColor = "white";
+    var expstr = document.getElementById("definition").value;
+    graph.setExpression(null);
+    var expression;
+    try {
+        expression = parser.parse(expstr);
+    }
+    catch (e) {
+        document.getElementById("message").innerHTML = "Error in function: " + e;
+        coords.draw(graphics,0,0,canvas.width,canvas.height);
+        document.getElementById("definition").style.backgroundColor = "pink";
+        return;
+    }
+    graph.setExpression(expression);
+    frameNum = nmin;
+    graphIt();
+}
+
+function doCustomFunction() {
+    document.getElementById("examples").value = "none";
+    newFunction();
+}
+
+function applyLimits() {
+    var error = null;
+    document.getElementById("message").innerHTML = "&nbsp;";
+    var xmin = Number( document.getElementById("xmin").value.trim() );   
+    var xmax = Number( document.getElementById("xmax").value.trim() );   
+    var ymin = Number( document.getElementById("ymin").value.trim() );   
+    var ymax = Number( document.getElementById("ymax").value.trim() );
+    var framemin = Number( document.getElementById("nmin").value.trim() );   
+    var framemax = Number( document.getElementById("nmax").value.trim() );
+    if (isNaN(xmin))
+        error = "The data entered for xmin is not a legal number";
+    else if (isNaN(xmax))
+        error = "The data entered for xmax is not a legal number";
+    else if (isNaN(ymin))
+        error = "The data entered for ymin is not a legal number";
+    else if (isNaN(ymax))
+        error = "The data entered for ymax is not a legal number";
+    else if (xmax <= xmin)
+        error = "The value of xmax must be greater than the value of xmin";
+    else if (ymax <= ymin)
+        error = "The value of ymax must be greater than the value of ymin";
+    else if (isNaN(framemin) || framemin != Math.round(framemin))
+        error = "The data entered for nmin is not a legal integer";
+    else if (isNaN(framemax) || framemax != Math.round(framemax))
+        error = "The data entered for nmax is not a legal integer";
+    if (error) {
+        pause();
+        document.getElementById("message").innerHTML = "Error in limits: "+ error;
+        graph.setExpression(null);
+        coords.draw(graphics,0,0,canvas.width,canvas.height);
+        return false;
+    }
+    else {
+        if (framemin != nmin || framemax != nmax) {
+          pause();
+          nmin = framemin;
+          nmax = framemax;
+          frameNum = nmin;
+          direction = "forward";
+        }
+        coords.setLimits(xmin,xmax,ymin,ymax);
+        return true;
+    }
+}
+
+function setN() {
+    document.getElementById("message").innerHTML = "&nbsp";
+    var n = Number(document.getElementById("ninput").value.trim());
+    if (isNaN(n) || n != Math.round(n)) {
+       document.getElementById("message").innerHTML = "Value in N input box is not a legal integer.";
+    }
+    else {
+       frameNum = n;
+       graphIt();
+    }
+}
+
+
+var examplesDefinitions = [
+   "Example 4.5.1; x>=0 and x <= 1/n? n*x : x > 1/n? 1; -0.3 1 0 1.5, 1 50, 1",
+   "Example 4.5.2; x>= 0 and x <= 1/n? n^2*x : x> 1/n and x <= 2/n? 2*n-n^2*x : x> 2/n? 0; -.5 2 0 50, 1 50, 1",
+   "Example 4.5.3; 2*x^n/(1 + x^n) ; -.5 2.5 -.5 2.5, 1 50, 1",
+   "Problem 4.5.1; x^n; 0 1 -0.5 1.5, 1 50, 1",
+   "Problem 4.5.2; 1/x^n; 1 3 -.5 1.5, 1 50, 1",
+   "Problem 4.5.3; 1/(1 + exp(-n*x)); -2.5 2.5 -0.5 1.5, 1 25, 1",
+   "Problem 4.5.4(a); x >=0? x^(1/n); -0.5 2 -0.5 2, 1 50, 1",
+   "Problem 4.5.4(b); 1/(1 + x^(2*n)); -5 5 0 1.5, 1 50, 1",
+   "Problem 4.5.4(c); 1/(1 + (x-n)^2); 0 50 -0.25 1.25, 1 50, 1",
+   "Problem 4.5.4(d); x>=0? 1/(1/n + x); 0 1 0 50, 1 50, 1",
+   "Problem 4.5.6; x/(1 + n^2*x^2); -5 5 -0.35 0.35, 1 50, 1",
+   "Infinte Escalator; x>=0 and x<=1? trunc(n*x)/n; -.2  1 -.2 1, 1 100, 1",
+   "Tweening Example; 5*sin(x)*(1-1/n)^2 + (5/(x^2+1))*(4/n)^(1/2); -6 6 -6 6, 1 100, 1",
+   "Infinite Motion?; sin(pi*(x-n/25)); -2 2 -2 2, 0 50, 1",
+];
+
+function getExamples() {
+    examples = [];
+    for (let i = 0; i < examplesDefinitions.length; i++) {
+       let data = examplesDefinitions[i].split(";");
+       try {
+          let example = {};
+          example.name = data[0];
+          example.definition = data[1].trim();
+          let nums = data[2].trim().split(/[ ,]+/);
+          example.xmin = Number(nums[0]);
+          example.xmax = Number(nums[1]);
+          example.ymin = Number(nums[2]);
+          example.ymax = Number(nums[3]);
+          example.nmin = Number(nums[4]);
+          example.nmax = Number(nums[5]);
+          example.loopstyle = nums[6];
+          examples.push(example);
+       }
+       catch (e) {
+         console.log(e);
+       }
+    }
+    let options = "<option value='none' disabled>[Custom]</option>";
+    for (let i = 0; i < examples.length; i++) {
+       options += "<option value='" + i + "'>" + examples[i].name + "</option>";
+    }
+    document.getElementById("examples").innerHTML = options;
+}
+
+function installExample() {
+    pause();
+    let num = Number(document.getElementById("examples").value);
+    let ex = examples[num];
+    document.getElementById("definition").value = ex.definition;
+    document.getElementById("xmin").value = "" + ex.xmin;
+    document.getElementById("xmax").value = "" + ex.xmax;
+    document.getElementById("ymin").value = "" + ex.ymin;
+    document.getElementById("ymax").value = "" + ex.ymax;
+    document.getElementById("nmin").value = "" + ex.nmin;
+    document.getElementById("nmax").value = "" + ex.nmax;
+    document.getElementById("ninput").value = "" + ex.nmin;
+    if (applyLimits()) {
+       newFunction();
+    }
+}
+
+var running = false;
+var frameRequest = null;
+var frameNum;
+var direction = "forward";
+var frameCountdown;
+
+function frame() {
+   frameRequest = null;
+   if (!running)
+      return;
+   if (frameCountdown == 0) {
+      next();
+      frameCountdown = 5;
+   }
+   else {
+      frameCountdown--;
+   }
+   frameRequest = requestAnimationFrame(frame);
+}
+
+function start() {
+   if (!running) {
+       running = true;
+       frameNum = nmin;
+       direction = "forward";
+       document.getElementById("start").disabled = true;
+       document.getElementById("pause").disabled = false;
+       document.getElementById("next").disabled = true;
+       document.getElementById("prev").disabled = true;
+       document.getElementById("setn").disabled = true;
+       frameCountdown = 0;
+       frameRequest = requestAnimationFrame(frame);
+   }
+}
+
+function pause() {
+   if (running) {
+       if (frameRequest)
+          cancelAnimationFrame(frameRequest);
+       running = false;
+       document.getElementById("start").disabled = false;
+       document.getElementById("pause").disabled = true;
+       document.getElementById("next").disabled = false;
+       document.getElementById("prev").disabled = false;
+       document.getElementById("setn").disabled = false;
+   }
+}
+
+function next() { 
+   if (animationType != 2 || direction == "forward")
+      advance();
+   else
+      retreat();
+}
+
+function prev() {
+   if (animationType != 2 || direction == "forward")
+      retreat();
+   else
+      advance();
+}
+
+function advance() {
+   if (frameNum < nmin)
+      frameNum = nmin;
+   else
+      frameNum++;
+   if (frameNum > nmax) {
+      switch (animationType) {
+         case 1:
+            frameNum = nmin;
+            break;
+         case 2:
+            frameNum = nmax - 1;
+            direction = "backward";
+            break;
+         case 3:
+            pause();
+            frameNum = nmax;
+            graphIt();
+      }
+   }
+   graphIt();
+}
+
+function retreat() {
+   if (frameNum > nmax)
+      frameNum = nmax;
+   else
+      frameNum--;
+   if (frameNum < nmin) {
+      switch (animationType) {
+         case 1:
+            frameNum = nmax;
+            break;
+         case 2:
+            frameNum = nmin + 1;
+            direction = "forward";
+            break;
+         case 3:
+            frameNum = nmin;
+            return;
+      }
+   }
+   graphIt();
+}
+
+function changeAnimType() {
+    animationType = Number(document.getElementById("animationType").value);
+    direction = "forward";
+}
+
+function init() {
+    canvas = document.getElementById("canvas");
+    graphics = canvas.getContext("2d");
+    if (graphics == null) {
+        document.getElementById("message").innerHTML = 
+            "Your browser does not have canvas support, which is required by this page!";
+        return;
+    }
+    animationType = 1;
+    document.getElementById("animationType").value = "1";
+    document.getElementById("examples").onchange = installExample;
+    document.getElementById("start").onclick = start;    
+    document.getElementById("pause").onclick = pause;    
+    document.getElementById("next").onclick = next;    
+    document.getElementById("prev").onclick = prev;
+    document.getElementById("animationType").onchange = changeAnimType;
+    document.getElementById("newfunction").onclick = doCustomFunction;
+    document.getElementById("definition").onchange = doCustomFunction;
+    document.getElementById("applylimits").onclick = function() { if (applyLimits()) graphIt(); };
+    document.getElementById("setn").onclick = setN;
+    document.getElementById("pause").disabled = true;
+    parser = new xfunctions.Parser();
+    parameter = parser.defineVariable("n");
+    variable = parser.defineVariable("x");
+    coords = new xfunctions.CoordinateRect();
+    coords.setLimits(-5,5,-5,5);
+    axes = new xfunctions.Axes("x","y");
+    graph = new xfunctions.Graph1D(null,variable);
+    getExamples();
+    document.getElementById("examples").value = "0";
+    coords.borderWidth = 2;
+    coords.add(axes);
+    coords.add(graph);
+    installExample();
+}
+
+</script>
+<head>
+<body onload="init();" style="background-color: #EEEEFF">
+
+<h2>Animated Graphs</h2>
+
+<noscript><p style="color:red">Sorry, but this page requires JavaScript.</p></noscript>
+
+<p id="message">&nbsp;</p>
+
+<table cellpadding=6 cellspacing=0 border=2 bgcolor="#EEEEEE">
+
+<tr>
+   <td colspan=2>Select Example: <select id="examples" title="to install one of the pre-defined examples, just select the example from this pop-up menu; an example incluse a function definiton as well as minimum and maximum value for x, y, and n.">
+       <option value="0">Default</option>
+   </select></td>
+</tr>
+
+<tr>
+    <td rowspan=3 valign=top>
+        <p><label title="minimum value shown on x-axix">xmin: <input type=text id="xmin" size=7></label></p>
+        <p><label title="maximum value shown on x-axix">xmax: <input type=text id="xmax" size=7></label></p>
+        <p><label title="minimum value shown on y-axix">ymin: <input type=text id="ymin" size=7></label></p>
+        <p><label title="maximum value shown on y-axix">ymax: <input type=text id="ymax" size=7></label></p>
+        <p style="margin-bottom:25pt; margin-left:15pt"><button id="applylimits" title="click to apply the limits in the xmin, xmax, ymin, ymax, nmin, and nmax input boxes to the current function">Apply Limits</button></p>
+        <p><label title="minimum value for the parameter, n, when using the animation buttons; must be an integer">nmin: <input type=text id="nmin" size=7></label></p>
+        <p><label title="maximum value for the parameter, n, when using the animation buttons; must be an integer">nmax: <input type=text id="nmax" size=7></label></p>
+        <p style="margin-top:40pt"><label title="to set a value for the parameter, n, by hand, enter the value here and click the 'Set N' button; value must be an integer but it does NOT have to be in the range of values from nmin to nmax">N = <input type=text size=7 id="ninput"></label></p>
+        <p style="margin-left:30pt"><button id="setn" title="click to set the value of n to the number in the input box above; value must be an integer">Set N</button></p>
+    </td>
+    <td>
+      <canvas id="canvas" width=720 height=550 style="background-color: white"></canvas>
+    </td>
+</tr>
+
+<tr>
+    <td align=center><label title="input a function definition here, and press return or click the 'New Function' button to use it; the function can include the variables x and n, arithimetic operators, standard functions, and the ternary '?' operator"><b>f(x) =</b>
+         <input type="text" size="50" id="definition"></label>
+         <button id="newfunction" title="click to use the definition of f(x) given in the input box">New Function</button></td>
+</tr>
+
+<tr>
+    <td align=center>
+        <button id="start" title="click to start animating the graph through all the possible values of n">Start</button>
+        <button id="pause" title="clidk to stop the animation">Pause</button>
+        <button id="next" title="click to advance the value of n one step, to the next value in the animation">Next</button>
+        <button id="prev" title="click to move the value of n one step back, to the previous value in the animation">Prev</button>
+        <span style="margin-left:15pt">Animation Type:</span>
+        <select id="animationType" title="select the animation style: continuous cycling through the values from nmin to nmax; running forward and backward through the range of values; or stopping after reaching nmax">
+           <option value="1">Loop</option>
+           <option value="2">Back-and-forth</option>
+           <option value="3">Once Through</option>
+        </select>
+    </td>
+</tr>
+
+</table>
+
+
+<div>
+</div>
+
+
+
+
+</body>
+</html>

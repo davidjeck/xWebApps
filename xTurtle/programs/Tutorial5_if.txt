@@ -1,0 +1,89 @@
+{ xTurtle Tutorial Example #5:  IF
+
+  An IF statement is used to choose
+  among several possible courses of
+  action.  The IF statement bases
+  its decision on the value of one
+  or more logical expressions.  A 
+  logical expression is something 
+  that can be either true or false,
+  such as "x > 0".
+}
+
+{ A simple IF..THEN..ELSE makes a
+  choice between two alternatives,
+  based on whether a condition is
+  true or false.  Here is an example: }
+
+DECLARE N, x
+N := randomInt(3)  { N is 1, 2, or 3 }
+AskUser("Guess a number.", x)
+
+IF x = N THEN
+   TellUser("That's right!")
+ELSE
+   TellUser("Sorry, the number was #N")
+END IF
+ { The first TellUser statement is
+   executed if "x = N" is true.
+   The second is executed if
+   "x = N" is false.  You can have
+   any number of statements between
+   THEN and ELSE or between ELSE
+   and END IF.  The "END IF" at
+   the end is required to mark
+   the end of the IF statement.
+   The ELSE part of the IF statement
+   is optional. }
+   
+   
+{ There is another version of the
+  IF statement that chooses among
+  more than two alternatives.  It
+  uses "OR IF" to make additional
+  tests.  The conditions in the
+  IF and OR IF parts are tested 
+  in order.  If one is found that
+  is true, than the corresponding
+  statements are executed.  The
+  IF statement then ends, without
+  testing the other conditions.
+  If an ELSE part is present, it
+  is executed in the case where
+  all the conditions are false.
+  Here is an example that does
+  a "random walk." }
+
+
+LOOP  { begin a loop; statements can
+        be nested, so I can put an
+        IF statement inside this loop. }
+
+   N := randomInt(4)  { N is 1, 2, 3, or 4 }
+   
+   IF N = 1 THEN
+      face(0)   { This is done in case N is 1. }
+   OR IF N = 2 THEN
+      face(90)  { This is done in case N is 2. }
+   OR IF N = 3 THEN
+      face(180) { This is done in case N is 3. }
+   ELSE
+      face(270) { This is done in any other case,
+                  which in this example can only
+                  happen if N is 4. }
+   END IF  { Marks the end of the IF statement }
+   
+   forward(0.5) { Moves forward a bit in the
+                  direction that has just been
+                  chosen at random. }
+   
+   EXIT IF (xcoord < -9) OR
+              (xcoord > 9) OR
+              (ycoord < -9) OR
+              (ycoord > 9)
+       { The loop ends when the turtle moves
+          outside the x and y coordinates in
+          the range from -9 to 9 }
+            
+END LOOP  { marks the end of the loop }
+

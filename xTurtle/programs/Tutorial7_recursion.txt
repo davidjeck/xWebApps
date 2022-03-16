@@ -1,0 +1,75 @@
+{ xTurtle Tutorial Example #7:  Recursion
+
+  A recutsive subroutine or function is
+  one that calls itself, or that calls
+  another routine that calls it back, and
+  so on.  You can do recursion in xTurtle.
+  This file demos two standard examples:
+  the recursive factorial function and
+  a recursive tree-drawing subroutine.
+}
+
+
+  { For a positive integer, N, 
+    factorial N is defined to be
+    N * factorial(N-1), as long
+    as N > 1.  If N <= 1, then
+    the answer is given directly 
+    as 1.  This definition can
+    be expressed easily in a 
+    function that calls itself
+    recursively. }
+
+FUNCTION factorial(N)
+   IF N > 1 THEN
+      return N * factorial(N-1)
+   ELSE
+      return 1
+   END IF
+END FUNCTION
+
+DECLARE N, F
+N := 1
+PenUp MoveTo(-10,9) PenDown
+black
+LOOP
+   EXIT IF N > 9
+   F := factorial(N)
+   DrawText("factorial(#N) = #F")
+   N := N + 1
+END LOOP
+
+
+  { A "binary tree" might be defined
+    as a trunk with two smaller trees
+    attached to it.  This is OK, as
+    long as we say that the smaller
+    trees are simpler than the main 
+    tree.  In the following subroutine,
+    the "level" tells how simple the
+    tree is.  When the level gets
+    down to zero, only a trunk is
+    drawn, with no attached trees. }
+
+SUB Tree(size,level)
+   IF level < 1 THEN
+      forward(size)
+      back(size)
+   ELSE
+      forward(size/2)
+      turn(45)
+      Tree(size/2,level-1)
+      turn(-90)
+      Tree(size/2,level-1)
+      turn(45)
+      back(size/2)
+   END IF
+END SUB
+
+PenUp MoveTo(3,-8) PenDown
+green
+face(90)
+
+Tree(15,6)  { Draw a "level-6" tree }
+
+

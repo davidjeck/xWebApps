@@ -1,0 +1,127 @@
+
+; This file contains two subroutines:  "TestPrime," which will
+; test a postive integer to see whether it is a prime number,
+; and "Remainder," which will compute the remainder when one
+; positive integer d is divided into another positive integer n.
+
+
+; ******************** Main Program ****************************          
+
+; This main program simply calls the PrimeTest subroutine to test
+; whether the number 31 is prime.  The answer better be "1".
+
+lod-c done     ; Set up the return address for the subroutine.
+sto ret_adr_p
+
+lod-c 17       ; Load the data for the subroutine into the AC register.
+
+jmp PrimeTest  ; Jump to the entry point of the subroutine.
+
+done: hlt      ; Subroutine will return to this point. 
+               ; The computer will hald with 0 or 1 in the AC.
+
+
+; -------------------------- Subroutine "PrimeTest" ---------------
+
+; This subroutine tests whether a number, p, is prime by dividing
+; it by the numbers 2,3,4,...,p-1.  If one of these numbers divides
+; p, then p is NOT prime.  If none of the numbers divide p, then
+; p is prime.  To test whether a number x divides p, the subroutine
+; "remainder" is called.  x divides p if the remainder when p is
+; divided by p is zero.  The value of p MUST be >= 2 for this
+; subroutine to work.
+;   To call the subroutine, store the return address in ret_adr_p.
+; Load the number p into the accumulator.  Then jump to PrimeTest.
+; When the subroutine ends, the accumulator will hold the value 1
+; if p is prime, and it will hold the value 0 if p is not prime.
+; You can then simply use a JMZ instruction to check the answer.
+
+@800  ; subroutine starts loading at 800
+
+ret_adr_p:  data        ; return address for PrimeText
+
+PrimeTest:  STO pp      ; STARTING POINT FOR SUBROUTINE.
+                        ; Save the number p, which is to be tested
+                        ; in location pp
+                     
+            LOD-C 2     ; Put a 2 in xx.  This is the first number that
+            STO xx      ; we try to divide into p.
+            
+loop_p:     LOD pp      ; If xx is pp than all the numbers
+            SUB xx      ;     from 2 to pp-1 have been checked without
+            JMZ prime_p ;     finding a divisor, so pp is prime.
+
+            LOD-C ret_p    ; Set up to call subroutine Remainder to
+            STO ret_adr_r  ;    determine whether xx divides pp.
+            LOD pp
+            STO n
+            LOD xx
+            STO d
+            JMP Remainder
+ret_p:      JMZ not_prime_p ; If remainder is zero, pp is not prime
+             
+            LOD xx      ; add 1 to xx, and return to start of loop
+            INC
+            STO xx
+            JMP loop_p
+           
+prime_p:    LOD-C 1   ; pp has been determined to be prime
+            JMP-I ret_adr_p
+            
+not_prime_p:  LOD-C 0  ; pp has been determined to be non-prime
+              JMP-I ret_adr_p
+
+pp:         data
+xx:         data
+            
+
+
+; --------------------------  Subroutine "Remainder" --------------
+
+; This subroutine computes the remainder when one positive number,
+; n, is divided by another positive number, d.  To use it:
+;     (1) store the number n in memory location "n"
+;     (2) store the number d in memory location "d"
+;     (3) store the return address in location "ret_adr_r"
+;     (4) jump to location "remainder"
+; When the subroutine terminates, the remainder will be in memory
+; location "rem."  It will ALSO be in the accumulator (AC).
+
+@900  ; subroutine loads starting at location 900
+
+ret_adr_r: data    ; return address for Remainder
+
+n:         data    ; parameters, as described above
+d:         data
+rem:       data
+
+Remainder: LOD   d       ; STARTING POINT FOR SUBROUTINE.
+           STO   temp_r  ; (You don't need to understand anything
+                         ;               from here on.)
+
+L1r:       LOD   temp_r
+           SHL
+           STO   temp_r
+           SUB   n
+           JMN   L1r
+           JMZ   L1r
+
+L2r:       LOD   temp_r
+           SHR
+           STO   temp_r
+           SUB   d
+           JMN   done_r
+           LOD   n
+           SUB   temp_r
+           JMN   L2r
+           STO   n
+           JMP   L2r
+done_r:    LOD   n
+           STO   rem
+
+           JMP-I  ret_adr_r
+
+temp_r:    data
+
+
+

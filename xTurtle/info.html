@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>xTurtle Info</title>
+
+<style>
+   body {
+      background-color: gray;
+      margin-top: 0;
+      margin-bottom: 0;
+   }
+   #content {
+      max-width: 750px;
+      margin: 0 auto;
+      padding: 5px 15px;
+      border-left: thin solid black;
+      border-right: thin solid black;
+      background-color: #F8F8F8;
+   }
+   #examples td, #examples tr {
+       margin: 0;
+       padding: 0;
+   }
+   #examples {
+       padding: 0;
+       margin: 7px auto;
+       border: 2px solid darkgray;
+       border-spacing: 0;
+   }
+   #examples td {
+       border: 2px solid darkgray;
+   }
+   #examples img, #examples a {
+       display: block;
+   }
+   .cmd {
+      color: #990000;
+      white-space: pre;
+   }
+   .term {
+      color: #005555;
+      font-weight: bold;
+   }
+   h1, h2, h3, p b {
+       color: #003388;
+   }
+   p b {
+      font-size: 110%
+   }
+   .rev {
+      font-weight: bold;
+      color: #880000;
+   }
+   .cmd {
+      font-style: italic;
+      color: #880000;
+   }
+   li {
+       margin-top: 5pt;
+   }
+</style>
+
+</head>
+<body">
+
+<div id="content">
+
+<h1>xTurtle Info</h1>
+<hr>
+
+<p>The <a href="xTurtle.html">xTurtle Web App</a> lets you write code in 
+a simple programming language, which is also called xTurtle.  This page
+contains descriptions of the xTurtle programming language and of the web app.
+Note that you can get a lot of information by reading the tutorial examples
+that are available when you run the app.</p>
+
+<p>I invented the xTurtle programming language in 1995 to use 
+to use as an example in a textbook that I was writing a the time,
+<cite><a href="http://math.hws.edu/TMCM.html">The Most Complex Machine</a></cite>,
+a book that surveyed the field of computer science.   Since programming is
+only one of the topics in the book, I wanted a reasonably simple language,
+but one that would have the major features of a typical programming
+language, including variables, assignment statements, loops, if statements,
+recursive subroutines, and even some multitasking.  However, xTurtle does
+not include objects or data structures of any type.  And because it is old,
+the syntax diverges significantly from the syntax of common programming
+languages like C and Java, most notably perhaps in the use of ":="
+instead of "=" for assignment.</p>
+
+<p>The first xTurtle program was written in the Pascal programming langauge to run
+on Macintosh computers.  Soon after the World Wide Web was invented, it was
+translated an "applet" written in Java, so that is could run in a web page.
+However, Java applets are no longer supported by web browsers.
+The new version is a translation into JavaScript and should work in all major
+web browsers.</p>
+
+<hr>
+
+<h3>The xTurtle Web App</h3>
+
+<p>This section is a meant as a brief user manual for the xTurtle
+app.  The <a href="#language">next&nbsp;section</a> is a description of the
+xTurtle programming language.</p>
+
+<p>The <a href="xTurtle.html">web page</a> where xTurtle runs
+has two main sections.  The top section is used to write and view programs
+written in the xTurtle programming language.  The bottom section contains
+the drawing surface where the results of program execution are shown.
+I will discuss the bottom section first.</p>
+
+<p>The drawing surface is shown as a large white square.  When the
+page first loads, the "turtle" is shown as a triangle at the center
+of the square, pointing to the right. The 
+turtle can move around in the drawing surface.  Usually, it draws a line as
+it moves.  The turtle can respond to a number of commands,
+such as <span class="cmd">forward</span>(5), which tells the turtle
+to move forward 5 units, and <span class="cmd">turn</span>(45), which tells
+the turtle to rotate counterclockwise through an angle of 45 degrees.  The turtle
+draws red lines, unless you tell it to use a different color.</p>
+
+<p>The position of the turtle is given by a pair of coordinates, (x,y).
+The x coordinate for the area visible in the drawing surface ranges
+from -10 at the left to 10 at the right, and the y coordinate ranges
+from -10 at the bottom to 10 at the top.  The turtle
+can move outside the visible region, and will just keep drawing happily,
+even though you can't see what it's doing.  The command <span class="cmd">home</span>
+moves the turtle back to the center of the screen.</p>
+
+<p>Above the drawing surface is an input box where you can type in commands
+for the turtle.  When you press return, the turtle will carry out the 
+commands or tell you that there was an error in your input.  Clicking on
+the button named "Do&nbsp;It!" is equivalent to pressing return.
+If an error message is displayed, you can make it go away by clicking on
+it.  But it will also go away automatically the next time you press return or click the
+"Do&nbsp;It!" button.</p>
+
+<p>There are no restrictions on what you can type in the command-input
+box.  You can even put a whole subroutine definition there.  However,
+for anything that takes more than a few words, you'll want to write 
+a program.</p>
+
+<p>The top section of the web page contains a large text area for
+writing xTurtle programs.  When the web page is first loaded, it should
+show a sample program named "Tutorial&nbsp;1:&nbsp;Basics".  Other sample
+programs are available and can be viewed by selecting them from the pop-up
+menu above the text area.</p>
+
+<p>If you want to create a new program of your own, select "[New&nbsp;Program]"
+from the pop-up menu.  The text area will be cleared, and you can enter your
+own program.</p>
+
+<p>To run the program on the text area, just click on the
+"Run&nbsp;the&nbsp;Program" button.  If the program is written correctly, it
+will be compiled and executed.  If there is an error, you'll get an
+error message, which will be shown below the "Run&nbsp;the&nbsp;Program" button.  
+If there is an error, the computer will move the 
+blinking cursor to the position in the program where it noticed the
+error.  The browser should scroll the text, if necessary, to show the
+cursor (but some browsers might not do that).</p>
+
+<p>Once the program has finished executing, you can run it again by
+clicking the "Run&nbsp;the&nbsp;Program" button again.  Before running a
+program, the computer always clears the screen and restores the
+turtle to its initial state (at the point (0,0), facing right,
+with pen down, and drawing color set to red).  If you've just run
+a program that defines subroutines or variables, you can use them
+in any commands that you type into the command-input box.  However,
+they will be cleared out of memory if you run another program or
+click the "Reset" button.</p>
+
+<p>The button named "Indent the program" can be used to fix the indentation
+of the program in the text area, to show its structure.  This is only useful
+for programs that you are writing yourself.  Indenting the program can help
+you to check whether your statements are properly nested.</p>
+
+<p>Finally, here is some information about the buttons
+and other controls that appear to the left of the drawing area</p>
+
+<ul>
+<li>"Reset" Button:
+    This button will restore turtle to its initial state.  It will clear
+    the drawing and restore the turtle to its starting point. (It also
+    makes the turtle forget any variables and subroutines that have bee
+    declared.)</li>
+<li>"Pause" and "Resume" Buttons:
+    These buttons can be used to pause the running program and resume the
+    execution of the program after it has been paused.</li>
+<li>"Abort" Button:
+    This button is active while a program is running (or
+    paused).  Click on it to end the execution of the program.</li>
+<li>"Speed" Pop-up Menu:
+    This menu, which is originally set to "Fast", controls
+    the speed at which the turtle draws.  (A delay is inserted after
+    each turtle motion such as drawing a line, drawing a circle,
+    or turning.)</li>
+<li>"Hide Turtles" Checkbox:
+    When this box is checked, the little triangular turtles
+    are invisible.  (By the way, this can speed up a program
+    significantly, especially in a multitasking program where
+    there are a lot of turtles.)</li>
+<li>"Lock Step" Checkbox:
+    This box only has an effect on multitasking programs.
+    When it is unchecked, each turtle gets to execute
+    a small random number of commands before control passes
+    to the next turtle.
+    When the box is checked, multiple turtles get to execute 
+    commands in strict alternation, one after the other.
+    This often looks nicer, but the random version is
+    a more realistic simulation of multitasking.</li>
+</ul>
+
+<hr>
+
+<h3><a id="language">The xTurtle Language</a></h3>
+
+<p>What follows is somewhat informal, but fairly complete, specification of 
+the xTurtle programming language, as implemented in the xTurtle web&nbsp;app.
+For many purposes, you might find the turtorial examples from
+the <a href="web&nbsp;">web&nbsp;app</a>
+more useful.  You might want to look at those examples first, in any case.</p>
+
+<p><b>Program Structure</b></p>
+
+<p>A program can contain comments.  A comment begins with { and ends
+with }.  Comments can be nested.  Comments are for human readers only.
+They are ignored when the program is run.</p>
+
+<p>The layout of a program on the page is ignored.  You can have more than
+one command on a line, and you can split commands over several lines.
+You can't have spaces in the middle of words.  (The command <span class="cmd">PenUp</span>,
+for example, <strong>cannot</strong> be written as "Pen Up".)  No distinction
+is made between upper and lower case letters.  (So you can write
+PenUp, penUp,
+penup, or even PeNUp,
+and they will all mean the same to the computer.</p>
+
+<p>A program consists of a sequence of one or more of the following:
+statements, variable declarations, subroutine declarations,
+function declarations.  Subroutine and function declarations <strong>cannot</strong>
+be nested inside one another.  (To provide for mutual recursion among
+subroutines and functions, they can be "predeclared."  This
+will be covered below.)  The program is executed from beginning to end.
+Declarations are much like statements in that
+you can think of them as being executed.  That is, you can't use a
+variable, subroutine, or function until it has been declared.</p>
+
+
+<p><b>Identifiers and Reserved Words</b></p>
+
+<p>Certain words are reserved for special purposes in the xTurtle
+language.  Reserved words cannot be used as names for variables,
+subroutines, and functions.  Note that since upper and lower case are
+equivalent, reserving the word "declare" also reserves
+"DECLARE", "Declare", and so on.
+Reserved words in xTurtle include:</p>
+<ul>
+<li>Built-in subroutine names (listed below)</li>
+<li>Built-in function names (listed below)</li>
+<li>Predefined read-only variables (listed below)</li>
+<li>Logical operators: <span class="rev">and</span>,
+    <span class="rev">or</span>, and <span class="rev">not</span></li>
+<li>Reserved words for declarations:
+<span class="rev">declare</span>,
+<span class="rev">import</span>,
+<span class="rev">end</span>,
+<span class="rev">endfunction</span>,
+<span class="rev">endsub</span>,
+<span class="rev">function</span>,
+<span class="rev">predeclare</span>,
+<span class="rev">ref, and
+<span class="rev">sub</span></li>
+<li>Reserved words for control statements:
+<span class="rev">else</span>,
+<span class="rev">end</span>,
+<span class="rev">endif</span>,
+<span class="rev">endgrab</span>,
+<span class="rev">endloop</span>,
+<span class="rev">exit</span>,
+<span class="rev">exitif</span>,
+<span class="rev">exitunless</span>,
+<span class="rev">grab</span>,
+<span class="rev">if</span>,
+<span class="rev">or</span>,
+<span class="rev">orif</span>,
+<span class="rev">loop</span>,
+<span class="rev">return</span>,
+<span class="rev">then</span>, and
+<span class="rev">unless</span></li>
+</ul>
+
+<p>(Combined words like
+"endif" and "endfunction"
+are redundant, since they can all be written
+equivalently as two words: For example, "end if".  Probably, it
+was a mistake to include these combinations in the language, but
+there they are.  I will not mention them again; instead, I will
+always use two separate words.)</p>
+
+<p>Variable names, subroutine names, and function names are
+collectively known as identifiers.  You can make up your own
+names for the variables and routines that you declare, as long as
+you don't use reserved words and as long as you don't try to 
+reuse a name in the same program.  Identifiers must begin with
+a letter.  They can contain letters, digits from 0 to 9, and
+the underscore character (_).  They cannot contain spaces or other
+white space.  They can be of any length.  A given name can only
+have one declaration.</p>
+
+
+<p><b>Variables and Expressions</b></p>
+
+<p>Before a variable can be used, it must be declared.  This is done
+using a variable declaration, which consists of the reserved word,
+<span class="rev">declare</span>, followed by the names of
+one or more variables that are being declared.  Variables in the list
+should be separated by commas.  For example:</p>
+
+<pre>                  DECLARE InterestRate
+                  DECLARE x, y, row, column
+</pre>
+
+<p>Variable declarations cannot be nested inside other statements, such
+as loops.  They can occur in subroutines and functions (where they are
+used to create "local variables," as discussed below).</p>
+
+<p>In xTurtle, the value of a variable must be a real number such as
+42, 3.14159, -1, or 12.3e-12.  The last example used scientific notation,
+which is legal in an xTurtle program.  (The notation 12.3e-12 means
+12.3 times 10 raised to the power -12.  Very large and small numbers
+are written using scientific notation.)  When a variable is first
+declared, it has a special value called "not-a-number"
+It is illegal to use such a value in a computation, and doing so will
+result in an error that will crash your program.</p>
+
+<p>Variables and numbers can be used in mathematical expressions
+such as <span style="whites-pace:pre">(1 + InterestRate) * Principal</pre>.
+Expressions can include the usual arithmetic operators plus (+),
+minus (-), times (*), divide (/), and exponentiation (^).  Expressions
+can also include built-in functions and user defined function.
+For example:  sin(2*angle+30).  Parentheses
+are always required around the arguments of a function.  (In the case
+of a function that takes no argument, a set of empty parentheses
+is optional.)  The predefined functions are:</p>
+
+<ul>
+<li>The usual trigonometric functions: 
+       <span class="cmd">sin</span>(x), 
+       <span class="cmd">cos</span>(x), 
+       <span class="cmd">tan</span>(x), 
+       <span class="cmd">sec</span>(x), 
+       <span class="cmd">csc</span>(x), 
+       <span class="cmd">cot</span>(x).
+     The arguments for these functions are measured in degrees.</li>
+<li>Some inverse trigonometric functions:
+       <span class="cmd">arcsin</span>(x),
+       <span class="cmd">arctan</span>(x),
+       <span class="cmd">arccos</span>(x).</li>
+<li>The exponential function <span class="cmd">exp</span>(x),
+       meaning e<sup>x</sup>.</li>
+<li>The natural logarithm <span class="cmd">ln</span>(x).</li>
+<li>The square root function <span class="cmd">sqrt</span>(x).</li>
+<li>The absolute value function <span class="cmd">abs</span>(x).</li>
+<li>The function <span class="cmd">round</span>(x), which rounds
+      its argument to the nearest integer.</li>
+<li>The function <span class="cmd">trunc</span>(x), which truncates
+      its argument by dropping any digits that follow the decimal point.</li>
+<li>A random integer function, <span class="cmd">randomInt</span>(x),
+      which returns a random integer in the range from 1 to x, inclusive.</li>
+<li>A random real number function, <span class="cmd">random</span>() (or
+      just <span class="cmd">random</span> without the parentheses),
+      which returns a random number in the range from 0.0 to 1.0, including
+      0.0 but not including 1.0.</li>
+</ul>
+
+<p>Note that the names of these predefined functions are reserved
+words.</p>
+
+<p>There are a few reserved words in xTurtle that act like pre-defined
+read-only variables.  These read-only variables contain information
+about the current state of the turtle.  You can inspect the values of
+these variables, but you can't use assignment statements to change
+their values.  The read-only variables are:</p>
+
+<ul>
+<li><span class="cmd">forkNumber</span> &mdash; used to distinguish
+among multiple turtles when doing multitasking, as described below.
+<li><span class="cmd">headin</span>g &mdash; the direction in which
+the turtle is facing, given in degrees between -180 and 180, where
+an angle of zero means that the turtle is facing to the right and
+positive angles are measured counterclockwise.
+<li><span class="cmd">isDrawing</span> &mdash; has a value of 1 or 0,
+depending on whether the turtle's pen is down or up.  If the pen is
+up, the turtle doesn't draw when it moves.
+<li><span class="cmd">isVisible</span> &mdash; has a value of 1 or 0,
+depending on whether or not the turtle has been hidden with a
+<span class="cmd">HideTurtle</span> command.
+<li><span class="cmd">xcoord</span> &mdash; gives the current x
+coordinate of the turtle.
+<li><span class="cmd">ycoord</span> &mdash; gives the current y
+coordinate of the turtle.
+</ul>
+
+<p><b>Assignment Statements</b></p>
+
+<p>The value of a variable can be changed by using an assignment statement.
+An assignment statement takes the form</p>
+
+<pre>              &lt;variable&gt; := &lt;expression&gt;
+</pre>
+
+<p>where <tt>&lt;variable&gt;</tt> is any declared variable (or the
+name of a parameter in a user-defined subroutine or function) and
+<tt>&lt;expression&gt;</tt> can be a number, a variable, or
+any expression created using operators and functions, as described
+above.  Here are some example assignment statements:</p>
+
+<pre>               Rate := 0.7
+               y := 3*x^2 - 2*x + 1
+               count := count + 1
+               r := exp(theta)
+</pre>
+
+<p><b>Built-in Subroutines</b></p>
+
+<p>The xTurtle language includes many predefined subroutines.  Most of the
+predefined subroutines are turtle graphics commands which move or turn
+the turtle or affect its state.  Two predefined subroutines related
+to multitasking, <span class="cmd">Fork</span>(n) and
+<span class="cmd">KillProcess</span>, are discussed later.
+The others built-in subroutines are:</p>
+
+<ul>
+<li><span class="cmd">forward</span>(x) &mdash; moves the turtle forward
+by a distance x along the direction in which it is currently facing.
+(If x is negative, the turtle actually moves backward.)  Whether it
+draws a line, and what color that line is, depends on the current state
+of the turtle.  (This same proviso applies to all the commands that
+move the turtle, and I will not repeat it.)</li>
+<li><span class="cmd">back</span>(x)&mdash; moves the turtle backwards
+by a distance x along the direction in which it is currently facing.
+(If x is negative, the turtle actually moves forward.)</li>
+<li><span class="cmd">moveTo</span>(x,y) &mdash; moves the turtle
+from its current position to the point with coordinates (x,y).
+<li><span class="cmd">move</span>(dx,dy) &mdash; moves the turtle
+from its current position to a point that is dx units away horizontally
+and dy units away vertically.</li>
+<li><span class="cmd">turn</span>(dA) &mdash; rotates the turtle from its
+current heading through an angle of dA degrees.  If dA is positive,
+the rotation is counterclockwise; if dA is negative, the angle is clockwise.</li>
+<li><span class="cmd">face</span>(A) &mdash; rotates the turtle to a
+heading of A degrees from the zero position.  (In the zero position,
+the turtle faces to the right.)</li>
+<li><span class="cmd">Circle</span>(r)  &mdash; draws a circle of
+radius r.  The current turtle position is on the circumference of the
+circle.  The turtle's heading is tangent to the circle.  If r is
+positive, the circle lies on the turtle's left.  If r is negative,
+the turtle lies on the turtle's right.  The effect of <span class="cmd">Circle</span>(r)
+is exactly the same as the effect of <span class="cmd">Arc</span>(r,360).
+Note that the turtle's position and heading do not change.</li>
+<li><span class="cmd">Arc</span>(r,A) &mdash; Draws an arc of a circle of
+radius r.  The arc subtends an angle of A.  The arc starts at the current
+position and heading of the turtle.  The turtle ends up at the other end
+of the arc.  If r and A are both positive, then the turtle curves
+forward and towards its left.  If r is negative and A is positive, the
+turtle curves forward and towards its right.  Negative angles move the
+turtle backwards.</li>
+<li><span class="cmd">PenUp</span> and <span class="cmd">PenDown</span>  &mdash;
+used to raise and lower the turtle's pen.  If the pen is up, it does not draw
+anything.  This affects all the movement commands described above.</li>
+<li><span class="cmd">HideTurtle</span> and <span class="cmd">ShowTurtle</span>
+&mdash; <span class="cmd">HideTurtle</span> makes the turtle invisible.  <span class="cmd">ShowTurtle</span> makes it visible again.
+It continues to draw while it is invisible, provided its pen is down.
+(If the web&nbsp;app's "No Turtles" checkbox is checked, the turtle will not be
+seen, no matter what is done with <span class="cmd">HideTurtle</span> and <span class="cmd">ShowTurtle</span>.)</li>
+<li><span class="cmd">Halt</span> &mdash; Halts the program.</li>
+<li>Commands for changing the drawing color to one of
+eleven named colors: 
+       <span class="cmd">red</span>,
+       <span class="cmd">green</span>,
+       <span class="cmd">blue</span>,
+       <span class="cmd">cyan</span>,
+       <span class="cmd">yellow</span>,
+       <span class="cmd">magenta</span>,
+       <span class="cmd">black</span>,
+       <span class="cmd">darkGray</span>,
+       <span class="cmd">gra</span>y,
+       <span class="cmd">lightGray</span>, and
+       <span class="cmd">white</span>.</li>
+<li><span class="cmd">rgb</span>(x,y,z) &mdash; Changes the drawing color,
+using an RGB color specification.  The parameters x, y, and z must be
+in the range 0.0 to 1.0.  They specify the amount of red, green, and blue,
+respectively, in the desired color.  A value of 1.0 represents the maximum
+possible amount of a color.  For example, <span class="cmd">rgb</span>(0,0,0) is black, <span class="cmd">rgb</span>(1,1,1)
+is white, and <span class="cmd">rgb</span>(1,0.5,0.5) is pink.</li>
+<li><span class="cmd">hsb</span>(x,y,z) &mdash; Changes the drawing color
+using an HSB specification.  The parameters x, y, and z must be
+in the range 0.0 to 1.0.  They specify the hue, saturation, and brightness
+respectively, of the desired color.  Setting y and z equal to 1 gives
+bright, saturated colors.  As x ranges from 0 to 1, the resulting
+hues cover the entire spectrum.  Note that <span class="cmd">hsb</span>(<span class="cmd">random</span>,1,1)
+will produce a bright random color.</li>
+</ul>
+
+<p><b>Input/Output</b></p>
+
+<p>The input/output commands in xTurtle are pretty rudimentary.
+However, it is possible to display messages to the user and
+to read numbers input by the user.  There are four built-in
+subroutines for doing such input and output.  These subroutines
+are special in that they use strings.  A string is a sequence of
+characters to be displayed to the user.  (A string cannot include an
+end-of-line.)  For example, the command</p>
+
+<pre>             TellUser("Hello World!")
+</pre>
+
+<p>will display the characters</p>
+
+<pre>             Hello World!
+</pre>
+
+<p>to the user.  Note that in the program, the string is enclosed in
+double quotes, but that the quote characters are not part of the string
+that is displayed to the user.  There are rules for converting the
+string in the program to the string to be displayed to the user:
+To display a quote character to the user, you have to use two
+quote characters in the string in the program.  For example,
+
+<pre>             TellUser("I said, ""Stop!""")
+</pre>
+
+<p>will display</p>
+
+<pre>             I said "Stop!"
+</pre>
+
+<p>The value of a variable can be included in the displayed string.
+To do this, you have to include a # character followed by the variable
+name in the string in the program.  This works for declared variables
+as well as for the predefined read-only variables.  For example,</p>
+
+<pre>             TellUser("The turtle is at (#xcoord,#ycoord).")
+</pre>
+
+<p>will tell the user the current position of the turtle.  That is, when
+the string is displayed, the value of <span class="cmd">xcoord</span> will be substituted for
+#xcoord in the string, and similarly for <span class="cmd">ycoord</span>.  (If you want to display
+an actual # character, you have to write it as ## in the string.)</p>
+
+<p>The <span class="cmd">TellUser</span> command pops up
+a box to display its string.  The user must click on an OK button
+to dismiss this box, and the program waits for the user to do so.
+The display is not changed.</p>
+
+<p>There is also a command for displaying a string in the graphics
+display area.  This <span class="cmd">DrawText</span> command
+writes the string at the current turtle position in the current
+drawing color.  The string is drawn even if the turtle's pen is
+currently up.  After drawing the string, the turtle moves to
+a point just below its original position, so that the output of
+successive <span class="cmd">DrawText</span> commands will line up neatly one under the other.
+<span class="cmd">DrawText</span> has one parameter specifying the string to be drawn.  For
+example,
+
+<pre>             DrawText("Hello World!")
+</pre>
+
+<p>There are commands for doing input: <span class="cmd">AskUser</span>
+and <span class="cmd">YesOrNo</span>.  Each of these input commands
+has two parameters.  The first parameter is a string to be displayed to
+the user.  This string is meant to prompt the user for a response.  
+The second parameter is the name of a variable where the user's response
+is to be stored.  For <span class="cmd">AskUser</span>, the user can type in any real number
+as a response.  For <span class="cmd">YesOrNo</span>, the user is given the choice of responding
+yes or no.  If the user says yes, the value 1 is stored in the variable;
+if the user says no, the value 0 is stored.  For both of these commands,
+the computer pops up a box to display the string and get the user's
+response.  The program waits until the user responds.  The display is
+not changed.  Here are some examples of using these two subroutines:</p>
+
+
+<pre>              AskUser("What is the interest rate?", rate)
+              AskUser("Enter a number less than #max", x)
+              YesOrNo("Do you want to play again?", response)
+</pre>
+
+<p>Note that the strings used in these commands can include the
+values of variables, just like the strings in <span class="cmd">TellUser</span> and
+<span class="cmd">DrawText</span>.</p>
+
+<p><b>Logical Expressions</b></p>
+
+<p>LOOP statements and IF statements (described below) use logical
+expressions to test whether or not some specified condition is true.
+A logical expression is a formula that can be either true or false.
+Basic logical expressions are formed by comparing numerical values
+using the relational operators =, &lt;, &gt;, &lt;=, &gt;=, and &lt;&gt;.
+(The last three of these mean "is less than or equal to",
+"is greater than or equal to", and " is not equal to",
+respectively.)</p>
+
+<p>Basic logical expressions can be combined into more complex expressions
+using the logical operators <span class="rev">and</span>, 
+<span class="rev">or</span>, and <span class="rev">not</span>.
+(These can also be written as single characters: &amp;, |, and&nbsp;~.)</p>
+
+<p>In the absence of parentheses, the precedence ordering for operators in
+xTurtle, from highest to lowest, is:</p>
+
+<pre>             NOT
+             AND
+             OR
+             relational operators
+             ^
+             * and /
+             + and -
+</pre>
+
+
+
+<p><b>LOOP Statement</b></p>
+
+<p>To repeat a sequence of statements in xTurtle, use a <span class="rev">LOOP</span>
+statement, which consists of the reserved word <span class="rev">loop</span>,
+followed by the statements to be repeated, followed by
+<span class="rev">end&nbsp;loop</span>.  One of the statements in the loop
+<strong>must</strong> be some sort of <span class="rev">EXIT</span> statement, which causes the loop to
+terminate (either unconditionally or conditionally) and transfers control
+to the statement that follows the loop.  Statements can be nested.  An <span class="rev">EXIT</span>
+statement always exits from the innermost enclosing loop.  There are three forms of
+the <span class="rev">EXIT</span> statement:</p>
+
+<pre>                  EXIT
+                  EXIT IF &lt;condition&gt;
+                  EXIT UNLESS &lt;condition&gt;
+</pre>
+
+<p>The plain <span class="rev">EXIT</span> statement exits the loop unconditionally, and would ordinarily be used inside an
+ <span class="rev">IF</span> statement that is nested inside
+the loop.  In the other two forms of the <span class="rev">EXIT</span> statement, the
+<tt>&lt;condition&gt;</tt> is a logical expression, as defined above.  
+An <span class="rev">EXIT&nbsp;IF</span> statement exits its loop if its condition is true;
+an <span class="rev">EXIT&nbsp;UNLESS</span> statement exits its loop if its condition is false.</p>
+
+<p>Here are two simple example programs that use loops:</p>
+
+<pre>       DECLARE ct                       DECLARE length
+       ct := 0                          LOOP
+       LOOP                                EXIT IF 1=2  { loop forever! }
+          forward(1)                       length := 7*random  { 0 &lt;= length &lt; 7 }
+          turn(45)                         hsb(random,1,1)
+          ct := ct + 1                     forward(length)
+          EXIT IF ct = 8                   back(length)
+       END LOOP                            face(360*random)
+                                        END LOOP
+</pre>
+
+
+<p><b>IF Statement</b></p>
+
+<p>An <span class="rev">IF</span> statement is used to choose one of several alternative
+courses of actions.  An IF statement always starts with a test
+of the form</p>
+
+<pre>                IF &lt;condition&gt; THEN
+</pre>
+
+<p>and ends with</p>
+
+<pre>                END IF
+</pre>
+
+<p>The <span class="rev">end if</span> is not an independent statement.
+It simply marks the end of the <span class="rev">IF</span> statement.  Between the
+<span class="rev">if</span> and the
+<span class="rev">end&nbsp;if</span>, there are lots of options.
+Here are some examples that exhibit the options, with comments that
+explain what they mean:</p>
+
+<pre>
+      IF d &gt;= 0 THEN   { Simple choice: do the following statements or skip them }
+         r1 := (-b - sqrt(d))/(2*a)
+         r2 := (-b + sqrt(d))/(2*a)
+      END IF
+         
+          
+      IF n/2 = trunc(n/2) THEN  { Branch: if the condition is true, do the   }
+          n := n/2              {         statements between THEN and ELSE;  }
+      ELSE                      {         if the condition is false, do the  }
+          n := 3*n+1            {         statements between ELSE and END IF }
+      END IF
+      
+      
+      IF grade &gt; 90 THEN           { Multiway Branch: Each of the conditions }
+         TellUser("Grade is A")    {   is tested in turn.  As soon as one is }
+      OR IF grade &gt; 80 THEN        {   found that is true, the statements    }
+         TellUser("Grade is B")    {   following that condition's THEN are   }
+      OR IF grade &gt; 70 THEN        {   executed, and then the computer jumps }
+         TellUser("Grade is C")    {   out of the IF statement to whatever   }
+      OR IF grade &gt; 60 THEN        {   statement follows the END IF.  If     }
+         TellUser("Grade is D")    {   none of the conditions are true,      }
+      ELSE                         {   then the statements between ELSE and  }
+         TellUser("Grade is F")    {   END IF are executed.  The ELSE part is}
+      END IF                       {   optional.  If it is absent and if all }
+                                   {   the conditions are false, then none   }
+                                   {   of the statements within the IF       }
+                                   {   statement are executed.               }
+
+</pre>
+
+<p><b>User-defined Subroutines</b></p>
+
+<p>The xTurtle language has built-in subroutines like <span class="cmd">PenUp</span>
+and <span class="cmd">moveTo</span>(x,y).  It is possible to define new
+subroutines in a program.  A subroutine has a name and, optionally, a list of
+parameters.  Once a subroutine has been defined, it can be called by giving its
+name and &mdash; if it has a parameter list &mdash; a list of values to be used for its
+parameters.  A subroutine consists of a list of statements and variable declarations.
+When the subroutine is called, all the statements within the subroutine are
+executed.</p>
+
+<p>Variables declared within a subroutine are called "local
+variables" for that subroutine.  They are not visible from outside
+the subroutine and are deleted from memory when the subroutine ends.  Variables that
+are not defined within a subroutine are called "global variables."
+A subroutine does <strong>not</strong> have automatic access to global variables.
+However, it is possible to give a subroutine access to global variables by
+explicitly "importing" them into the subroutine.  This is
+done with an <span class="rev">IMPORT</span> statement, which consists of the reserved word
+import followed by the names of one or more
+previously declared global variables (separated by commas).  <span class="cmdrev">IMPORT</span> statements
+can only occur inside subroutine and function definitions.</p>
+
+<p>A subroutine definition starts with the word <span class="rev">sub</span>,
+followed by the subroutine name, followed optionally by a list of parameters.
+The parameter list is just a list of parameter names, separated by commas.
+A parameter name can be optionally preceded by the reserved word
+ref, which indicates that the parameter is to
+be passed by reference.  (This is discussed below.)  The word
+sub, the subroutine name, and the parameter list
+make up the "subroutine header."  Following the header
+come the statements that make up the subroutine.  Finally, 
+<span class="rev">end&nbsp;sub</span> is used to mark the end of the
+subroutine.  Here are two sample subroutines:</p>
+
+<pre>      SUB polygon(N,side)                   SUB UpdateAmount(ref amount)
+         DECLARE count                         IMPORT InterestRate
+         count := 0                            DECLARE interest
+         LOOP                                  interest := InterestRate * amount
+            forward(side)                      amount := amount + interest
+            turn(360/N)                     END SUB
+            count := count + 1
+            EXIT IF count = N
+         END LOOP
+      END SUB
+</pre>
+
+<p>When a subroutine is called, one parameter value must be provided for
+each parameter listed in the subroutine definition.  The parameter values
+in the subroutine call statement are called "actual parameters."
+Parameters can be passed by value or by reference, as indicated by the
+absence or presence of the reserved word <span class="rev">ref</span>
+in the subroutine definition.  When a parameter is passed by reference,
+the subroutine can change the value of an actual parameter that is
+provided to it when the subroutine is called.  (The actual parameter for
+a ref parameter must be a name; it cannot
+be a constant or a complex expression.)  This is illustrated by the
+UpdateAmount example given above.</p>
+
+<p>It is possible to exit from a subroutine at any point by using a
+<span class="rev">RETURN</span> statement, which consists simply of the word return.
+<span class="rev">RETURN</span> statements can only occur in subroutines. When the computer executes a
+<span class="rev">RETURN</span> statement, it exits immediately from the subroutine.</p>
+
+<p>A subroutine can call itself.  This is called "recursion."  It is
+also possible for one subroutine to call another which in turn calls the first
+subroutine.  Longer loops of subroutine calls are possible. This is called
+"mutual recursion."  Because subroutines must be declared before
+they are used, a special syntax is required to make mutually recursive subroutines
+possible.  One of the subroutines must be "predeclared".
+This is done by giving the reserved word predeclare,
+followed by the subroutine heading.  The rest of the subroutine is omitted.
+Predeclaring a subroutine allows it to be called by other subroutines.  A full
+definition of the predeclared subroutine must be given later in the program.
+The full definition includes another copy of the subroutine header.</p>
+
+
+<p><b>User-defined Functions</b></p>
+
+<p>A function is very similar to a subroutine, except that it computes
+and returns a value.  A function in xTurtle is defined in the same way
+as a subroutine, with the word <span class="rev">function</span>
+substituted for the word <span class="rev">sub</span>.  The only
+other difference in the definition is that a function must include a
+<span class="rev">RETURN</span> statement that specifies the value to be returned by the
+subroutine.  A <span class="rev">RETURN</span> statement in a function takes the form</p>
+
+<pre>                 return &lt;value&gt;
+</pre>
+
+<p>where <tt>&lt;value&gt;</tt> is a constant, variable, or formula specifying
+the value to be returned.  Here are two sample functions:</p>
+
+<pre>      FUNCTION NextN(num)                    FUNCTION UpdateAmount(amount)
+         IF num/2 = round(n/2) THEN              IMPORT InterestRate
+            return num/2                         DECLARE Interest
+         ELSE                                    Interest := amount * InterestRate
+            return 3 * num + 1                   DECLARE newAmount 
+         END IF                                  newAmount := amount + Interest
+      END FUNCTION                               return newAmount
+                                             END FUNCTION
+</pre>
+
+<p>User-defined functions are used in the same way as built-in functions
+such as <span class="cmd">sin</span>(x).  Functions can have 
+<span class="rev">ref</span> parameters, they can be recursive,
+and they can be predeclared.</p>
+
+
+<p><b>Multitasking</b></p>
+
+<p>In "parallel processing," several processes are going on at
+the same time.  "Multitasking" is a way of simulating parallel
+processing by giving a little bit of execution time to one process, then
+a little bit to another process, and so on.  Multitasking can be done
+in xTurtle by using the <span class="cmd">fork</span> statement.
+<span class="cmd">Fork</span> is a subroutine that takes a single
+parameter, specifying the number of processes to be created.  This number
+must be between 1 and 100.  Conceptually, the command <span class="cmd">fork</span>(N)
+splits a turtle into N different turtles.  Each of the turtles then proceeds
+to execute the following statements independently.  Any variables that
+exist before the fork are shared by all the
+turtles.  However, if a variable declaration statement occurs after the
+fork, each turtle will create its own copy of
+the variable.</p>
+
+<p>Each process created in a <span class="cmd">fork</span> command
+continues executing until either:  it reaches the end of the program, or it
+executes a <span class="cmd">KillProcess</span> command,
+or it finishes the subroutine or function in which the fork command
+occurred.  Note how forks in subroutines are handled:  All processes
+that are created inside the subroutine must end before the subroutine
+returns.  When the subroutine returns, only the original process that
+called the subroutine is still running.</p>
+
+<p>In fact, the command <span class="cmd">fork</span>(N) actually creates N
+"child processes."  The original parent process goes to sleep until all
+the child processes have ended.  Then the original parent awakens.  The state of
+the turtle in the awakened parent process is the same as it was before the
+child processes were created.  That is, the turtle still has the same
+heading, position, visibility, pen state, and drawing color as it did at
+the moment when the fork statement was executed.  If the fork command
+occurred inside a subroutine, the subroutine does not return until
+<strong>all</strong> the child processes have ended, and then it is actually the
+original parent process that returns.  (The same sort of thing happens
+if you use a fork command in the xTurtle web&nbsp;app's command-input box.)</p>
+
+<p>The processes that are created by a fork command are identical,
+except for one thing: Each process has a different value for the
+read-only variable <span class="cmd">forkNumber</span>.  The
+fork numbers for the processes created by the command
+<span class="cmd">fork</span>(N) range from 1 to N.  The different
+values for <span class="cmd">forkNumber</span> allow the different
+processes to do different things.  Note that it is certainly possible
+to have two or more <span class="cmd">forks</span> in a row.  However, a process only remembers the
+fork number from the most recent <span class="cmd">fork</span> command that it has executed.</p>
+
+<p><b>Grab Statement</b></p>
+
+<p>After a <span class="cmd">fork</span> command has been executed, the processes that it creates can
+communicate by setting or reading the values of shared variables (variables
+that were declared before the <span class="cmd">fork</span> command).  This form of communication has
+the problem of "mutual exclusion" &mdash; making sure that only one
+process at a time has access to the shared variable.  It is up to the
+programmer to enforce mutual exclusion.  In xTurtle, this can be done using
+the <span class="rev">GRAB</span> statement, which takes the form</p>
+
+<pre>            GRAB &lt;variable&gt; THEN
+                .
+                .  { any statements &mdash; except fork, exit, return }
+                .
+            END GRAB
+</pre>
+
+<p>The <tt>&lt;variable&gt;</tt> in a <span class="cmd">GRAB</span> statement must be a global variable.
+If you want to use a GRAB statement inside a subroutine, you will have to use
+an imported global variable.  The point here is that only one process at a
+time is allowed to grab a given variable.  If a process tries to grab
+a variable and another process has already grabbed it, then the second process
+has to wait until the first process exits from its GRAB statement.</p>
+
+<p>There is a variation of the grab statement that has an ELSE part.  (I have
+never found it actually useful.)  It has the form:</p>
+
+<pre>            GRAB &lt;variable&gt; THEN
+                  { some statements }
+            ELSE
+                  { more statements }
+            END GRAB
+</pre>
+
+<p>In this case, if the GRAB fails, the computer does not wait. Instead, it
+executes the ELSE part of the grab statement.  The ELSE part can include
+<span class="cmd">fork</span>, <span class="rev">exit</span>, and <span class="rev">return</span> statements.</p>
+
+<hr>
+<div align=right><a href="http://math.hws.edu/eck/index.html"><i>David Eck</i></a></div>
+
+</div>
+
+</body>
+</html>

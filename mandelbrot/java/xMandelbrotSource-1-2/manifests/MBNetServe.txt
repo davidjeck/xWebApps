@@ -1,0 +1,2 @@
+Main-Class: edu.hws.eck.umb.comp/MandelbrotNetworkTaskServer
+

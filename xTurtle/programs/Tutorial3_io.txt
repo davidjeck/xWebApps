@@ -1,0 +1,64 @@
+{ xTurtle Tutorial Example #3: I/O
+
+  I/O, or Input/Output, refers to
+  the exchange of information 
+  between a program and the person
+  using the program.  All the 
+  turtle graphics commands, 
+  including DrawText, are examples
+  of output (from the computer
+  to the user).  This file
+  gives examples of several other
+  I/O commands in xTurtle.
+}
+
+TellUser("Hello World!")
+   { This command pops up a box
+     displaying the specified
+     string to the user.  The
+     user must click on a 
+     displayed OK button before
+     the program can continue. }
+     
+DECLARE amount
+
+AskUser("What is the amount?", amount)
+   { This also pops up a box 
+     displaying the string.
+     There is also an input box
+     where the user can type in 
+     a number.  That number 
+     is stored as the value of 
+     the specified variable.
+     In this example, the number
+     typed by the user is stored
+     in the variable amount. }
+     
+amount := amount * 1.07
+   { Uses the value typed in 
+     by the user in a computation.
+     The computed value is
+     then stored as the new
+     value of amount. }
+     
+TellUser("The amount is now #amount.")
+   { Just as in DrawText, strings
+     can include variables.  This
+     command displays a string 
+     containing the new value of
+     amount. }
+     
+DECLARE resp
+
+YesOrNo("Are you happy?", resp)
+   { Displays the string, and
+     gets a response from the user.
+     With this command, the user
+     can only answer yes or no.
+     If the user says yes, the
+     value of the variable is
+     set to 1; if the user says
+     no, the value is set to 0. }
+     
+TellUser("The recorded answer is #resp")
+

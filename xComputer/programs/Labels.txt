@@ -1,0 +1,89 @@
+; A multiplication program that uses labels.
+
+; Many assembly language instructions refer to
+; addresses of memory locations.  This could force
+; you to count instructions in order to find the
+; address number of the location you want to refer to.
+; Fortunately, there is a way around this:  Use labels
+; to refer to memory locations.
+
+; A label is just a name for a memory location.
+; You define a label by writing the name of the
+; label, followed by a colon (:) followed by
+; the contents of the memory location.  The value
+; of the label is the address of that location.
+; You can use the label anywhere in the program 
+; where you could use a number.  For example,
+; the command "JMP start" will jump to the
+; location with label "start".
+
+; The program in this file uses several labels,
+; such as "loop," "doAdd," "N1," and "ANS."  Some
+; of these labels refer to instructions, and
+; some of them refer to data.  Both of these
+; uses are very common.
+
+; Note, by the way, that the way this program is
+; formatted isn't important, as long as there is
+; at most one instruction or data value per line.
+; Also, you should know that the computer doesn't
+; distinguish between upper and lower case letters
+; in instructions or in label names.
+
+
+; This program multiplies two numbers, stored in
+; locations "N1" and "N2".  The result is left in 
+; location number "ANS".  (How this works isn't
+; important, but essentially, it is a loop that
+; looks at the bits in N1.  When a bit is found that
+; is 1, N2 is added to ANS.  In any case, each time
+; through the loop, N2 is multiplied by 2.)  For this
+; to give the correct answer, the answer must be in
+; the range of numbers that can be represented
+; using 16 bits (but mathematically, the answer is
+; always 'correct modulo 2 to the power 16').
+
+; The program:
+
+       lod-c 0     ; Start by putting a zero into "ANS"
+       sto ANS 
+
+loop:  lod N1      ; If N1 is zero, the process is complete.
+       jmz done 
+       
+       shr         ; Otherwise, shift N1 one bit right.
+       sto N1
+       jmf doAdd   ; If the bit shifted off the end of N1
+                   ;   was a one, jump to doAdd to add N2
+                   ;   to the answer.
+       
+shift: lod N2      ; Multiply N2 by 2 by shifting it left.
+       shl
+       jmz done    ; If N2 is zero, we are done.
+       sto N2
+       
+       jmp loop    ; Proceed to the next iteration.
+
+doAdd: lod N2      ; This section adds N2 to ANS before
+       add ANS     ;   doing the preceding shift operation.
+       sto ANS
+       jmp shift
+
+done:  lod ANS     ; copy the answer into the AC register
+       hlt         ; Halts the program.
+
+
+@20  ; This says that when the program is loaded, the
+     ;   following item will be placed at location 20.  Thus,
+     ;   N1 will be 20, N2 will be 21, and ANS will be 22.
+
+N1:   13    ; The number 13 is stored in a location named "N1".
+N2:   56    ; 56 is in a location named "N2".  N1 and N2 are the
+            ;    two numbers that will be multiplied; change them
+            ;    to any values you like.
+
+ANS:  0     ; "ANS" is the name for a memory location that
+            ;    will hold the product of N1 and N2 when
+            ;    the program ends.  Note the the program also
+            ;    copies the answer into the AC register
+ 

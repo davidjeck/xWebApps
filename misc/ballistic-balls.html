@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Ballistic Balls Canvas Demo</title>
+<script type="text/javascript">
+
+   var canvas;   // The canvas element, on which the drawing is done.
+   var graphics; // A graphic context for drawing on the canvas.
+   var balls;    // An array of 50 balls that bounce around the canvas.
+   var running;  // The balls are moving when running is true; value is controlled by a checkbox.
+   var timeout;  // refers to the timeout that drives the animation.
+   var dragging; // True when the mouse is being dragged.
+   
+   // -------------------- Definition of class Ball -------------------------
+   
+   function Ball(left, top, width, height) {
+         // Create a red Ball with radius 5, random speed between 2 and 9
+         // and a random direction.  As the ball moves, it is constrained
+         // to stay inside the rectangle with upper left corner (left,top) 
+         // and a given width and height.  The initial position of the ball 
+         // is at the center of this rectangle.
+      this.left = left;
+      this.top = top;
+      this.width = width;
+      this.height = height;
+      this.x = left + width/2;
+      this.y = top + height/2;
+      this.radius = 7;
+      this.color = "#F00";
+      var speed = 7*Math.random()+2;
+      var angle = 2*Math.PI * Math.random();
+      this.dx = speed*Math.cos(angle);
+      this.dy = speed*Math.sin(angle);
+   }
+   Ball.prototype.headTowards = function(a,b) {
+         // Changes the velocity of the ball so that it points from the current
+         // location of the ball to the point (a,b).  The speed is not changed.
+         // If the ball is already at (a,b), the velocity is not changed.
+      var heading_x = a - this.x;
+      var heading_y = b - this.y;
+      var heading_length = Math.sqrt(heading_x*heading_x + heading_y*heading_y);
+      if (heading_length < 1e-10)
+         return;
+      heading_x /= heading_length;
+      heading_y /= heading_length;
+      var speed = Math.sqrt(this.dx*this.dx + this.dy*this.dy);
+      this.dx = speed * heading_x;
+      this.dy = speed * heading_y;
+   }
+   Ball.prototype.move = function() {
+          // Moves the ball by an amount equal to its velocity, (this.dx,this.dy).
+          // If this places the ball outside its constraint rectangle, then the ball
+          // is "reflected" off the boundary of that rectangle.  (This will not work
+          // for a velocity that is larger than the size of the rectangle.)
+      this.y += this.dy;
+      this.x += this.dx;
+      if (2*this.radius >= this.height) {
+         this.y = this.top + this.height/2;
+      }
+      else if (this.y > this.top + this.height - this.radius) {
+         this.y -= 2*(this.y - (this.top+this.height-this.radius));
+         this.dy = -Math.abs(this.dy);
+      }
+      else if (this.y < this.top + this.radius) {
+         this.y += 2*(this.top + this.radius - this.y);
+         this.dy = Math.abs(this.dy);
+      }
+      if (2*this.radius >= this.width) {
+         this.x = this.left + this.left/2;
+      }
+      else if (this.x > this.left + this.width - this.radius) {
+         this.x -= 2*(this.x - (this.left+this.width-this.radius));
+         this.dx = -Math.abs(this.dx);
+      }
+      else if (this.x < this.left + this.radius) {
+         this.x += 2*(this.left + this.radius - this.x);
+         this.dx = Math.abs(this.dx);
+      }
+   }
+   Ball.prototype.draw = function() {
+         // Draws the ball in the canvas's graphics context, using its 
+         // current location, color, and radius.
+      graphics.fillStyle = this.color;
+      graphics.beginPath();
+      graphics.arc(this.x,this.y,this.radius,0,2*Math.PI,false);
+      graphics.closePath();
+      graphics.fill();
+   }
+   // ------------------------- end definition of class Ball --------------------
+   
+   /**
+    * Does one frame of the animation:  Clears the canvas, moves all the balls,
+    * and draws them.  If the animation is running, it schedules the next call
+    * of this method.
+    */
+   function frame() {
+      graphics.clearRect(0,0,canvas.width,canvas.height);
+      for (var i = 0; i < 50; i++) {
+         balls[i].move();
+         balls[i].draw();
+      }
+      if (running) {
+         timeout = setTimeout(frame,30);  // Call this method again in 30 milliseconds.
+      }
+   }
+   
+   /**
+    * Responds to a change in the status of the "Running" checkbox.
+    * This is attached to the checkbox in the init() function.
+    */
+   function handleRunningCheckbox() {
+      running = document.getElementById("checkboxRunning").checked;
+      if (running) {
+         timeout = setTimeout(frame,30); // Schedule the first frame 30 milliseconds from now.
+      }
+      else {
+         clearTimeout(timeout); // Cancel the pending call to the animation frame function.
+      }
+   }
+   
+   /**
+    * Responds to a change in the status of the "Random Sizes" checkbox.
+    * This is attached to the checkbox in the init() function.
+    */
+   function handleSizeCheckbox() {
+      graphics.clearRect(0,0,canvas.width,canvas.height);
+      if (document.getElementById("checkboxRandomSizes").checked) {  // Make all the sizes random.
+         for (var i = 0; i < 50; i++) {
+            balls[i].radius = Math.floor(2+20*Math.random());
+            balls[i].draw();
+         }
+      }
+      else {  // Make the sizes of all the balls equal to 7.
+         for (var i = 0; i < 50; i++) {
+            balls[i].radius = 7;
+            balls[i].draw();
+         }
+      }
+   }
+   
+   /**
+    * Responds to a change in the status of the "Random Colors" checkbox.
+    * This is attached to the checkbox in the init() function.
+    */
+   function handleColorCheckbox() {
+      graphics.clearRect(0,0,canvas.width,canvas.height);
+      if (document.getElementById("checkboxRandomColors").checked) { // Color all the balls randomly.
+         for (var i = 0; i < 50; i++) {
+            var r = Math.floor(256*Math.random());
+            var g = Math.floor(256*Math.random());
+            var b = Math.floor(256*Math.random());
+            balls[i].color = "rgb(" + r + "," + g + "," + b + ")";
+            balls[i].draw();
+         }
+      }
+      else {  // Color all the balls red.
+         for (var i = 0; i < 50; i++) {
+            balls[i].color = "#F00";
+            balls[i].draw();
+         }
+      }
+   }
+   
+   /**
+    * Sets up responses to mouse events on the canvas so that clicking or
+    * dragging on the canvas will cause all the balls to head towards the 
+    * mouse position.  This method is called just once, from the init() method.
+    */
+   function setUpDragging() {
+      dragging = false;  // initially, the mouse is not being dragged.
+      function doMouseDown(evt) {
+               // When the mouse is pressed on the canvas, make balls head towards 
+               // mouse position, and start a drag operation.  Note:  e.pageX,e.pageY
+               // give the mouse coordinages in the entire document.  These coordinates
+               // are modified by the offset of the canvas element (#balls) to get
+               // the coordinates in the canvas.  Math.round is used because the offset
+               // can be a real number, and I want an integer.
+           var r = canvas.getBoundingClientRect();
+           var x = Math.round(evt.clientX - r.left);
+           var y = Math.round(evt.clientY - r.top);
+           for (var i = 0; i < 50; i++)
+              balls[i].headTowards(x,y);
+           dragging = true;
+           canvas.addEventListener("mousemove",doMouseMove,false);
+           document.addEventListener("mouseup",doMouseUp,false);
+      }
+      function doMouseMove(evt) {
+             // This is called when the mouse moves on the canvas.  This is treated as
+             // a drag operation only if dragging is true, that is if it comes between
+             // a mousedown on the canvas and a mouseup
+          if (dragging) {
+           var r = canvas.getBoundingClientRect();
+           var x = Math.round(evt.clientX - r.left);
+           var y = Math.round(evt.clientY - r.top);
+              for (var i = 0; i < 50; i++)
+                  balls[i].headTowards(x,y);
+          }
+      }
+      function doMouseUp() {
+            // This is called when the mouse is released anywhere in the document.  This
+            // is attached to the document, not the canvas, because the mouseup after a
+            // mousedown on the canvas can occur anywhere.  (Actually, a saner langauge 
+            // would send the mouseup to the same object that got the mousedown, but
+            // javascript/jquery doesn't seem to do that.)
+         if (dragging) {
+            dragging = false;
+            canvas.removeEventListener("mousemove",doMouseMove,false);
+            document.removeEventListener("mouseup",doMouseUp,false);
+         }
+      }
+      canvas.addEventListener("mousedown",doMouseDown,false);
+   }
+   
+   function setUpTouch() {
+      var touchStarted = false;
+      function doTouchStart(evt){ 
+          if (evt.touches.length != 1) {
+             doTouchCancel();
+             return;
+          }
+          if (touchStarted) {
+              return;
+          }
+          var r = canvas.getBoundingClientRect();
+          var x = Math.round(evt.touches[0].clientX - r.left);
+          var y = Math.round(evt.touches[0].clientY - r.top);
+          for (var i = 0; i < 50; i++)
+              balls[i].headTowards(x,y);
+          touchStarted = true;
+          canvas.addEventListener("touchmove", doTouchMove);
+          canvas.addEventListener("touchend", doTouchEnd);
+          canvas.addEventListener("touchcancel", doTouchCancel);
+          evt.preventDefault();
+      }
+      function doTouchMove(evt){
+          if (evt.touches.length != 1 || !touchStarted) {
+             doTouchCancel();
+             return;
+          }
+          var r = canvas.getBoundingClientRect();
+          var x = Math.round(evt.touches[0].clientX - r.left);
+          var y = Math.round(evt.touches[0].clientY - r.top);
+          for (var i = 0; i < 50; i++)
+              balls[i].headTowards(x,y);
+          evt.preventDefault();
+      }
+      function doTouchEnd(evt) {
+          doTouchCancel();
+      }
+      function doTouchCancel() {
+          if (touchStarted) {
+             touchStarted = false;
+             canvas.removeEventListener("touchmove", doTouchMove);
+             canvas.removeEventListener("touchend", doTouchEnd);
+             canvas.removeEventListener("touchcancel", doTouchCancel);
+          }
+      }
+      canvas.addEventListener("touchstart", doTouchStart);
+   }
+   
+   /**
+    * This function is called just once, when the document has been loaded.
+    * (The call is scheduled by the last lne of this script.)
+    */
+   function init() {
+      canvas = document.getElementById("balls"); // A reference to the canvas element.
+      if ( ! canvas || ! canvas.getContext ) {
+             // This browser apparently does not support canvasses since the canvas
+             // element has no getContext function.  Give up!
+         document.getElementById("message").innerHTML = "Sorry, your browser doesn't support the canvas element.";
+         return;
+      }
+      document.getElementById("checkboxRunning").checked = true;   // Set default states of checkboxes;
+      document.getElementById("checkboxRandomSizes").checked = false; //   (Required when reloading the page.
+      document.getElementById("checkboxRandomColors").checked = false;
+      document.getElementById("checkboxRunning").onchange = handleRunningCheckbox;    // Set up handlers for the checkboxes.
+      document.getElementById("checkboxRandomSizes").onchange = handleSizeCheckbox;
+      document.getElementById("checkboxRandomColors").onchange = handleColorCheckbox;
+      setUpDragging();  // Set up mouse handling.
+      setUpTouch();  // alternative to mouse, for a touch screen.
+      graphics = canvas.getContext("2d");  // Get the graphics context that will be used to draw on the canvas.
+      balls = new Array();  // Create the balls.
+      for (i = 0; i < 50; i++)
+         balls[i] = new Ball(0,0,canvas.width,canvas.height);
+      timeout = setTimeout(frame,30);  // Schedule the first frame of the animation.
+      running = true;
+   }
+   
+</script>   
+</head>
+<body onload="init()">
+   
+   <noscript><p style="color:red">Sorry, this program requires JavaScript to run.</p></noscript>
+   
+   <h2>Ballistic Balls</h2>
+   
+
+   <p id="message"><i>Click</i> or <i>click-and-drag</i> your mouse on the canvas (while Running)!<br>
+   (On a touch screen, use a finger to <i>tap</i> or <i>drag</i>.)</p>
+   
+   <canvas id="balls" width=500 height=400 style="background-color:black"></canvas>
+   
+   <p>
+      <input type="checkbox" id="checkboxRunning"><label for="checkboxRunning" style="margin-right:1cm">Running</label>
+      <input type="checkbox" id="checkboxRandomColors"><label for="checkboxRandomColors" style="margin-right:1cm">Random Colors</label>
+      <input type="checkbox" id="checkboxRandomSizes"><label for="checkboxRandomSizes">Random Sizes</label>      
+   </p>
+   
+</body>
+</html>

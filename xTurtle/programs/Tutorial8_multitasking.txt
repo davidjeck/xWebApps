@@ -1,0 +1,80 @@
+{ xTurtle Tutorial Example #8: multitasking
+
+  Turtles in xTurtle have the cute ability
+  to split themselves into a specified 
+  number of turtles.  Each turtle
+  then goes on to execute the rest of
+  the program.  (If the split occurs
+  inside a subroutine, all the extra
+  turtles are gone before the subroutine
+  returns.) Turtles are split up in this
+  way with the Fork command}
+
+
+SUB starburst(lineCount)
+
+   { Creates a bunch of lines
+     radiating out from a center
+     point.  The number of lines
+     is given by the parameter.
+     The lines have random lengths
+     and point in random directions.
+     Because of a limitation on the
+     Fork command, lineCount can't
+     be more than 100. }
+     
+   fork(lineCount)  { There are now
+                      lineCount turtles }
+   
+   face(random*360) { Each turtle faces in
+                      a random direction }
+   
+   forward(random*5)  { Each turtle goes
+                        forward by a random
+                        amount. }
+
+   { All the turtles die before the
+     subroutine returns. }                 
+
+END SUB
+
+
+PenUp MoveTo(5,5) PenDown
+Starburst(50)
+
+PenUp MoveTo(-5,-5) PenDown
+blue
+StarBurst(50)
+
+
+{ There is a special variable that you
+  can use to tell the turtles created in
+  a fork statement apart.  The name of
+  the variable is ForkNumber.  Each
+  of the turtles created by a Fork(N)
+  command has a different ForkNumber.
+  The values are 1, 2, ..., N.  }
+  
+Fork(2)
+PenUp
+IF ForkNumber = 1 THEN
+   MoveTo(-5,5)  { One turtle does this. }
+   green
+ELSE
+   MoveTo(5,-5)  { The other turtle does this. }
+   yellow
+END IF
+PenDown
+
+Fork(60)  { Both turtles split; there are now
+            120 turtles. }
+            
+Face(6 * Forknumber)  { Because they have
+                        different values for
+                        ForkNumber, the turtles
+                        face in different directions. }
+                        
+Forward(4) { Every turtle does this. }
+
+
+

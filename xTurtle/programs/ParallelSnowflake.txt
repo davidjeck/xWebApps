@@ -1,0 +1,24 @@
+
+{ This program demonstrates the "fork"
+  command, which is used in xTurtle 
+  to simulate multiprocessing.  The
+  command "fork(6)" makes six turtles.
+  The turtles are identical, except
+  that each one has a different
+  "ForkNumber".  By using ForkNumber
+  in the program, you can make the 
+  turtles behave differently. The
+  following program uses three levels
+  of forking to draw a snowflake-like
+  picture.
+}
+
+fork(6)
+face(60 * forkNumber)
+forward(6)
+fork(6)
+face(60 * forkNumber + 30)
+forward(2)
+fork(6)
+face(60 * forkNumber)
+forward(0.7)

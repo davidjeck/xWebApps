@@ -1,0 +1,35 @@
+{Mongolian Design: 
+ turn turtle and autoscroll off.}
+
+sub baseE
+penDown
+move(-3,0)
+move(0,2)
+move(1,0)
+move(0,-1)
+move(1,0)
+move(0,2)
+move(-3,0)
+move(0,-7)
+move(3,0)
+move(0,2)
+move(-1,0)
+move(0,-1)
+move(-1,0)
+move(0,2)
+move(3,0)
+end sub
+
+sub junk
+fork(6)
+penUp
+moveTo(8*(forkNumber-3),0)
+fork(6)
+move(0,8*(forkNumber-3))
+baseE
+penUp
+move(-4,-3)
+baseE
+end sub
+
+junk

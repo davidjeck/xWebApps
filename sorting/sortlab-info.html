@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>xSortLab Info</title>
+<style>
+   body {
+      background-color: gray;
+      margin-top: 0;
+      margin-bottom: 0;
+   }
+   #content {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 5px 15px;
+      border-left: thin solid black;
+      border-right: thin solid black;
+      background-color: #EEEEEE;
+   }
+   h1, h2, h3 {
+       text-align: center;
+   }
+</style>
+</head>
+<body>
+<div id="content">
+
+<h2>xSortLab: Info and Instructions</h2>
+
+<p>The program <a href="xSortLab.html">xSortLab.html</a> is meant to help you learn
+about common sorting algorithms.   To "sort" an array means to put the items in the
+array into increasing, or decreasing, order.  A sorting algorithm is a specific
+technique for doing so.  There are many well-known sorting algorithms.  xSortLab
+works with the algorithms named Bubble Sort, Selection Sort, Insertion Sort,
+Merge Sort, and Quick Sort.</p>
+
+<p>For more information about sorting, you might check out
+the Wikipedia article on
+<a href="https://en.wikipedia.org/wiki/Sorting_algorithm">sorting&nbsp;algorithms</a>.
+That page has links to individual articles on each of the sorting algorithms that
+are implemented in xSortLab.</p>
+
+
+<hr align="center" width="33%">
+
+<p>The xSortLab web page is divided into three sections.  The top section is
+"Visual Sort."   This section applies sorting algorithms to arrange
+16 bars in order of increasing height, while showing the step-by-step
+details of the process.  Below the area where the bars are
+displayed are two message areas, which display a running commentary when
+a sort is in progress.  The lower message area displays a detailed comment
+on each step in the sort.  The upper area displays more general messages
+about major phases in the sort.  (The lower message area is not used when
+the sort is being run at "Fast" speed.)</p>
+
+<p>To the right of the bars is a column of controls.  The first of these
+is a pop-up menu, that can be used to select the sorting method.
+Clicking "New Sort" will rearrange the bars into a random order and
+get ready to start the sorting algorithm.
+The "Step" button does one step in the algorithm, while the "Run"
+button executes the steps automatically.  There is a checkbox
+labeled "Fast" that will speed up the process significantly by
+reducing the delay between steps and by omitting the animations that
+show a bar moving from one location to the next&mdash;instead, they
+just jump to the new location.</p>
+
+<p>Two basic operations are used in sorting:  <b>comparing</b> two items to
+see which is bigger and <b>copying</b> an item from one place to another.  The number
+of comparisons and the number of copies used in the current sort are
+displayed below the controls.</p>
+
+<p>You would typically use the Visual Sort panel by stepping slowly through the algorithm
+to see how it works in detail.  You should also run it at fast speed from beginning to end to
+get a better overview of the process as a whole.</p>
+
+<hr align="center" width="33%">
+
+<p>The second section of xSortLab is "Timed Sort."  This section is used to obtain
+statistics about the running times of the five sorting algorithms.  The 
+interesting question is how the running time depends on the number of
+items being sorted.  You can enter the size of the array that is to be
+sorted.  You can also specify the number of arrays to be sorted.
+The point is that a small array takes so little time to sort that
+the time cannot be measured accurately, so the program can be set
+to sort several arrays of the same size.  The time required to sort
+one array can then be computed
+by dividing the total time by the number of arrays.  You probably
+want to adjust the number of arrays so that the total time is at
+least one second.</p>
+
+<p>The arrays in this case are arrays of numbers.  The program begins
+by creating the arrays and filling them with random numbers.  It is not
+possible to work with more than 500 million numbers, so there are
+limits on the array size and on the number of arrays.  You should only
+consider sorting very large arrays when the algorithm is Quick Sort
+or Merge Sort.</p>
+
+<p>The timing statistics should be fairly accurate, as long as your computer
+is not busy with too many other tasks at the same time that you are doing
+the sort. (Also,if the number of arrays is very large and the array size is
+very small, the overhead involved in managing the arrays might distort the
+results somewhat, since the overhead is inclueded in the measured time.)</p>
+
+<p>A timed sort uses a web browser capability called a "web worker,"
+which should be available in all modern browsers.  If you are using an
+old browser that does not support web workers, the Timed Sort option will
+be disabled.</p>
+
+<hr align="center" width="33%">
+
+<p>The third section of the page is a "Log."  Every time the program completes
+a sorting operation, it will write statistics about the operation to the log.
+If this annoys you, there is a checkbox that you can uncheck to disable logging.
+The statistics are output as a table that you can easily copy-and-paste into
+a text editor if you want to save the data.</p>
+
+<p>For a visual sort, the number of arrays is always 1, the array size is
+always 16, and the elapsed time is omitted from the log.</p>
+
+
+<hr>
+<div align=right><a href="http://math.hws.edu/eck/index.html"><i>David Eck</i></a></div>
+
+</div>
+</body>
+</html>

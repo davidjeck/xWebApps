@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><meta charset="utf-8">
+
+<title>Erdos Theorem Demo</title>
+<script type="text/javascript">
+
+    var canvas;
+    var graphics;
+    var width;
+    var trials = 0;
+    var speed;
+    var white = 0;
+    var black = 0;
+    var stepNumber;
+    var prevRatio;
+    var running;
+    
+    function step() {
+        stepNumber++;
+        if (stepNumber >= width) {
+            white = 0;
+            return;
+        }
+        var ratio = black/(black + white);
+        if (Math.random() < ratio) {
+            black++;
+        }
+        else {
+            white++;
+        }
+        graphics.beginPath();
+        graphics.moveTo(stepNumber-0.5,prevRatio*512);
+        graphics.lineTo(stepNumber+0.5,ratio*512);
+        graphics.stroke();
+        prevRatio = ratio;
+    }
+    
+    function frame() {
+        if (!running)
+            return;
+        if (white == 0) {
+            var r = Math.random();
+            var g = Math.random();
+            var b = Math.random();
+            var m = Math.max(r,g,b);
+            r = Math.floor(255*r/m);
+            g = Math.floor(255*g/m);
+            b = Math.floor(255*b/m);
+            graphics.strokeStyle= "rgb(" + r + "," + g + "," + b + ")";
+            prevRatio = 0.5;
+            stepNumber = 0;
+            trials++;
+            black = 1;
+            white = 1;
+            document.getElementById("trials").innerHTML = "" + trials;
+        }
+        if (speed == 1 || speed == 0)
+            step();
+        else if (speed == 2) {
+            for (var i = 0; i < 10 && stepNumber < width; i++)
+                step();
+        }
+        else if (speed == 3) {
+            for (var j = 0; j < 50 && stepNumber < width; j++)
+                step();
+        }
+        else {
+            while (stepNumber < width)
+                step();
+        }
+        setTimeout(frame, speed == 0 ? 100 : 10);
+    }
+    
+    function doSpeedSelect() {
+        speed = Number(document.getElementById("speed").value);
+    }
+    
+    function doStart() {
+        running = !running;
+        document.getElementById("start").innerHTML = running? "Click Here to Pause" : "Click Here to Start";
+        if (running)
+            frame();
+    }
+    
+    function doClear() {
+        white = 0;
+        running = false;
+        trials = 0;
+        document.getElementById("start").innerHTML = "Click Here to Start";
+        graphics.clearRect(0,0,canvas.width,canvas.height);
+        document.getElementById("trials").innerHTML = "0";
+    }
+
+    function init() {
+        try {
+            canvas = document.getElementById("canvas");
+            width = window.innerWidth? window.innerWidth-80 : 800;
+            canvas.width = width;
+            graphics = canvas.getContext("2d");
+            if (!graphics)
+                throw 1;
+        }
+        catch (e) {
+            document.getElementById("par").innerHTML = "Sorry, the required graphics context couldn't be initialized<br>" + e;
+            return;
+        }
+        running = false;
+        speed = 2;
+        document.getElementById("start").innerHTML = "Click Here to Start";
+        document.getElementById("speed").value = "2";
+    }
+</script>
+</head>
+<body style="background-color: #E8E8E8" onload="init()">
+
+<h2>A Demonstration of a Theorem of Paul Erd&#337;s</h2>
+
+<p id="par">
+<button id="start" onclick="doStart()" style="font-weight: bold">Click Here to Start</button>
+<span style="margin-left:1cm">Speed: <select id="speed" onchange="doSpeedSelect()">
+   <option value="1">Slow</option>
+   <option value="2">Fast</option>
+   <option value="3">Faster</option>
+   <option value="4">Fastest</option>
+</select></span>
+<button id="clear" onclick="doClear()" style="margin-left:1cm">Clear</button>
+<span style="margin-left: 1cm; white-space: pre">Number of trials: <b id="trials">0</b></span>
+</p>
+
+<div>
+<canvas width="1034" height="512" style="background-color:black; margin-left:30px" id="canvas">
+</canvas>
+</div>
+
+
+
+<div style="max-width:700px">
+
+<p><b>Explanation:</b>
+Consider the following experiment.  Place a black pebble and a white pebble
+in an empty urn.  Then repeat the following step over and over: Remove a randomly selected
+pebble at random from the urn, then return that pebble to the urn along
+with another pebble of the same color.  That is, if the removed pebble is white,
+drop two white pebbles into the urn; if the removed pebble is black, then
+drop two black pebbles into the urn.  Keep track of the fraction of pebbles
+in the urn that are white.  This fraction starts at 0.5.  After one step, there
+are three pebbles in the urn and the fraction of white pebbles is either 1/3
+or 2/3.  After two steps, there are four pebbles in the urn, and the fraction
+of white pebbles is 1/4, 2/4, or 3/4.  The question is, what happens or can
+happen to the fraction in the long run?</p>
+
+<p style="text-indent: 30px">This web page simulates this experiment, and the results
+are shown as a graph in the black area above.  The graph plots the fraction of
+white pebbles as a function of the number of steps.  Steps increase from left to right,
+with one step per pixel.  The fraction of white pebbles is zero at the bottom of the black rectangle and
+is one at the top.  A randomly selected color is used for the graph.  When
+the number of steps reaches the width of the black area, the experiment is terminated.
+A new experiment is begun, starting again with one black and one white pebble, and
+another random colors is selected for the new graph.  Think about what you expect to
+happen before you run the simulation.</p>
+
+<p style="text-indent: 30px">
+The "Fast" speed is about 10 times faster than the "Slow" speed,
+and the "Faster" speed is 5 times faster again.
+At the "Fastest" speed, an entire experiment is completed and the entire graph for that
+experiment is added to the picture at once.  To see what tends to happen in the long
+run, run at "Fastest" speed for a while.  (Note: To change the size of the black rectangle,
+change the window size and then reload this page.)</p>
+
+<p style="text-indent: 30px">(Erd&#337;s proved that in a given experiment, in the long run
+the fraction of white pebbles will approach a constant value, with probability one.  Furthermore,
+in multiple experiments, the limit values are evenly distributed in the interval from
+zero to one.)</p>
+
+</div>
+
+
+
+</body></html>

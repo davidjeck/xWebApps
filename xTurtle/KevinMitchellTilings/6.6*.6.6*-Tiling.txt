@@ -1,0 +1,32 @@
+{
+ Semi-regular 6.6*.6.6* uniform tiling
+ using rgular star polygons.}
+
+declare side
+side:=1.25
+declare perp
+perp:=side*sin(60)
+
+sub motif(side)
+face(0)
+penDown
+declare ct
+ct:=0
+  loop
+   forward(side)
+   turn(120)
+			forward(side)
+   turn(-60)
+   ct:= ct+1
+   exit if ct=6
+  end loop
+end sub
+
+penUp
+fork(6)
+move(0,(forkNumber-4)*4*perp)
+fork(6)
+move((forkNumber-3)*6*side,0)
+fork(2)
+move((forkNumber-1)*3*side,(forkNumber-1)*2*perp)
+motif(side)

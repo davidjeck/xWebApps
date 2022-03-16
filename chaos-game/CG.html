@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Chaos Game: Fractals from Random Dots</title>
+<style>
+   html, body {
+      padding: 0;
+      margin: 0;
+      background-color: #EEEEEE;
+   }
+   #content {
+      min-width: 600px;
+     -webkit-user-select: none; /* turning off text selection  / Webkit */
+     -moz-user-select: none;    /* Firefox */
+     -ms-user-select: none;     /* IE 10  */
+     -o-user-select: none;    /* Opera */
+     user-select: none;
+   }
+   #control {
+      padding: 0;
+      margin: 5px 10px 10px 5px;
+      float: left;
+      background-color: white;
+      border-left: 2px solid black;
+      border-right: 2px solid black;
+      border-top: 2px solid black;
+   }
+   .section {
+      margin: 0;
+      padding: 6px;
+      border-bottom: 2px solid black;
+   }
+   #boardHolder {
+      padding:0;
+      position: absolute;
+      border: 2px solid black;
+      display: none;
+   }
+   p {
+      margin: 5px 0;
+   }
+   #maplist {
+      position: relative;
+      overflow: auto;
+      height: 100px;
+      border: 1px solid #333333;
+   }
+   #maplist p {
+      margin: 0;
+      padding: 3px 6px;
+   }
+   canvas {
+      display: block;
+   }
+   #jsonimportbg {
+       position: fixed;
+       z-index: 10;
+       opacity: 0.7;
+       background-color: black;
+       left: 0;
+       top: 0;
+       width: 100%;
+       height: 100%;
+       display: none;
+   }
+   #jsonimport {
+       position: absolute;
+       left: 50px;
+       top: 50px;
+       z-index:20;
+       padding: 10px;
+       background-color: #D8D8FF;
+       border: 2px solid #000099;
+       border-radius: 16px;
+       box-shadow: 5px 5px 8px black;
+       display: none;
+   }
+   textarea {
+     white-space: pre;
+     word-wrap: normal;
+     overflow-x: scroll;
+   }
+</style>
+
+<script src="seedrandom.js"></script> <!-- needed for consistency when editing maps -->
+
+<script>
+
+"use strict";
+
+var canvas, graphics;
+var OSC, OSG;  // off-screen canvas and graphics
+
+var size, topGap, leftGap;
+var batchSize = 0;
+
+var showMaps = true;
+var colorLevel = 0;
+
+var maps = [];
+var selectedMapIndex = -1;
+var selectionWidgets = null;
+
+var random; // seeded random number generator
+var frameRequest = null;
+var cumulativeAreas, totalArea;
+var batchSize;
+var symmetricDrag = true;
+
+var undoList = [];
+var undoCount = 0;
+var applyUndoInProgress = false;  // items are not added to the undo list when an undo/redo is in progress
+var currentExample = -1;
+
+var touchFactor = 1;  // factor affecting distance allowed between click/touch and widget;
+                      // when a touch is used, this is increased to allow for lesser accuracy.
+
+var palette = [
+        "#800000", "#008000", "#000080", "#008080", "#800080", "#808000",
+        "#FF0000", "#00FF00", "#0000FF", "#00FFFF", "#FF00FF", "#808080",
+        "#FF8080", "#80FF80", "#8080FF", "#80FFFF", "#FF80FF", "#404040"
+    ];
+
+function AffineMap( x0,y0, x1,y1, x2,y2 ) {
+       // (x0,y0), (x1,y1), (x2,y2), are the images of (0,0), (1,0), (0,1);
+    this.x0 = x0;
+    this.y0 = y0;
+    this.x1 = x1;
+    this.y1 = y1;
+    this.x2 = x2;
+    this.y2 = y2;
+    this.e = x0;
+    this.f = y0;
+    var v1_x = x1 - x0;
+    var v1_y = y1 - y0;
+    var v2_x = x2 - x0;
+    var v2_y = y2 - y0;
+    this.x3 = v1_x + v2_x + x0;
+    this.y3 = v1_y + v2_y + y0;
+    this.a = v1_x;
+    this.b = v2_x;
+    this.c = v1_y;
+    this.d = v2_y;
+    this.determinant = this.a*this.d - this.b*this.c;
+    this.area = Math.max( Math.abs(this.determinant), 0.0001);
+}
+AffineMap.prototype.apply = function(pt) {  // pt is an object with numeric properties pt.x, pt.y
+    var x = pt.x;
+    var y = pt.y;
+    pt.x = this.a * x + this.b * y + this.e;
+    pt.y = this.c * x + this.d * y + this.f;
+}
+AffineMap.prototype.drawOutline = function() {
+    var x0 = xToPixel(this.x0);
+    var x1 = xToPixel(this.x1);
+    var x2 = xToPixel(this.x2);
+    var x3 = xToPixel(this.x3);
+    var y0 = yToPixel(this.y0);
+    var y1 = yToPixel(this.y1);
+    var y2 = yToPixel(this.y2);
+    var y3 = yToPixel(this.y3);
+    graphics.lineWidth = 2;
+    drawLine("red",x2,y2,x3,y3);
+    drawLine("green",x3,y3,x1,y1);
+    drawLine("blue",x1,y1,x0,y0);
+    drawLine("cyan",x0,y0,x2,y2);
+}
+AffineMap.prototype.drawOverlay = function() {
+    var x0 = xToPixel(this.x0);
+    var x1 = xToPixel(this.x1);
+    var x2 = xToPixel(this.x2);
+    var x3 = xToPixel(this.x3);
+    var y0 = yToPixel(this.y0);
+    var y1 = yToPixel(this.y1);
+    var y2 = yToPixel(this.y2);
+    var y3 = yToPixel(this.y3);
+    graphics.globalAlpha = 0.2;
+    graphics.fillStyle = "black";
+    graphics.beginPath();
+    graphics.moveTo(x2,y2);
+    graphics.lineTo(x3,y3);
+    graphics.lineTo(x1,y1);
+    graphics.lineTo(x0,y0);
+    graphics.fill();
+    graphics.globalAlpha = 1;
+}
+AffineMap.prototype.containsPoint = function(x,y) {
+    if (Math.abs(this.determinant) < 1e-20) {
+        return false;
+    }
+    x = x - this.e;
+    y = y - this.f;
+    var x1 = (x*this.d - y*this.b) / this.determinant;
+    var y1 = (-x*this.c + y*this.a) / this.determinant;
+    if (0 <= x1 && x1 <=1 && 0 <= y1 && y1 <= 1) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+function xToPixel(x) {
+    return 0.5 + Math.floor(leftGap + x*size);
+}
+function yToPixel(y) {
+    return 0.5 + Math.floor(topGap + (1-y)*size);
+}
+function pixelToX(pixelX) {
+    return (pixelX - leftGap)/size;
+}
+function pixelToY(pixelY) {
+    return 1 - (pixelY - topGap)/size;
+}
+
+function SelectionWidgets(map) {  // positions of drag handles on the map, in world coords
+    this.cornerX = new Array(4);
+    this.cornerY = new Array(4);
+    this.arrowX = new Array(5);  // centers of arrows; last spot is for arrow at head of rotate handle
+    this.arrowY = new Array(5);
+    this.arrowDX = new Array(5); // arrow directions, unit vectors
+    this.arrowDY = new Array(5);
+    this.cornerX[0] = map.x0;
+    this.cornerY[0] = map.y0;
+    this.cornerX[1] = map.x1;
+    this.cornerY[1] = map.y1;
+    this.cornerX[2] = map.x2;
+    this.cornerY[2] = map.y2;
+    this.cornerX[3] = map.x3;
+    this.cornerY[3] = map.y3;
+    this.centerX = this.centerY = 0;
+    for (var i = 0; i < 4; i++) {
+        this.centerX += this.cornerX[i];
+        this.centerY += this.cornerY[i];
+    }
+    this.centerX /= 4;
+    this.centerY /= 4;
+    var dx = map.x1 - map.x0;
+    var dy = map.y1 - map.y0;
+    var length = Math.sqrt(dx*dx + dy*dy);
+    dx = dx/length;
+    dy = dy/length;
+    var temp = dx*Math.cos(Math.PI/6) - dy*Math.sin(Math.PI/6);
+    dy = dx*Math.sin(Math.PI/6) + dy*Math.cos(Math.PI/6);
+    dx = temp;
+    this.rotateHandleX = this.centerX + (80.0/size) * dx;
+    this.rotateHandleY = this.centerY + (80.0/size) * dy;
+    this.arrowX[0] = (map.x0 + map.x1)/2;
+    this.arrowY[0] = (map.y0 + map.y1)/2;
+    this.arrowX[1] = (map.x2 + map.x3)/2;
+    this.arrowY[1] = (map.y2 + map.y3)/2;
+    this.arrowX[2] = (map.x0 + map.x2)/2;
+    this.arrowY[2] = (map.y0 + map.y2)/2;
+    this.arrowX[3] = (map.x1 + map.x3)/2;
+    this.arrowY[3] = (map.y1 + map.y3)/2;
+    this.arrowX[4] = this.rotateHandleX;
+    this.arrowY[4] = this.rotateHandleY;
+    this.arrowDX[0] = map.x1 - map.x0;
+    this.arrowDY[0] = map.y1 - map.y0;
+    this.arrowDX[1] = map.x2 - map.x3;
+    this.arrowDY[1] = map.y2 - map.y3;
+    this.arrowDX[2] = map.x0 - map.x2;
+    this.arrowDY[2] = map.y0 - map.y2;
+    this.arrowDX[3] = map.x3 - map.x1;
+    this.arrowDY[3] = map.y3 - map.y1;
+    this.arrowDX[4] = -dy;
+    this.arrowDY[4] = dx;
+    for (var i = 0; i < 4; i++) {
+        length = Math.sqrt( this.arrowDX[i]*this.arrowDX[i] + this.arrowDY[i]*this.arrowDY[i] );
+        this.arrowDX[i] /= length;
+        this.arrowDY[i] /= length;
+    }
+}
+SelectionWidgets.prototype.draw = function() {
+    function line(x1,y1,x2,y2) {
+        graphics.beginPath();
+        graphics.moveTo(Math.floor(x1) + 0.5, Math.floor(y1) + 0.5);
+        graphics.lineTo(Math.floor(x2) + 0.5, Math.floor(y2) + 0.5);
+        graphics.stroke();
+    }
+    function oval(x,y,r) {
+        graphics.beginPath();
+        graphics.moveTo(x+r,y);
+        graphics.arc(x,y,r,0,2*Math.PI);
+        graphics.fill();
+    }
+    graphics.save();
+    graphics.translate(leftGap,topGap);
+    var pw = 1.0/size;
+    graphics.strokeStyle = "#700070";
+    graphics.fillStyle = "#700070";
+    graphics.globalAlpha = 0.7;
+    for (var i = 0; i < 4; i++)
+        graphics.fillRect(Math.floor(this.cornerX[i]*size) - 4, Math.floor((1-this.cornerY[i])*size) - 4, 9, 9);
+    graphics.lineWidth = 2;
+    line(this.centerX*size, (1-this.centerY)*size, this.rotateHandleX*size, (1-this.rotateHandleY)*size);
+    oval(Math.floor(this.centerX*size), Math.floor((1-this.centerY)*size), 3);
+    graphics.lineWidth = 3;
+    for (var i = 0; i < 5; i++) {
+        var a = 20;  // half of arrow length
+        var x1 = this.arrowX[i] + a*pw*this.arrowDX[i];
+        var y1 = this.arrowY[i] + a*pw*this.arrowDY[i];
+        var x2 = this.arrowX[i] - a*pw*this.arrowDX[i];
+        var y2 = this.arrowY[i] - a*pw*this.arrowDY[i];
+        line(x1*size,(1-y1)*size,x2*size,(1-y2)*size);
+        var x3 = x1 - a*pw*(this.arrowDX[i] - this.arrowDY[i])/5;
+        var y3 = y1 - a*pw*(this.arrowDY[i] + this.arrowDX[i])/5;
+        var x4 = x1 - a*pw*(this.arrowDX[i] + this.arrowDY[i])/5;
+        var y4 = y1 - a*pw*(this.arrowDY[i] - this.arrowDX[i])/5;
+        line(x1*size,(1-y1)*size,x3*size,(1-y3)*size);
+        line(x1*size,(1-y1)*size,x4*size,(1-y4)*size);
+        x3 = x2 + a*pw*(this.arrowDX[i] - this.arrowDY[i])/5;
+        y3 = y2 + a*pw*(this.arrowDY[i] + this.arrowDX[i])/5;
+        x4 = x2 + a*pw*(this.arrowDX[i] + this.arrowDY[i])/5;
+        y4 = y2 + a*pw*(this.arrowDY[i] - this.arrowDX[i])/5;
+        line(x2*size,(1-y2)*size,x3*size,(1-y3)*size);
+        line(x2*size,(1-y2)*size,x4*size,(1-y4)*size);
+    }
+    graphics.restore();
+}
+
+
+function draw() {
+    graphics.drawImage(OSC,0,0);
+    if ( ! showMaps ) {
+        return;
+    }
+    graphics.globalAlpha = 0.25;
+    graphics.fillStyle = "black";
+    graphics.fillRect(0,0,canvas.width,topGap);
+    graphics.fillRect(0,topGap,leftGap,size);
+    graphics.fillRect(leftGap+size,topGap,leftGap+1,size);
+    graphics.fillRect(0,topGap+size,canvas.width,topGap+1);
+    graphics.globalAlpha = 1;
+    graphics.lineWidth = 3;
+    drawLine("red",leftGap-1.5,topGap-1.5,leftGap+size+3,topGap-1.5);
+    drawLine("green",leftGap+size+3,topGap-1.5,leftGap+size+3,topGap+size+3);
+    drawLine("blue",leftGap+size+3,topGap+size+3,leftGap-1.5,topGap+size+3);
+    drawLine("cyan",leftGap-1.5,topGap+size+3,leftGap-1.5,topGap-1.5);
+    for (var i = 0; i < maps.length; i++) {
+        maps[i].drawOutline();
+    }
+    if (selectedMapIndex >= 0) {
+        maps[selectedMapIndex].drawOverlay();
+        if (selectionWidgets == null) {
+            selectionWidgets = new SelectionWidgets(maps[selectedMapIndex]);
+        }
+        selectionWidgets.draw();
+    }
+}
+
+function drawLine(color, x1,y1, x2,y2) {
+    graphics.strokeStyle = color;
+    graphics.beginPath();
+    graphics.moveTo(x1,y1);
+    graphics.lineTo(x2,y2);
+    graphics.stroke();
+}
+
+function makeDot() {
+    var pt = { x: random(), y: random() };
+    var colorCode = -1;
+    for (var i = 0; i < 100; i++) {
+       var r = random() * totalArea;
+       var map = 0;
+       while (map < cumulativeAreas.length-1 && r > cumulativeAreas[map]) {
+           map++;
+       }
+       maps[map].apply(pt);
+       if (i == 100 - colorLevel) {
+           colorCode = map;
+       }
+    }
+    if (colorLevel > 0) {
+        OSG.fillStyle = palette[colorCode % palette.length];
+    }
+    var x = Math.floor(leftGap + size*pt.x);
+    var y = Math.floor(topGap + size*(1-pt.y));
+    OSG.fillRect(x,y,1,1);
+}
+
+function makeBatch() {
+    OSG.fillStyle = "black";
+    for (var i = 0; i < batchSize; i++) {
+        makeDot();
+    }
+    draw();
+    frameRequest = requestAnimationFrame(makeBatch);
+}
+
+function restart() {
+    OSG.fillStyle = "white";
+    OSG.fillRect(0,0,OSC.width,OSC.height);
+    if (frameRequest !== null) {
+        cancelAnimationFrame(frameRequest);
+        frameRequest = null;
+    }
+    if (maps.length >= 2) {
+        random = new Math.seedrandom(83887346);
+        cumulativeAreas = [maps[0].area];
+        for (var i = 1; i < maps.length; i++) {
+            cumulativeAreas.push(cumulativeAreas[i-1] + maps[i].area);
+        }
+        totalArea = cumulativeAreas[cumulativeAreas.length-1];
+        var start = new Date().getTime();
+        var ct = 0;
+        OSG.fillStyle = "black";
+        do {
+            ct += 100;
+            for (var i = 0; i < 100; i++) {
+                makeDot();
+            }
+            var time = (new Date().getTime()) - start;
+        } while (time < 30 && ct < 10000);
+        var bs = Math.max(1000, Math.ceil(ct / 3));
+        if (batchSize == 0) {
+            batchSize = bs;
+        }
+        else {
+            batchSize = Math.ceil( .7*batchSize + .3*bs);
+        }
+        //console.log("   batchSize = " + batchSize);
+        frameRequest = requestAnimationFrame(makeBatch);
+        document.getElementById("stopBtn").disabled = false;
+    }
+    else {
+        document.getElementById("stopBtn").disabled = true;
+    }
+    draw();
+}
+
+function doCanvasSize() {
+    var width = Math.max(650,window.innerWidth);
+    var height = window.innerHeight;
+    var board = document.getElementById("boardHolder");
+    var controlRect = document.getElementById("control").getBoundingClientRect();
+    var w = width - controlRect.width - 50;
+    var h = height - controlRect.height - 50;
+    var newWidth, newHeight, left, top;
+    if (w > h) {
+        newWidth = Math.min(w, Math.round(1.25*(height-30)));
+        newHeight = height - 30;
+        left = (controlRect.left + controlRect.width + 15) + "px";
+        top = "5px";
+    }
+    else {
+        canvas.height = Math.min(h, Math.round(1.25*(width-30)));
+        newHeight = width - 30;
+        left = "5px";
+        top = (controlRect.top + controlRect.height + 15) + "px";
+    }
+    if ( newWidth < 500 || newHeight < 500)  {
+        newWidth = 500;
+        newHeight = 500;
+        left = (controlRect.left + controlRect.width + 15) + "px";
+        top = "5px";
+    }
+    if (newWidth != canvas.width || newHeight != canvas.height) {
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+        board.style.left = left;
+        board.style.top = top;
+        graphics = canvas.getContext("2d");
+        OSC.width = canvas.width;
+        OSC.height = canvas.height;
+        OSG = OSC.getContext("2d");
+        size = Math.min(newWidth,newHeight) - 40;
+        leftGap = Math.floor((newWidth - size)/2);
+        topGap = Math.floor((newHeight - size)/2);
+        selectionWidgets = null;
+        restart();
+    }
+}
+
+function selectMap(mapNum) {
+    if (mapNum == selectedMapIndex) {
+        return;
+    }
+    var list = document.getElementById("maplist");
+    if (selectedMapIndex != -1) {
+        list.children[selectedMapIndex].style.backgroundColor = "white";
+    }
+    selectedMapIndex = mapNum;
+    if (selectedMapIndex != -1) {
+        var selected = list.children[selectedMapIndex];
+        selected.style.backgroundColor = "#CCCCFF";
+        var container = list.getBoundingClientRect();
+        var scroll = list.scrollTop;
+        var pos = selected.offsetTop;
+        var height = selected.getBoundingClientRect().height;
+        if (pos < scroll) {
+            list.scrollTop = pos;
+        }
+        else if (pos+height > scroll + container.height) {
+            list.scrollTop = pos - (container.height) + height;
+        }
+    }
+    document.getElementById("selectNoneBtn").disabled = selectedMapIndex == -1;
+    document.getElementById("deleteMapBtn").disabled = selectedMapIndex == -1;
+    selectionWidgets = null;
+    draw();
+}
+
+function doClear() {
+    addUndoItem("Clear", [selectedMapIndex,maps,currentExample], [-1, [], -1] );
+    maps = [];
+    document.getElementById("maplist").innerHTML = "";
+    document.getElementById("clearBtn").disabled = true;
+    document.getElementById("selectNoneBtn").disabled = true;
+    document.getElementById("selectNextBtn").disabled = true;
+    document.getElementById("deleteMapBtn").disabled = true;
+    selectionWidgets = null;
+    selectedMapIndex = -1;
+    clearExample();
+    restart();
+}
+
+function doStopRunning() {
+    if (frameRequest !== null) {
+        cancelAnimationFrame(frameRequest);
+        frameRequest = null;
+        document.getElementById("stopBtn").disabled = true;
+    }
+}
+
+function doAddMap() {
+    var size = Number(document.getElementById("addMapSelect").value);
+    var map = new AffineMap( 0.5-size/2, 0.5-size/2, 0.5+size/2, 0.5-size/2, 0.5-size/2, 0.5+size/2 );
+    addUndoItem("Add Map", [maps.length,null,currentExample], [maps.length,map,-1]);
+    maps.push(map);
+    var p = document.createElement("p");
+    p.innerHTML = "Map Number " + maps.length;
+    p.mapIndex = maps.length - 1;
+    p.onclick = function () { selectMap(this.mapIndex); };
+    p.style.cursor = "pointer";
+    p.style.color = palette[ (maps.length-1) % palette.length ];
+    document.getElementById("maplist").appendChild(p);
+    selectMap(maps.length-1);
+    document.getElementById("selectNextBtn").disabled = false;
+    document.getElementById("clearBtn").disabled = false;
+    clearExample();
+    document.getElementById("showMapsCB").checked = true;
+    showMaps = true;
+    restart();
+}
+
+function doDeleteMap() {
+    if (selectedMapIndex < 0) {
+        return;
+    }
+    var index = selectedMapIndex;
+    addUndoItem("Delete Map", [index,maps[index],currentExample], [index,null,-1] );
+    selectMap(-1);
+    var list = document.getElementById("maplist");
+    list.removeChild(list.children[list.children.length-1]);
+    maps.splice(index,1);
+    if (maps.length == 0) {
+        document.getElementById("selectNextBtn").disabled = true;
+        document.getElementById("clearBtn").disabled = true;
+    }
+    document.getElementById("deleteMapBtn").disabled = true;
+    document.getElementById("selectNoneBtn").disabled = true;
+    clearExample();
+    document.getElementById("showMapsCB").checked = true;
+    showMaps = true;
+    restart();
+}
+
+function clearExample() {
+    document.getElementById("exampleSelect").value = "-1"
+    currentExample = -1;
+}
+
+function doLoadExample() {
+   var num = Number(document.getElementById("exampleSelect").value);
+   var s,t,newmaps;
+   switch (num) {
+      case -1:
+          currentExample = -1;
+          return;
+      case 0:
+          t = 0.25;
+          newmaps = [
+                [ 0, 0, 0.5, 0, 0, 0.5 ],
+                [ 0.5, 0, 1, 0, 0.5, 0.5 ],
+                [ t, 0.5, t+0.5, 0.5, t, 1 ]          
+          ];
+          break;
+      case 1:
+          t = 0.25;
+          newmaps = [
+                [ 0, 0, 0.5, 0, 0, 0.5 ],
+                [ 0.5, 0, 1, 0, 0.5, 0.5 ],
+                [ t, 1, t+0.5, 1, t, 0.5 ]          
+          ];
+          break;
+      case 2:
+          t = 1.0/3.0;
+          s = 2*t;
+          newmaps = [
+                [ 0,0, t,0, 0,t ],
+                [ t,0, s,0, t,t ],
+                [ s,0, 1,0, s,t ],
+                
+                [ 0,t, t,t, 0,s ],
+                [ s,t, 1,t, s,s ],
+                
+                [ 0,s, t,s, 0,1 ],
+                [ t,s, s,s, t,1 ],
+                [ s,s, 1,s, s,1 ],
+          ];
+          break;
+      case 3:
+          t = 1.0/3.0;
+          var s30 = Math.sin(Math.PI/6);
+          var c30 = Math.cos(Math.PI/6);
+          newmaps = [
+                [ 0,t, t,t, 0,2*t ],
+                [2*t,t, 1,t, 2*t,2*t ], 
+                [ t+t/2*c30,0.5-t/2*s30, t+t/2*c30+t*s30,0.5-t/2*s30+t*c30,  t-t/2*c30,0.5+t/2*s30 ],
+                [ 2*t+-t/2*c30-t*s30,0.5-t/2*s30+t*c30, 2*t+-t/2*c30,0.5-t/2*s30, 2*t+-t/2*c30-t*s30+t*c30,0.5-t/2*s30+t*c30+t*s30 ]          
+          ];
+          break;
+      case 4:
+          t = 1/3;
+          newmaps = [
+                [ 0,2*t, t,2*t, 0,1 ],
+                [ 2*t,0, 1,0, 2*t,t ],
+                [ t/2,1-t/2, 1-t/2,1-t/2, t/2,t/2 ]
+          ];
+          break;
+      case 5:
+          newmaps = [
+                 [ 0, 0.16350543813154061, 0.8364945618684594, 0.16350543813154061, 0, 1 ],
+                 [ 0.6251156706003034, 0.40154378512589217, 0.973794182137125, 0.04318182342729534, 0.6162153017944614, 0.39314262181019877 ],
+                 [  0.4766635514792108, 0.026033183448064517, 0.8863913625426726, 0.15702646361704373, 0.41784516523971715, 0.2100084882354928 ],
+                 [  0.7217558026701403, 0.3929480737887107, 0.8375255959632895, 0.1487987212000302, 0.9535743798755543, 0.5028709078246302 ]
+          ];
+          break;
+      case 6:
+          newmaps = [
+                [0.28905566795944176, 0.2513366656842541, 0.09036898139052062, 0.2508887640207258, 0.2895035696229701, 0.05264997911533296, ],
+                [-0.1143641581399009, 0.20908397337302598, 0.7921786528896009, -0.11562678440252727, 0.21034659963565214, 1.1156267844025272, ]
+          ];
+          break;
+      case 7:
+         newmaps = [
+               [ 0.3345515695274417, 0.1088122771501357, 0.9730517026987309, 0.3005465317440663, 0.14281731493351102, 0.7473124103214247 ],
+               [ -0.005457598656591067, -0.0067170445004197665, 0.3278757346767423, -0.0067170445004197665, -0.005457598656591067, 0.3266162888329136 ],
+               [ 0.6620486985726282, -0.0067170445004197665, 0.9953820319059614, -0.0067170445004197665, 0.6620486985726282, 0.3266162888329136 ]
+         ];
+         break;
+      case 8:
+         newmaps = [
+               [ 0.5, -0.213666, 0.971405, 0.257739, 0.0285955, 0.257739 ],
+               [ 0.0285955, 0.743607, 0.5, 0.272202, 0.5, 1.21501 ]
+         ];
+         break;
+      case 9:
+         newmaps = [
+               [ 0.0, 0.0, 0.3333333333333333, 0.0, 0.0, 0.3333333333333333 ],
+               [ 0.3333333333333333, 0.0, 0.6666666666666666, 0.0, 0.3333333333333333, 0.3333333333333333 ],
+               [ 0.6666666666666666, 0.0, 1.0, 0.0, 0.6666666666666666, 0.3333333333333333 ],
+               [ 0.07010915197313179, 0.17926112510495376, 0.9248530646515533, 0.17926112510495376, 0.07010915197313179, 0.8198992443324938 ],
+               [ 0.01810453400503781, 0.8556360201511335, 0.1431045340050378, 0.8556360201511335, 0.01810453400503781, 0.9806360201511335 ],
+               [ 0.8505982367758187, 0.8518576826196473, 0.9755982367758187, 0.8518576826196473, 0.8505982367758187, 0.9768576826196473 ]
+         ];
+         break;
+      case 10:
+         newmaps = [
+               [ 0, 0, 0.5, 0.5, 0, 0.5 ],
+               [ 0.5, 0.5, 1, 0, 0.5, 1 ],
+               [ 0.25, 0, 0.75, 0, 0.25, 0.5 ],
+               [ 0.289031, 0.76817, 0.716353, 0.76817, 0.289031, 0.980148 ]
+         ];
+         break;
+      case 11:
+         newmaps = [
+               [ 0, 0, 0.5, 0.5, 0, 0.5 ],
+               [ 0.5, 0.5, 1, 0, 0.5, 1 ]
+         ];
+         break;
+   }
+   addUndoItem("Load Example", [selectedMapIndex,maps,currentExample], [-1,newmaps,num]);
+   currentExample = num;
+   installMapSet(newmaps, -1);
+   restart();
+}
+
+function installMapSet(newMaps, selectedIndex) { 
+   maps = [];
+   selectedMapIndex = -1;
+   var list = document.getElementById("maplist");
+   list.innerHTML = "";
+   for (var i = 0; i < newMaps.length; i++) {
+        var m = newMaps[i];
+        var map = (m instanceof AffineMap)? m : new AffineMap( m[0], m[1], m[2], m[3], m[4], m[5] ); 
+        maps.push(map);
+        var p = document.createElement("p");
+        p.innerHTML = "Map Number " + maps.length;
+        p.mapIndex = i;
+        p.onclick = function () { selectMap(this.mapIndex); };
+        p.style.cursor = "pointer";
+        p.style.color = palette[ (maps.length-1) % palette.length ];
+        list.appendChild(p);
+   }
+   document.getElementById("clearBtn").disabled = maps.length == 0;
+   document.getElementById("selectNoneBtn").disabled = selectedIndex == -1;
+   document.getElementById("selectNextBtn").disabled = maps.length == 0;
+   document.getElementById("deleteMapBtn").disabled = selectedIndex == -1;
+   selectionWidgets = 0;
+   if (selectedIndex >= 0 && selectedIndex < maps.length) {
+       selectMap(selectedIndex);
+   }
+}
+
+function installMouseHandler() {
+    var dragging = false, touched = false;
+    var whatIsBeingDragged;
+    var dragMap, whichMapIsHit;
+    var
+        CORNER0 = 0, CORNER1 = 1, CORNER2 = 2, CORNER3 = 3,
+        SKEW0 = 4, SKEW1 = 5, SKEW2 = 6, SKEW3 = 7,
+        SIDE0 = 8, SIDE1 = 9, SIDE2 = 10, SIDE3 = 11,
+        ROTATE = 12, INSIDE_SELECTED = 13, INSIDE_OTHER = 14,
+        NO_HIT = -1;
+    var startX, startY;
+    var prevX, prevY;
+    var dragDX, dragDY;
+    var original_angle;
+    var oldValue = null, newValue = null; // for undo/redo
+    var shifted;
+    var insideDragWhileShifted;  // 0 = not dragging yet; 1 = horizontal drag; 2 = vertical drag
+    function hitPoint(mouseX, mouseY, x, y) {
+        var xint = leftGap + Math.floor(x*size);
+        var yint = topGap + Math.floor((1-y)*size);
+        var xdiff = xint - mouseX;
+        var ydiff = yint - mouseY;
+        return xdiff*xdiff + ydiff*ydiff < 49*touchFactor*touchFactor;
+    }
+    function hitLine(mouseX, mouseY, x1, y1, x2, y2, epsilon) {
+        epsilon *= touchFactor;
+        var dx = x2 - x1;
+        var dy = y2 - y1;
+        var length = Math.sqrt(dx*dx+dy*dy);
+        dx /= length;
+        dy /= length;
+        var ptx = Math.floor(mouseX - leftGap) / size;
+        var pty = 1.0 - Math.floor(mouseY - topGap) / size;
+        var distance = (ptx - x1)*(-dy) + (pty - y1)*dx;
+        var distanceInPixels = distance*size;
+        if (Math.abs(distanceInPixels) > 1.5*epsilon)
+            return false;
+        var projlen = (ptx - x1)*(-dy) + (pty - y1)*dx;
+        var projx = ptx - projlen*(-dy);
+        var projy = pty - projlen*dx;
+        var eps = 1.0/size * epsilon;
+        return ( (x1 - eps <= projx && projx <= x2 + eps || x2 - eps <= projx && projx <= x1 + eps)
+                && (y1 - eps <= projy && projy <= y2 + eps || y2 - eps <= projy && projy <= y1 + eps) );
+    }
+    function inside(mouseX, mouseY, map) {
+        var ptx = (mouseX - leftGap) / size;
+        var pty = 1.0 - (mouseY - topGap) / size;
+        return map.containsPoint(ptx, pty);
+    }
+    function hitArrow(mouseX, mouseY, centerX, centerY, dx, dy) {
+        var pw = 1.0/size;
+        var x1 = centerX + dx*pw*20;
+        var y1 = centerY + dy*pw*20;
+        var x2 = centerX - dx*pw*20;
+        var y2 = centerY - dy*pw*20;
+        return hitLine(mouseX, mouseY, x1, y1, x2, y2, 6);
+    }
+    function whatIsHit(x, y) {
+        if ( ! showMaps ) {
+            return NO_HIT;
+        }
+        if (selectedMapIndex == -1) {
+            for (var i = maps.length-1; i >= 0; i--) {
+                var map = maps[i];
+                if (hitLine(x,y,map.x0,map.y0,map.x1,map.y1,4) || hitLine(x,y,map.x1,map.y1,map.x3,map.y3,4) ||
+                        hitLine(x,y,map.x3,map.y3,map.x2,map.y2,4) || hitLine(x,y,map.x2,map.y2,map.x0,map.y0,4)) {
+                    whichMapIsHit = i;
+                    return INSIDE_OTHER;
+                }
+            }
+            for (var i = maps.length-1; i >= 0; i--) {
+                if (inside(x,y,maps[i])) {
+                    whichMapIsHit = i;
+                    return INSIDE_OTHER;
+                }
+            }
+            return NO_HIT;
+        }
+        var map = maps[selectedMapIndex];
+        if (selectionWidgets == null)
+            selectionWidgets = new SelectionWidgets(map);
+        dragDX = NaN;
+        if (hitPoint(x,y,selectionWidgets.cornerX[0],selectionWidgets.cornerY[0])) {
+            dragDX = selectionWidgets.cornerX[3] - selectionWidgets.cornerX[0];
+            dragDY = selectionWidgets.cornerY[3] - selectionWidgets.cornerY[0];
+            var length = Math.sqrt(dragDX*dragDX + dragDY*dragDY);
+            dragDX /= length;
+            dragDY /= length;
+            return CORNER0;
+        }
+        else if (hitPoint(x,y,selectionWidgets.cornerX[1],selectionWidgets.cornerY[1])) {
+            dragDX = selectionWidgets.cornerX[2] - selectionWidgets.cornerX[1];
+            dragDY = selectionWidgets.cornerY[2] - selectionWidgets.cornerY[1];
+            var length = Math.sqrt(dragDX*dragDX + dragDY*dragDY);
+            dragDX /= length;
+            dragDY /= length;
+            return CORNER1;
+        }
+        else if (hitPoint(x,y,selectionWidgets.cornerX[2],selectionWidgets.cornerY[2])) {
+            dragDX = selectionWidgets.cornerX[1] - selectionWidgets.cornerX[2];
+            dragDY = selectionWidgets.cornerY[1] - selectionWidgets.cornerY[2];
+            var length = Math.sqrt(dragDX*dragDX + dragDY*dragDY);
+            dragDX /= length;
+            dragDY /= length;
+            return CORNER2;
+        }
+        else if (hitPoint(x,y,selectionWidgets.cornerX[3],selectionWidgets.cornerY[3])) {
+            dragDX = selectionWidgets.cornerX[0] - selectionWidgets.cornerX[3];
+            dragDY = selectionWidgets.cornerY[0] - selectionWidgets.cornerY[3];
+            var length = Math.sqrt(dragDX*dragDX + dragDY*dragDY);
+            dragDX /= length;
+            dragDY /= length;
+            return CORNER3;
+        }
+        else if (hitArrow(x,y,selectionWidgets.arrowX[0],selectionWidgets.arrowY[0],selectionWidgets.arrowDX[0],selectionWidgets.arrowDY[0])) {
+            dragDX = selectionWidgets.arrowDX[0];
+            dragDY = selectionWidgets.arrowDY[0];
+            return SKEW0;
+        }
+        else if (hitArrow(x,y,selectionWidgets.arrowX[1],selectionWidgets.arrowY[1],selectionWidgets.arrowDX[1],selectionWidgets.arrowDY[1])) {
+            dragDX = selectionWidgets.arrowDX[1];
+            dragDY = selectionWidgets.arrowDY[1];
+            return SKEW1;
+        }
+        else if (hitArrow(x,y,selectionWidgets.arrowX[2],selectionWidgets.arrowY[2],selectionWidgets.arrowDX[2],selectionWidgets.arrowDY[2])) {
+            dragDX = selectionWidgets.arrowDX[2];
+            dragDY = selectionWidgets.arrowDY[2];
+            return SKEW2;
+        }
+        else if (hitArrow(x,y,selectionWidgets.arrowX[3],selectionWidgets.arrowY[3],selectionWidgets.arrowDX[3],selectionWidgets.arrowDY[3])) {
+            dragDX = selectionWidgets.arrowDX[3];
+            dragDY = selectionWidgets.arrowDY[3];
+            return SKEW3;
+        }
+        else if (hitArrow(x,y,selectionWidgets.arrowX[4],selectionWidgets.arrowY[4],selectionWidgets.arrowDX[4],selectionWidgets.arrowDY[4]))
+            return ROTATE;
+        else if (hitLine(x,y,map.x0,map.y0,map.x1,map.y1,5)) {
+            dragDX = selectionWidgets.arrowDX[2];
+            dragDY = selectionWidgets.arrowDY[2];
+            return SIDE0;
+        }
+        else if (hitLine(x,y,map.x3,map.y3,map.x2,map.y2,5)) {
+            dragDX = selectionWidgets.arrowDX[2];
+            dragDY = selectionWidgets.arrowDY[2];
+            return SIDE1;
+        }
+        else if (hitLine(x,y,map.x0,map.y0,map.x2,map.y2,5)) {
+            dragDX = selectionWidgets.arrowDX[0];
+            dragDY = selectionWidgets.arrowDY[0];
+            return SIDE2;
+        }
+        else if (hitLine(x,y,map.x3,map.y3,map.x1,map.y1,5)) {
+            dragDX = selectionWidgets.arrowDX[0];
+            dragDY = selectionWidgets.arrowDY[0];
+            return SIDE3;
+        }
+        else if (inside(x,y,map))
+            return INSIDE_SELECTED;
+        else {
+            for (var i = maps.length-1; i >= 0; i--) {
+                if (inside(x,y,maps[i])) {
+                    whichMapIsHit = i;
+                    return INSIDE_OTHER;
+                }
+            }
+            return NO_HIT;
+        }
+    }
+    function doDown(x, y) {
+        if ( ! showMaps ) {
+            document.getElementById("showMapsCB").checked = true;
+            showMaps = true;
+            draw();
+            return false;
+        }
+        var hit = whatIsHit(x,y);
+        if (hit == NO_HIT) {
+            var ptx = (x - leftGap) / size;
+            var pty = 1.0 - (y - topGap) / size;
+            if (selectedMapIndex != -1 && !maps[selectedMapIndex].containsPoint(ptx,pty)) {
+                selectMap(-1)
+            }
+            oldValue = newValue = null;
+            return false;
+        }
+        if (hit == INSIDE_OTHER) {
+            hit = INSIDE_SELECTED;
+            selectMap(whichMapIsHit);
+        }
+        oldValue = [selectedMapIndex,maps[selectedMapIndex],currentExample];
+        newValue = null;
+        startX = prevX = x;
+        startY = prevY = y;
+        insideDragWhileShifted = 0;
+        whatIsBeingDragged = hit;
+        dragMap = maps[selectedMapIndex];
+        if (hit == ROTATE) {
+            var centerX = (dragMap.x1 + dragMap.x2)/2;
+            var centerY = (dragMap.y1 + dragMap.y2)/2;
+            var startX_real = (startX-leftGap)/size;
+            var startY_real = 1 - (startY-topGap)/size;
+            original_angle = Math.atan2(startY_real - centerY, startX_real - centerX);
+            if (shifted) {
+                original_angle = Math.PI/12*(Math.floor((original_angle+Math.PI/24)/(Math.PI/12)));
+            }
+        }
+        return true;
+    }
+    function doUp() {
+        if (oldValue && newValue) {
+            addUndoItem("Edit Map", oldValue, newValue);
+        }
+        oldValue = newValue = null;
+    }
+    function doMove(x,y) {
+        var offsetFromStartX = (x - startX)/size;
+        var offsetFromStartY = (-(y - startY))/size;
+        if ( ! isNaN(dragDX) )  {
+            var dot = dragDX*offsetFromStartX + dragDY*offsetFromStartY;
+            offsetFromStartX = dragDX * dot;
+            offsetFromStartY = dragDY * dot;
+        }
+        var map = dragMap;
+        var newMap = null;
+        var startX_real = (startX-leftGap)/size;
+        var startY_real = 1 - (startY-topGap)/size;
+        var centerX = (map.x1 + map.x2)/2;
+        var centerY = (map.y1 + map.y2)/2;
+        switch (whatIsBeingDragged) {
+        case INSIDE_SELECTED:
+            if (shifted) {
+                if (insideDragWhileShifted == 0) {
+                    if (Math.abs(offsetFromStartX) + Math.abs(offsetFromStartY) < 10.0/size)
+                        break;
+                    if (Math.abs(offsetFromStartX) >= Math.abs(offsetFromStartY))
+                        insideDragWhileShifted = 1;
+                    else
+                        insideDragWhileShifted = 2;
+                }
+                if (insideDragWhileShifted == 1)
+                    offsetFromStartY = 0;
+                else
+                    offsetFromStartX = 0;
+            }
+            newMap = new AffineMap(map.x0+offsetFromStartX,map.y0+offsetFromStartY,map.x1+offsetFromStartX,
+                    map.y1+offsetFromStartY,map.x2+offsetFromStartX,map.y2+offsetFromStartY);
+            break;
+        case CORNER0:
+        case CORNER1:
+        case CORNER2:
+        case CORNER3:
+            var startDist = Math.sqrt((centerX-startX_real)*(centerX-startX_real) + (centerY-startY_real)*(centerY-startY_real));
+            var newx, newy, newDist,ratio;
+            var newCenterX = centerX;
+            var newCenterY = centerY;
+            if (!symmetricDrag) {
+                newCenterX = centerX + offsetFromStartX/2;
+                newCenterY = centerY + offsetFromStartY/2;
+            }
+            if (whatIsBeingDragged == CORNER0) {
+                newx = map.x0+offsetFromStartX;
+                newy = map.y0+offsetFromStartY;
+            }
+            else if (whatIsBeingDragged == CORNER1) {
+                newx = map.x1+offsetFromStartX;
+                newy = map.y1+offsetFromStartY;
+            }
+            else if (whatIsBeingDragged == CORNER2) {
+                newx = map.x2+offsetFromStartX;
+                newy = map.y2+offsetFromStartY;
+            }
+            else {
+                newx = map.x3+offsetFromStartX;
+                newy = map.y3+offsetFromStartY;
+            }
+            newDist = Math.sqrt((newCenterX-newx)*(newCenterX-newx) + (newCenterY-newy)*(newCenterY-newy));
+            if (newDist < 1e-10)
+                break;
+            ratio = newDist/startDist;
+            if ( (newCenterX - newx > 0) != (centerX - startX_real > 0) ||
+                    (newCenterY - newy > 0) != (centerY - startY_real > 0) )
+                ratio = -ratio;
+            newMap = new AffineMap(newCenterX+ratio*(map.x0-centerX),newCenterY+ratio*(map.y0-centerY),
+                    newCenterX+ratio*(map.x1-centerX),newCenterY+ratio*(map.y1-centerY),
+                    newCenterX+ratio*(map.x2-centerX),newCenterY+ratio*(map.y2-centerY));
+            break;
+        case SKEW0:
+        case SIDE0:
+            if (symmetricDrag)
+                newMap = new AffineMap(map.x0+offsetFromStartX,map.y0+offsetFromStartY,map.x1+offsetFromStartX,
+                        map.y1+offsetFromStartY,map.x2-offsetFromStartX,map.y2-offsetFromStartY);
+            else
+                newMap = new AffineMap(map.x0+offsetFromStartX,map.y0+offsetFromStartY,map.x1+offsetFromStartX,
+                    map.y1+offsetFromStartY,map.x2,map.y2);
+            break;
+        case SKEW1:
+        case SIDE1:
+            if (symmetricDrag)
+                newMap = new AffineMap(map.x0-offsetFromStartX,map.y0-offsetFromStartY,map.x1-offsetFromStartX,
+                        map.y1-offsetFromStartY,map.x2+offsetFromStartX,map.y2+offsetFromStartY);
+            else
+                newMap = new AffineMap(map.x0,map.y0,map.x1,
+                        map.y1,map.x2+offsetFromStartX,map.y2+offsetFromStartY);
+            break;
+        case SKEW2:
+        case SIDE2:
+            if (symmetricDrag)
+                newMap = new AffineMap(map.x0+offsetFromStartX,map.y0+offsetFromStartY,map.x1-offsetFromStartX,
+                        map.y1-offsetFromStartY,map.x2+offsetFromStartX,map.y2+offsetFromStartY);
+            else
+                newMap = new AffineMap(map.x0+offsetFromStartX,map.y0+offsetFromStartY,map.x1,
+                        map.y1,map.x2+offsetFromStartX,map.y2+offsetFromStartY);
+            break;
+        case SKEW3:
+        case SIDE3:
+            if (symmetricDrag)
+                newMap = new AffineMap(map.x0-offsetFromStartX,map.y0-offsetFromStartY,map.x1+offsetFromStartX,
+                        map.y1+offsetFromStartY,map.x2-offsetFromStartX,map.y2-offsetFromStartY);
+            else
+                newMap = new AffineMap(map.x0,map.y0,map.x1+offsetFromStartX,
+                        map.y1+offsetFromStartY,map.x2,map.y2);
+            break;
+        case ROTATE:
+            var y_real = 1 - Math.floor(y-topGap)/size;
+            var x_real = Math.floor(x-leftGap)/size;
+            var angle = Math.atan2(y_real - centerY, x_real - centerX);
+            if (shifted) {
+                angle = Math.PI/12*(Math.floor((angle+Math.PI/24)/(Math.PI/12)));
+            }
+            var change = angle - original_angle;
+            var s = Math.sin(change);
+            var c = Math.cos(change);
+            var a0,b0,a1,b1,a2,b2;
+            a0 = centerX + (c*(map.x0-centerX)-s*(map.y0-centerY));
+            b0 = centerY + (s*(map.x0-centerX)+c*(map.y0-centerY));
+            a1 = centerX + (c*(map.x1-centerX)-s*(map.y1-centerY));
+            b1 = centerY + (s*(map.x1-centerX)+c*(map.y1-centerY));
+            a2 = centerX + (c*(map.x2-centerX)-s*(map.y2-centerY));
+            b2 = centerY + (s*(map.x2-centerX)+c*(map.y2-centerY));
+            newMap = new AffineMap(a0,b0,a1,b1,a2,b2);
+            break;
+        }
+        if (newMap != null) {
+            maps[selectedMapIndex] = newMap;
+            newValue = [selectedMapIndex, newMap, -1];
+            selectionWidgets = null;
+            clearExample();
+            restart();
+        }
+        prevX = x;
+        prevY = y;
+    }
+    function mouseDown(evt) {
+       touchFactor = 1; // since a mouse is being used
+       if (dragging) {
+          return;
+       }
+       if (evt.button != 0) {
+           return;
+       }
+       shifted = evt.shiftKey;
+       var r = canvas.getBoundingClientRect();
+       var x = evt.clientX - r.left;
+       var y = evt.clientY - r.top;
+       dragging = doDown(x,y);
+       if (dragging) {
+           document.addEventListener("mouseup",mouseUp,false);
+       }
+    }
+    function mouseUp(evt) {
+        if (! dragging) {
+            return;
+        }
+        document.removeEventListener("mouseup",mouseUp,false);
+        dragging = false;
+        mouseMove(evt); // to set cursor
+        doUp();
+    }
+    function mouseMove(evt) {
+        var r = canvas.getBoundingClientRect();
+        var x = evt.clientX - r.left;
+        var y = evt.clientY - r.top;
+        if (dragging) {
+           doMove(x,y);
+        }
+        else {
+           var hit = whatIsHit(x,y);
+           if (hit == INSIDE_SELECTED) {
+               canvas.style.cursor = "move";
+           }
+           else if (hit == INSIDE_OTHER) {
+               canvas.style.cursor = "pointer";
+           }
+           else if (hit == ROTATE) {
+               canvas.style.cursor = "crosshair";
+           }
+           else if (hit == NO_HIT) {
+               canvas.style.cursor = "default";
+           }
+           else {
+               var a = Math.abs(dragDX) < 0.00001 ? Math.PI/2 : Math.atan(dragDY/dragDX);
+               a = a/Math.PI * 180;
+               if (Math.abs(a) < 22.5) {
+                   canvas.style.cursor = "ew-resize";
+               }
+               else if (Math.abs(a) > 67.5) {
+                   canvas.style.cursor = "ns-resize";
+               }
+               else if (a > 0) {
+                   canvas.style.cursor = "nesw-resize";
+               }
+               else {
+                   canvas.style.cursor = "nwse-resize";
+               }
+           }
+        }
+    }
+   function doTouchStart(evt){
+        touchFactor = 6;  // since a touchscreen is being used
+        if (evt.touches.length != 1) {
+           doTouchCancel();
+           return;
+        }
+        if (touched) {
+            return;
+        }
+        shifted = false;
+        var r = canvas.getBoundingClientRect();
+        var x = evt.touches[0].clientX - r.left;
+        var y = evt.touches[0].clientY - r.top;
+        touched = doDown(x,y);
+        if (touched) {
+            canvas.addEventListener("touchmove", doTouchMove);
+            canvas.addEventListener("touchend", doTouchEnd);
+            canvas.addEventListener("touchcancel", doTouchCancel);
+        }
+        evt.preventDefault();
+    }
+    function doTouchMove(evt){
+        if (!touched)
+           return;
+        if (evt.touches.length != 1) {
+           doTouchCancel();
+           return;
+        }
+        var r = canvas.getBoundingClientRect();
+        var x = evt.touches[0].clientX - r.left;
+        var y = evt.touches[0].clientY - r.top;
+        doMove(x,y);
+        evt.preventDefault();
+    }
+    function doTouchEnd(evt) {
+        doTouchCancel();
+    }
+    function doTouchCancel() {
+        if (touched) {
+           canvas.removeEventListener("touchmove", doTouchMove);
+           canvas.removeEventListener("touchend", doTouchEnd);
+           canvas.removeEventListener("touchcancel", doTouchCancel);
+           touched = false;
+           doUp();
+        }
+    }
+    canvas.addEventListener("touchstart",doTouchStart,false);
+    canvas.addEventListener("mousedown",mouseDown,false);
+    canvas.addEventListener("mousemove",mouseMove,false);
+ }
+ 
+ //---------------------- Undo/Redo ---------------------------------------
+
+function doUndo() {
+    if (undoCount > 0) {
+        var item = undoList[undoCount-1];
+        undoCount--;
+        document.getElementById("undo").disabled = (undoCount == 0);
+        document.getElementById("undo").innerHTML = undoCount? ("Undo " + undoList[undoCount-1].name) : "Undo";
+        document.getElementById("redo").disabled = false;
+        document.getElementById("redo").innerHTML = "Redo " + item.name;
+        applyUndoItem(item.name, item.oldValue);
+    }
+}
+
+function doRedo() {
+    if (undoCount < undoList.length) {
+        var item = undoList[undoCount];
+        undoCount++;
+        document.getElementById("undo").disabled = false;
+        document.getElementById("undo").innerHTML = "Undo " + item.name;
+        document.getElementById("redo").disabled = (undoCount == undoList.length);
+        document.getElementById("redo").innerHTML = (undoCount < undoList.length)? ("Redo " + undoList[undoCount].name) : "Redo";
+        applyUndoItem(item.name, item.newValue);
+    }
+}
+
+function addUndoItem(name, oldValue, newValue) {
+    if (applyUndoInProgress) {
+        return;
+    }
+    undoList.length = undoCount;
+    undoList.push( { name: name, oldValue: oldValue, newValue: newValue } );
+    if (undoList.length > 100) {
+        undoList.shift();
+    }
+    undoCount = undoList.length;
+    document.getElementById("undo").disabled = false;
+    document.getElementById("undo").innerHTML = "Undo " + name;
+    document.getElementById("redo").disabled = true;
+    document.getElementById("redo").innerHTML = "Redo";
+}
+
+function applyUndoItem(name, value) {
+    applyUndoInProgress = true;
+    switch (name) {
+    case "Edit Map":
+        maps[value[0]] = value[1];
+        selectionWidgets = null;
+        selectMap(value[0]);
+        restart();
+        break;
+    case "Clear":
+    case "Load Example":
+    case "Load JSON":
+        installMapSet(value[1],value[0]);
+        restart();
+        break;
+    case "Add Map":
+    case "Delete Map":
+        var index = value[0];
+        var map = value[1];
+        var list = document.getElementById("maplist");
+        if (map === null) {  // delete map at index
+            if (index >= 0 && index < maps.length) { // sanity check
+                selectMap(-1);
+                maps.splice(index,1);
+                list.removeChild(list.children[list.children.length-1]);
+                restart();
+            }
+        }
+        else {  // add map at index
+            if (index >= 0 && index <= maps.length) {
+                selectMap(-1);
+                var p = document.createElement("p");
+                p.innerHTML = "Map Number " + maps.length;
+                p.mapIndex = maps.length - 1;
+                p.onclick = function () { selectMap(this.mapIndex); };
+                p.style.cursor = "pointer";
+                p.style.color = palette[ (maps.length-1) % palette.length ];
+                list.appendChild(p);
+                if (index == maps.length) {
+                    maps.push(map);
+                }
+                else {
+                    maps.splice(index,0,map);
+                }
+                selectMap(index);
+                restart();
+            }
+        }
+        document.getElementById("clearBtn").disabled = maps.length == 0;
+        document.getElementById("selectNextBtn").disabled = maps.length == 0;
+        break;
+    }
+    document.getElementById("exampleSelect").value = "" + value[2];
+    currentExample = value[2];
+    applyUndoInProgress = false;
+}
+
+//--------------------- JSON inport/export ------------------------------
+
+function mapsFromJSON(text) {
+   try {
+       var json = JSON.parse(text);
+   } catch(e) {
+       throw "The text is not a legal JSON array.";
+   }
+   if (!json.length) {
+       throw "The text must represent a non-empty JSON array.";
+   }
+   for (var i = 0; i < json.length; i++) {
+       var m = json[i];
+       if (m.length !== 6) {
+           throw "Each item in the array must be an array of six numbers.";
+       }
+       for (var j = 0; j < 6; j++) {
+           if (typeof m[j] != "number" || isNaN(m[j]) || m[j] < -1 || m[j] > 2) {
+               throw "Items must be numbers in the range -1 to 2.";
+           }
+       }
+   }
+   var oldValue = [selectedMapIndex,maps,currentExample];
+   var newValue = [-1,json,-1];
+   addUndoItem("Load JSON", oldValue, newValue);
+   installMapSet(json,-1);
+   restart();
+}
+
+function mapsToJSON(maps) {
+    var json = "[\n\n";
+    for (var i = 0; i < maps.length; i++) {
+        var m = maps[i];
+        json += "  [ " + num(m.x0) + ", "+ num(m.y0) + ",\n";
+        json += "    " + num(m.x1) + ", "+ num(m.y1) + ",\n";
+        json += "    " + num(m.x2) + ", "+ num(m.y2) + " ]";
+        if (i < maps.length-1)
+           json += ",\n\n";
+    }
+    json += "\n\n]";
+    return json;
+    function num(n) {
+        var str = n.toPrecision(6);
+        if (str.indexOf(".") >= 0) {
+            while (str.charAt(str.length-1) === "0") {
+                str = str.substring(0,str.length-1);
+            }
+            if (str.charAt(str.length-1) === ".") {
+                str = str.substring(0,str.length-1);
+            }
+            if (str === "") {
+                str = "0";
+            }
+        }
+        return str;
+    }
+}
+
+function showJsonDialog() {
+    document.getElementById("JSONtextinput").value = "";
+    document.getElementById("jsonimportbg").style.display = "block";
+    document.getElementById("jsonimport").style.display = "block";
+    document.addEventListener("keydown", doKey, false);
+    document.getElementById("cancelJSONimport").onclick = dismiss;
+    document.getElementById("applyJSONimport").onclick = apply;
+    document.getElementById("grabcurrent").onclick = grabCurrent;
+    document.getElementById("grabcurrent").disabled = maps.length == 0;
+    function apply() {
+        var text = document.getElementById("JSONtextinput").value.trim();
+        if (text == "") {
+            dismiss();
+            return;
+        }
+        try {
+            mapsFromJSON(text);
+            dismiss();
+        } catch(e) {
+            if (! confirm("The JSON code contains an error: \n" + e + " \nDo you want to continue editing?")) {
+                dismiss();
+            }
+        }
+    }
+    function dismiss() {
+        document.getElementById("jsonimportbg").style.display = "none";
+        document.getElementById("jsonimport").style.display = "none";
+        document.removeEventListener("keydown", doKey, false);
+    }
+    function grabCurrent() {
+        document.getElementById("JSONtextinput").value = mapsToJSON(maps);
+    }
+    function doKey(evt) {
+        var code = evt.keyCode;
+        if (code == 27) {
+            dismiss();
+        }
+    }
+}
+
+
+//------------------------------------------------------------------------
+
+function init() {
+    canvas = document.getElementById("board");
+    if (!canvas.getContext) {
+        document.getElementById("boardHolder").innerHTML =
+                 "Sorry, this page requires Canvas Graphics.";
+        return;
+    }
+    OSC = document.createElement("canvas");
+    document.getElementById("exampleSelect").onchange = doLoadExample;
+    document.getElementById("exampleSelect").value = "-1";
+    var ctl = document.getElementById("control");
+    doCanvasSize();
+    window.addEventListener("resize",doCanvasSize,false);
+    document.getElementById("boardHolder").style.display = "block";
+    document.getElementById("clearBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = true;
+    document.getElementById("deleteMapBtn").disabled = true;
+    document.getElementById("selectNextBtn").disabled = true;
+    document.getElementById("selectNoneBtn").disabled = true;
+    document.getElementById("selectNextBtn").onclick = function() {
+        if (selectedMapIndex >= 0) {
+            selectMap( selectedMapIndex == maps.length-1 ? 0 : selectedMapIndex+1);
+        }
+        else if (maps.length > 0) {
+            selectMap(0);
+        }
+    };
+    document.getElementById("selectNoneBtn").onclick = function() {
+        selectMap(-1);
+    };
+    document.getElementById("clearBtn").onclick = doClear;
+    document.getElementById("stopBtn").onclick = doStopRunning;
+    document.getElementById("addMapBtn").onclick = doAddMap;
+    document.getElementById("addMapSelect").value = "0.5";
+    document.getElementById("deleteMapBtn").onclick = doDeleteMap;
+    document.getElementById("colorCodeSelect").value = "0";
+    document.getElementById("colorCodeSelect").onchange = function() {
+        colorLevel = Number(document.getElementById("colorCodeSelect").value);
+        restart();
+    };
+    document.getElementById("showMapsCB").checked = showMaps;
+    document.getElementById("showMapsCB").onchange = function() {
+         showMaps = document.getElementById("showMapsCB").checked;
+         draw();
+    };
+    document.getElementById("symmetricDragCB").checked = symmetricDrag;
+    document.getElementById("symmetricDragCB").onchange = function() {
+         symmetricDrag = document.getElementById("symmetricDragCB").checked;
+    }
+    document.getElementById("undo").disabled = true;
+    document.getElementById("undo").onclick = doUndo;
+    document.getElementById("redo").disabled = true;
+    document.getElementById("redo").onclick = doRedo;
+    document.getElementById("showJSONBtn").onclick = showJsonDialog;
+    installMouseHandler();
+    if (!window.requestAnimationFrame) {
+      window.requestAnimationFrame = function(callback) {
+          return setTimeout(callback,1000/60);
+      };
+      window.cancelAnimationFrame = function(id) {
+          clearTimeout(id);
+      };
+    }
+}
+
+</script>
+</head>
+<body onload="init()">
+
+<div id="content">
+
+<div id="control">
+   <div class="section">
+   <h2>Chaos Game</h2>
+   <p><a href="chaos-game-info.html">Click here</a> for info and help.</p>
+   </div>
+   <div class="section">
+   <p><label><input type="checkbox" id="showMapsCB">Show Map Outlines</label></p>
+   <p><label>Color Coding: <select id="colorCodeSelect">
+      <option value="0">None</option>
+      <option value="1">Level 1</option>
+      <option value="2">Level 2</option>
+      <option value="3">Level 3</option>
+      <option value="4">Level 4</option>
+      <option value="5">Level 5</option>
+   </select></label></p>
+   <p><label><input type="checkbox" id="symmetricDragCB">Symmetric Dragging</label></p>
+   </div>
+   <div class="section">
+   <p><button id="clearBtn">Clear</button>
+      <button id="stopBtn" style="margin-left:50px">Stop Running</button></p>
+   <p><button id="addMapBtn">Add Map:</button>&nbsp;<select id="addMapSelect">
+      <option value="0.5">1/2 Size</option>
+      <option value="0.3333333333">1/3 Size</option>
+      <option value="0.25">1/4 Size</option>
+      <option value="0.2">1/5 Size</option>
+      <option value="0.1666666667">1/6 Size</option>
+      <option value="0.125">1/8 Size</option>
+      <option value="0.1">1/10 Size</option>
+      <option value="0.6666666667">2/3 Size</option>
+      <option value="0.75">3/4 Size</option>
+      <option value="0.8">4/5 Size</option>
+      <option value="0.9">9/10 Size</option>
+   </select></p>
+   <p><button id="deleteMapBtn">Delete Selected Map</button></p>
+   <div id="maplist">
+   </div>
+   <p><button id="selectNextBtn">Select Next</button>&nbsp;&nbsp;&nbsp;
+      <button id="selectNoneBtn">Select None</button></p>
+   </div>
+   <div class="section">
+   <p><button id="undo">Undo</button></p>
+   <p><button id="redo">Redo</button></p>
+   </div>
+   <div class="section">
+   <p><label>LoadExample:<br>
+   <select id="exampleSelect" style="margin-left:20px">
+       <option value="-1">(Select)</option>
+       <option value="0">Sierpinski Triangle</option>
+       <option value="1">Triangle with Inversion</option>
+       <option value="2">Sierpinski Carpet</option>
+       <option value="3">Koch Curve</option>
+       <option value="4">Antenna</option>
+       <option value="8">C-Curve</option>
+       <option value="7">Wave</option>
+       <option value="5">Fern</option>
+       <option value="10">Hills</option>
+       <option value="11">Hilltops</option>
+       <option value="6">Spiral</option>
+       <option value="9">Invasion</option>
+   </select></label></p>
+   </div>
+   <div class="section">
+   <p><button id="showJSONBtn">Show Import/Export Dialog</button></p>
+   </div>
+</div>
+
+<div id="boardHolder">
+   <canvas id="board" width="10" height="10">Sorry, this page requires Canvas Graphics!</canvas>
+</div>
+
+</div>
+
+<div id="jsonimportbg">
+</div>
+<div id="jsonimport">
+<p>Chaos Game examples are coded as formatted lists of<br>
+numbers.  See the <a href="chaos-game-info.html#saveload">instructions</a> to learn about the format.<br>
+You can copy-and-paste the code for an example into this<br>
+text input box.  Click "Apply" to load the example into<br>
+the program.  Click "Cancel" or press ESC to cancel. The <br>
+"Grab Current Example" button loads the code for the<br>
+example that is currently shown in the program; this<br>
+allows you to save the example (or even edit it by hand).</p>
+<p><button style="margin-left:50px" id="applyJSONimport">Apply</button>
+<button style="margin-left:20px" id="cancelJSONimport">Cancel</button>
+<button style="margin-left:20px" id="grabcurrent">Grab Current Example</button></p>
+<p><textarea rows="21" cols="45" id="JSONtextinput" placeholder="(Map data goes here)"></textarea>
+
+
+</body>
+</html>

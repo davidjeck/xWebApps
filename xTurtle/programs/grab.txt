@@ -1,0 +1,72 @@
+
+{ This multitasking program demonstrates the use of the GRAB
+  statement to enforce mutual exclusion.  The problem that
+  GRAB solves is that when several parallel processes all need
+  to use the same variable, it is important that each process
+  has exclusive access to the variable while is is useing
+  that variable.
+  
+  This program has two subroutines that each try to count to
+  100 in a strange way: by forking 100 parallel processes and
+  haveing each process add one to a variable.  In one subroutine,
+  the GRAB statement is used to enforce mutual exclusion, in
+  the other, mutual exclusion is not used.  The result is that
+  the second subroutine.
+  
+  The problem in the second subroutine, addIncorrectly, is that
+  a process that is trying to execute "y := y + 1" might be
+  interrupted by another process after reading the old value
+  of y but before storing the new value.  In that case,
+  both processes can read the same old value and get the
+  same new value, and the upshot is that 1 has only been
+  added to y once instead of twice.  In face, if the "Lockstep"
+  option is on, all of the processes will read the same
+  value (the initial value, 0), get 1 as the new value,
+  and store 1 as the new value of y.  So, the answer is 1.
+  If "Lockstep" is off, the answer can theoretically be
+  any value between 1 and 100, and it can be different
+  each time the program is run.
+}
+
+declare x
+x := 0
+
+sub addCorrectly  { will correctly change the value of x to 0 }
+   import x       { access the global variable, x;
+                    only global variable can be grabbed }
+   fork(100)      { each process grabs x, then adds 1 to it }
+   grab x then
+      x := x + 1  { the GRAB function ensures that this
+                    computation will complete before another
+                    process can start it }
+   end grab
+end sub
+
+penUp
+moveTo(-5,5)
+penDown
+
+drawtext("Running the first subroutine.")
+drawText("The answer should be 100.")
+addCorrectly
+drawtext("In fact, the answer is #x.")
+drawtext("")
+
+declare y
+y := 0
+
+sub addIncorrectly { changes y to some value between 1 and 100 }
+   import y
+   fork(100)
+   y  := y + 1
+end sub
+
+drawtext("Running the second subroutine.")
+drawText("The answer will probably not be 100!")
+addIncorrectly
+drawtext("In fact, the answer is #y.")
+
+if y = 1 then
+   drawtext("(With ""Lockstep"" on, the answer is 1.)")
+end if
+

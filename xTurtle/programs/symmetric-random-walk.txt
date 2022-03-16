@@ -1,0 +1,30 @@
+declare angle, count
+
+count := 1
+angle := 360*random
+
+fork(6)
+
+face(60*forknumber)
+penUp
+forward(3)
+pendown
+loop
+
+   exit if 1=2
+
+   grab count then
+      if  count = forknumber then
+         turn(angle)
+         forward(0.2)
+         count := count + 1
+         if count = 7 then
+            count := 1
+            angle := random*360
+         end if
+      end if
+   else
+   end grab
+
+end loop
+

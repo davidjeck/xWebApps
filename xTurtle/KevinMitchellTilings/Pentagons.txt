@@ -1,0 +1,38 @@
+{Tiling by pentagons created from
+ overlapping hexagons. A favorite 
+ of M.C. Escher}
+
+declare l
+l:=1.5
+declare edge
+edge:=.825*l
+declare side
+side:=2.25*l
+
+sub hexagon(side,edge)
+penDown
+face(0)
+forward(side)
+turn(60)
+forward(edge)
+turn(60)
+forward(side)
+penUp
+forward(-side/2)
+turn(-90)
+forward(-side/2)
+penDown
+forward(side)
+turn(60)
+forward(side)
+turn(60)
+forward(edge)
+end sub
+
+penUp
+face(0)
+fork(9)
+move((forkNumber-5)*(side+cos(60)*edge),(forkNumber-4)*sin(60)*edge)
+fork(10)
+move(-(forkNumber-5)*cos(30)*edge,(forkNumber-5)*(side+sin(30)*edge))
+hexagon(side,edge)

@@ -1,0 +1,98 @@
+; Complex programs are written using 'subroutines'.  Although
+; xComputer has no special support for subroutines, you can
+; still implement basic subroutines.  You just have to save
+; the return address somewhere so the subroutine knows where
+; to jump back to when it ends.
+
+; This file includes a subroutine that adds up a list of
+; numbers.  It also includes a sample main program that
+; calls that subroutine.  The main program uses the subroutine
+; to compute the sum 1 + 2 + 3 + 4 + 5 + 6 + 7.  When the
+; main program ends, the value of this sum will be in the
+; accumulator as well as in the memory location with label 'Sum'.
+
+; *********************** Main Program *************************
+
+          lod-c List      ; Set up to call the subroutine with
+          sto ListStart   ;     ListStart = List and RetAddr = finish
+          lod-c finish
+          sto RetAddr
+          jmp ListSum     ; Call the subroutine
+          
+finish:   lod Sum  ; Load answer from subroutine into accumulator.
+          hlt
+
+
+@10  ; The following data for the program will load at loaction 10.
+
+List:      1  ; The list of numbers to be added
+           2
+           3
+           4
+           5
+           6
+           7
+           0  ; A zero marks the end of the list
+
+
+; ----------------------- ListSum subroutine -------------------------
+;
+; This is a subroutine for adding up a list of positive integers.
+; To use the subroutine, do the following steps:
+;
+;     (1)  Store the address of the memory location where the 
+;          list begins into ListStart
+;     (2)  Store the return address into memory location
+;          RetAddr.  When the subroutine ends, it will
+;          jump to this location.
+;     (3)  Jump to the start of the subroutine with a 
+;          "JMP ListSum" instruction.
+;     (4)  At the return address, put a "LOD Sum" instruction
+;          to retrieve the answer computed by the subroutine.
+;
+
+
+@50  ; Subroutine will be loaded starting at memory location 50.
+
+RetAddr:    data   ; Return address.
+ListStart:  data   ; Address of the first number in the list.
+Sum:        data   ; When the subroutine ends, this will be the
+                   ;   sum of the numbers in the list.
+
+
+ListSum:    lod-c 0        ; STARTING POINT OF SUBROUTINE
+            sto Sum        ; Store the number 0 in location "Sum"
+                           ; to get ready to start adding.
+
+            lod ListStart  ; Get the number "List" (a memory location) 
+            sto NextNum_s  ; and store it in memory location NextNum_s.
+                           ; NextNum_s will always contain the memory
+                           ; location of the next number in the list.
+        
+
+Loop_s:     lod-i NextNum_s ; Get the next number in the list.
+
+            jmz Done_s     ; If the number that was loaded by the
+                           ; preceding instruction was zero, then
+                           ; we have reached the end of the list, and
+                           ; the program should end.
+                      
+            add Sum        ; Add the previous value of Sum to the
+            sto Sum        ; number and store the result back into
+                           ; sum.  This adds one number from the
+                           ; list to the sum.
+                      
+            lod NextNum_s  ; Add one to NextNum, so that it point
+            inc            ; to the next item in the list.
+            sto NextNum_s
+                      
+            jmp Loop_s     ; Go back to process the next number
+
+Done_s:     jmp-i RetAddr  ; When the subroutine has finished adding
+                           ; the numbers in this list, this instruction
+                           ; will jump back to the return address in the
+                           ; main program.
+
+NextNum_s: data            ; This location will hold the ADDRESS
+                           ; of the next number that needs to be
+                           ; added to the Sum.

@@ -1,0 +1,2141 @@
+<!DOCTYPE html>
+<!--
+    Web page written by David Eck, http://math.hws.edu/eck/index.html
+    You can do anything you like with this web page and with the code, but
+    if you use a substantial portion of it, you should include attribution.
+   
+    This page defines a Turing Machine simulation program.  Several example
+    machines are included.  They are defined near the top of the script.
+    You can modify the value of the variable exampleMachines if you want
+    to provide a different set of examples.
+-->
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+    html, body, #content {
+        margin: 0;
+        padding: 0;
+        background-color: #EEEEEE;
+    }
+    h2 {
+        margin: 5px 10px 1px 10px;
+        white-space: pre;
+    }
+    #content {
+        min-width: 800px;
+       -webkit-user-select: none; /* turning off text selection  / Webkit */
+       -moz-user-select: none;    /* Firefox */
+       -ms-user-select: none;     /* IE 10  */
+       -o-user-select: none;    /* Opera */
+       user-select: none;
+   }
+    .message {
+        color: #CC0000;
+        font-weight: bold;
+        margin-left:10px;
+    }
+    #description {
+        color: #005555;
+        font-size: 80%;
+        margin-left: 10px;
+        width: 600px;
+    }
+    #tape-holder {
+       margin: 5px 0;
+       padding: 0;
+       border-bottom: 2px solid black;
+       border-top: 2px solid black;
+    }
+    #tape-canvas {
+       display: block;
+       background-color: white;
+    }
+    tr.selected {
+        outline: magenta solid 2px;
+    }
+    td.selected {
+        outline: cyan solid 4px;
+    }
+    #rules-holder {
+        display: inline-block;
+        border: 2px solid black;
+        background-color: white;
+        margin-left: 10px;
+    }
+    #rules-table tr {
+        margin: 0;
+        padding: 0;
+    }
+    #rules-table td, #rules-table th {
+        margin:0;
+        padding: 4px;
+        text-align: center;
+        width: 20%;
+    }
+    #rules-table th {
+        font-weight: bold;
+        border-bottom: 2px solid black;
+    }
+    #rules-table td {
+        border-bottom: 1px solid black;
+    }
+    .border-right {
+        border-right: 2px solid black;
+    }
+    #editor-holder {
+        float: left;
+        margin: 10px;
+        padding: 8px;
+        background-color: white;
+        border: 2px solid black;
+    }
+    #bottom-table {
+        clear:both;
+    }
+    #controls {
+        display: inline-block;
+        background-color:white;
+        border-left: 2px solid black;
+        border-right: 2px solid black;
+        border-top: 2px solid black;
+        padding: 0;
+        margin-left:10px;
+    }
+    #controls p {
+        margin: 12px 0;
+        white-space: nowrap;
+    }
+    div.group {
+        padding: 0 8px;
+        border-bottom: 2px solid black;
+    }
+   #jsonimportbg {
+       position: fixed;
+       z-index: 10;
+       opacity: 0.7;
+       background-color: black;
+       left: 0;
+       top: 0;
+       width: 100%;
+       height: 100%;
+       display: none;
+   }
+   #jsonimport {
+       position: absolute;
+       left: 50px;
+       top: 50px;
+       z-index:20;
+       padding: 10px;
+       background-color: #D8D8FF;
+       border: 2px solid #000099;
+       border-radius: 16px;
+       box-shadow: 5px 5px 8px black;
+       display: none;
+   }
+   textarea {
+     white-space: pre;
+     word-wrap: normal;
+     overflow-x: scroll;
+   }
+</style>
+<script>
+
+
+/* The following "DEFAULT" values are used in machine specifications, unless another value is given in
+ * the specification.  They are also used for a machine created with the "New Turing Machine" button.
+ */
+
+var DEFAULT_BLANK = "#";      // to represent a blank cell, for use in rule definitions.
+var DEFAULT_WILDCARD = "*";   // represents the value "other" for the old symbol in a rule, or "same" for the new symbol
+var DEFAULT_SYMBOLS = "xyzabc01$@";  // possible symbols in cells, in addition to blan and wildcard.
+var DEFAULT_MAX_STATE = 25;   // state numbers range from 0 to MAX_STATE, plus halt state "h"; must be 99 or less.
+
+
+/* The value of exampleMachines is an array of machine specifications.  Each specification is
+ * an object, given in JSON format, whose properties specify the table of rules for the machine,
+ * the initial contents of its tape, and other data.  The properties are name, blank, wildcard, symbols,
+ * max_state, tape, position, and rules.  The format is the same as is used for the Input/Export feature
+ * of the program.  The first machine in the array is commented to explain the meaning of each property.
+ */
+ 
+var exampleMachines = [
+    {
+       "name": "Binary Increment",
+          // The name is displayed in the examples menu and in a message at the top of the page.
+          // Default value is "Untitled".
+          
+       "description": "The Binary Increment Turing machine will add one to a binary number and halt. " +
+                      "It must be started on the right end of the number that is to be incremented.",
+          // When a machine is installed, its description is displayed at the top of the
+          // web page, in small type just below the title.  It disappears if the user
+          // modifies the machine's rules in any way.  The default is an empty string.
+          
+       "blank": "#",
+          // The symbol that is used in the OldSymbol and NewSymbol pop-up menus and in the
+          // table of rules to represent a blank.  It can also be used when the user is typing
+          // a blank symbol for the tape.  The default is the value of DEFAULT_BLANK ("#").
+          
+       "wildcard": "*",
+          // This symbol is used in the rule specification to represent "other" as an old
+          // symbol and "same" as a new symbol.  It is not ordinarily seen by the user, but
+          // the user can use it when typing the New Symbol in a rule in the table of rules.
+          // The default is the value of DEFAULT_WILDCARD ("*").
+          
+       "symbols": "xyzabc01$@",
+          // A string containing the non-blank symbols that can appear on the tape.
+          // Should not include a space or the values of the "blank" or "wildcard"
+          // propreties (as given above).  The default, which is used in this example,
+          // is the value of DEFAULT_SYMBOLS.
+    
+       "max_state": 25,
+          // The largest legal state number.  Must be 99 or less.  The defalt is the
+          // value of DEFAULT_MAX_STATE (25).
+          
+       "tape": "10011111",
+          // Initial contents of the tape.  Can contain symbols from the "symbols" property
+          // as well as blanks.  (A blank can be represented as a space or as the "blank" symbol.)
+          // The default is an empty tape.
+          
+       "position": 7,
+          // The initial position of the machine on the tape, relative to the start of
+          // the iniital tape contents as given by the "tape" property.  A value of 0
+          // would put the machine on the left end of the content string.  The default is
+          // the length of the content string minus 1, which places the machine on the
+          // right end of the contents, as is done here
+       
+       "rules": [
+              // An array of rules.  Each rule is an array of five elements specifying
+              // one rule for the machine's program.  The five values are, in order:
+              // old state, old symbol, new symbol, new state, direction of motion.
+              // Blanks can be specified by spaces as well as by the "blank" symbol (#).
+              // A wildcard symbol should be specifed using the "wildcard" (*).
+              // The halt state can be specified either as "h" or as the number -1.
+              // The direction of motion must be "R", "L", or "S".  The default
+              // is an empty array.
+           [ 0, "0", "1", 1, "R" ],
+           [ 0, "#", "1", 1, "R" ],
+           [ 0, "1", "0", 0, "L" ],
+           [ 1, "0", "0", 1, "R" ],
+           [ 1, "1", "1", 1, "R" ],
+           [ 1, "#", "#", -1, "L" ]
+       ]
+    },
+    {
+       "name": "Count in Base 10",
+       "description": "When started on a tape containing a base-10 number, on the right end " +
+                      "of the number, this machine will count forever.",
+       "symbols": "0123456789",
+       "tape": "0",
+       "rules": [
+           [0, "#", "1", 1, "R"],
+           [0, "0", "1", 1, "R"],
+           [0, "1", "2", 1, "R"],
+           [0, "2", "3", 1, "R"],
+           [0, "3", "4", 1, "R"],
+           [0, "4", "5", 1, "R"],
+           [0, "5", "6", 1, "R"],
+           [0, "6", "7", 1, "R"],
+           [0, "7", "8", 1, "R"],
+           [0, "8", "9", 1, "R"],
+           [0, "9", "0", 0, "L"],
+           [1, "#", "#", 0, "L"],
+           [1, "*", "*", 1, "R"]
+       ]
+    },
+   {
+      "name": "Copy abc",
+      "description": "When started on the left end of a string containing only a's, b's and c's, " +
+                     "this machine will make a copy of the string, with the copy to the right of the original.",
+      "max_state": 25,
+      "symbols": "xyzabc01$@",
+      "tape": "babccaba",
+      "position": 0,
+      "rules": [
+         [ 0, "#", "#", "h", "R" ],
+         [ 0, "a", "@", 1, "R" ],
+         [ 0, "b", "@", 5, "R" ],
+         [ 0, "c", "@", 9, "R" ],
+         [ 1, "#", "#", 2, "R" ],
+         [ 1, "*", "*", 1, "R" ],
+         [ 2, "#", "a", 3, "L" ],
+         [ 2, "*", "*", 2, "R" ],
+         [ 3, "#", "#", 4, "L" ],
+         [ 3, "*", "*", 3, "L" ],
+         [ 4, "@", "a", 0, "R" ],
+         [ 4, "*", "*", 4, "L" ],
+         [ 5, "#", "#", 6, "R" ],
+         [ 5, "*", "*", 5, "R" ],
+         [ 6, "#", "b", 7, "L" ],
+         [ 6, "*", "*", 6, "R" ],
+         [ 7, "#", "#", 8, "L" ],
+         [ 7, "*", "*", 7, "L" ],
+         [ 8, "@", "b", 0, "R" ],
+         [ 8, "*", "*", 8, "L" ],
+         [ 9, "#", "#", 10, "R" ],
+         [ 9, "*", "*", 9, "R" ],
+         [ 10, "#", "c", 11, "L" ],
+         [ 10, "*", "*", 10, "R" ],
+         [ 11, "#", "#", 12, "L" ],
+         [ 11, "*", "*", 11, "L" ],
+         [ 12, "@", "c", 0, "R" ],
+         [ 12, "*", "*", 12, "L" ]
+      ]
+   },
+    {
+       "name": "Delete a's",
+       "description": "When started on the right end of a string containing only a's, b's and c's, " +
+                     "this machine will delete all the a's from the string.",
+       "max_state": 25,
+       "symbols": "xyzabc01$@",
+       "tape": "cbabcaabbccaaababca",
+       "position": 18,
+       "rules": [
+          [ 0, "#", "#", 10, "R" ],
+          [ 0, "a", "$", 1, "L" ],
+          [ 0, "b", "b", 0, "L" ],
+          [ 0, "c", "c", 0, "L" ],
+          [ 1, "#", "#", 2, "R" ],
+          [ 1, "*", "*", 1, "L" ],
+          [ 2, "a", "#", 4, "R" ],
+          [ 2, "b", "#", 5, "R" ],
+          [ 2, "c", "#", 6, "R" ],
+          [ 2, "$", "#", 10, "R" ],
+          [ 4, "a", "a", 4, "R" ],
+          [ 4, "b", "a", 5, "R" ],
+          [ 4, "c", "a", 6, "R" ],
+          [ 4, "$", "$", 1, "L" ],
+          [ 5, "a", "b", 4, "R" ],
+          [ 5, "b", "b", 5, "R" ],
+          [ 5, "c", "b", 6, "R" ],
+          [ 5, "$", "b", 0, "L" ],
+          [ 6, "a", "c", 4, "R" ],
+          [ 6, "b", "c", 5, "R" ],
+          [ 6, "c", "c", 6, "R" ],
+          [ 6, "$", "c", 0, "L" ],
+          [ 10, "#", "#", "h", "L" ],
+          [ 10, "*", "*", 10, "R" ]
+       ]
+    },
+    {
+       "name": "Binary Addition",
+       "description": "When started on a tape continaing two binary numbers, on the right end of " +
+                      "the second number, this machine will replace the numbers with their sum.",
+       "tape": "1011101 1001111",
+       "rules": [
+           [ 0, "#", "#", 10, "L" ],
+           [ 0, "0", "#", 6, "L" ],
+           [ 0, "1", "#", 1, "L" ],
+           [ 1, "#", "#", 2, "L" ],
+           [ 1, "*", "*", 1, "L" ],
+           [ 2, "#", "y", 4, "R" ],
+           [ 2, "0", "y", 4, "R" ],
+           [ 2, "1", "x", 3, "L" ],
+           [ 2, "*", "*", 2, "L" ],
+           [ 3, "#", "1", 4, "R" ],
+           [ 3, "0", "1", 4, "R" ],
+           [ 3, "1", "0", 3, "L" ],
+           [ 4, "#", "#", 5, "R" ],
+           [ 4, "*", "*", 4, "R" ],
+           [ 5, "#", "#", 0, "L" ],
+           [ 5, "*", "*", 5, "R" ],
+           [ 6, "#", "#", 7, "L" ],
+           [ 6, "*", "*", 6, "L" ],
+           [ 7, "#", "x", 4, "R" ],
+           [ 7, "0", "x", 4, "R" ],
+           [ 7, "1", "y", 4, "R" ],
+           [ 7, "*", "*", 7, "L" ],
+           [ 10, "x", "0", 10, "L" ],
+           [ 10, "y", "1", 10, "L" ],
+           [ 10, "*", "*", 11, "R" ],
+           [ 11, "#", "#", "h", "L" ],
+           [ 11, "*", "*", 11, "R" ]
+       ]
+    },
+    {
+       "name": "Binary Multiplication",
+       "description": "When started on a tape continaing two binary numbers, on the right end of " +
+                      "the second number, this machine will replace the numbers with their product.",
+       "max_state": 43,
+       "symbols": "xyzabc01$@",
+       "tape": "10110 1010",
+       "position": 9,
+       "rules": [
+          [ 0, "#", "#", 1, "L" ],
+          [ 0, "0", "#", 10, "L" ],
+          [ 0, "1", "#", 20, "L" ],
+          [ 1, "#", "#", 2, "L" ],
+          [ 1, "0", "#", 1, "L" ],
+          [ 1, "1", "#", 1, "L" ],
+          [ 2, "#", "#", 3, "R" ],
+          [ 2, "0", "0", 3, "R" ],
+          [ 2, "1", "1", 3, "R" ],
+          [ 2, "$", "1", 2, "L" ],
+          [ 2, "@", "0", 2, "L" ],
+          [ 3, "#", "#", "h", "L" ],
+          [ 3, "0", "0", 3, "R" ],
+          [ 3, "1", "1", 3, "R" ],      
+          [ 10, "#", "#", 11, "L" ],
+          [ 10, "*", "*", 10, "L" ],
+          [ 11, "#", "#", 12, "L" ],
+          [ 11, "*", "*", 11, "L" ],
+          [ 12, "#", "@", 15, "R" ],
+          [ 12, "0", "@", 15, "R" ],
+          [ 12, "1", "$", 15, "R" ],
+          [ 12, "$", "$", 12, "L" ],
+          [ 12, "@", "@", 12, "L" ],
+          [ 15, "#", "#", 16, "R" ],
+          [ 15, "*", "*", 15, "R" ],
+          [ 16, "#", "#", 17, "R" ],
+          [ 16, "*", "*", 16, "R" ],
+          [ 17, "#", "#", 0, "L" ],
+          [ 17, "*", "*", 17, "R" ],
+          [ 20, "#", "#", 21, "L" ],
+          [ 20, "0", "0", 20, "L" ],
+          [ 20, "1", "1", 20, "L" ],
+          [ 21, "0", "x", 22, "L" ],
+          [ 21, "1", "y", 26, "L" ],
+          [ 22, "#", "#", 23, "L" ],
+          [ 22, "*", "*", 22, "L" ],
+          [ 23, "#", "@", 24, "R" ],
+          [ 23, "0", "@", 24, "R" ],
+          [ 23, "1", "$", 24, "R" ],
+          [ 23, "*", "*", 23, "L" ],
+          [ 24, "#", "#", 25, "R" ],
+          [ 24, "*", "*", 24, "R" ],
+          [ 25, "x", "x", 30, "L" ],
+          [ 25, "y", "y", 30, "L" ],
+          [ 25, "*", "*", 25, "R" ],
+          [ 26, "#", "#", 27, "L" ],
+          [ 26, "*", "*", 26, "L" ],
+          [ 27, "#", "$", 24, "R" ],
+          [ 27, "0", "$", 24, "R" ],
+          [ 27, "1", "@", 28, "L" ],
+          [ 27, "*", "*", 27, "L" ],
+          [ 28, "#", "1", 24, "R" ],
+          [ 28, "0", "1", 24, "R" ],
+          [ 28, "1", "0", 28, "L" ],
+          [ 30, "#", "#", 40, "L" ],
+          [ 30, "0", "x", 31, "L" ],
+          [ 30, "1", "y", 35, "L" ],
+          [ 31, "#", "#", 32, "L" ],
+          [ 31, "*", "*", 31, "L" ],
+          [ 32, "#", "x", 33, "R" ],
+          [ 32, "0", "x", 33, "R" ],
+          [ 32, "1", "y", 33, "R" ],
+          [ 32, "*", "*", 32, "L" ],
+          [ 33, "#", "#", 34, "R" ],
+          [ 33, "*", "*", 33, "R" ],
+          [ 34, "x", "x", 30, "L" ],
+          [ 34, "y", "y", 30, "L" ],
+          [ 34, "*", "*", 34, "R" ],
+          [ 35, "#", "#", 36, "L" ],
+          [ 35, "*", "*", 35, "L" ],
+          [ 36, "#", "y", 33, "R" ],
+          [ 36, "0", "y", 33, "R" ],
+          [ 36, "1", "x", 37, "L" ],
+          [ 36, "*", "*", 36, "L" ],
+          [ 37, "#", "1", 33, "R" ],
+          [ 37, "0", "1", 33, "R" ],
+          [ 37, "1", "0", 37, "L" ],
+          [ 40, "#", "#", 41, "R" ],
+          [ 40, "*", "*", 40, "L" ],
+          [ 41, "#", "#", 42, "R" ],
+          [ 41, "x", "0", 41, "R" ],
+          [ 41, "y", "1", 41, "R" ],
+          [ 41, "*", "*", 41, "R" ],
+          [ 42, "#", "#", 43, "R" ],
+          [ 42, "x", "0", 42, "R" ],
+          [ 42, "y", "1", 42, "R" ],
+          [ 42, "*", "*", 42, "R" ],
+          [ 43, "#", "#", 0, "L" ],
+          [ 43, "*", "*", 43, "R" ]
+       ]
+    },
+    {
+      "name": "3N+1 with Counter",
+      "description": "Counts the number of steps in a 3N+1, or hailstone, sequence where the " +
+                     "the initial value of N is given by the number of x's.  (See the documenation!)",
+      "max_state": 25,
+      "symbols": "xyzabc01$@",
+      "tape": "0 xxx",
+      "position": 1,
+      "rules": [
+         [ 0, "#", "#", 0, "R" ],
+         [ 0, "x", "x", 1, "R" ],
+         [ 1, "#", "#", 19, "L" ],
+         [ 1, "x", "x", 3, "R" ],
+         [ 2, "#", "#", "h", "L" ],
+         [ 2, "x", "$", 3, "R" ],
+         [ 3, "#", "#", 12, "L" ],
+         [ 3, "x", "x", 4, "R" ],
+         [ 4, "#", "$", 5, "L" ],
+         [ 4, "x", "x", 3, "R" ],
+         [ 5, "x", "$", 6, "R" ],
+         [ 6, "#", "$", 7, "R" ],
+         [ 6, "$", "$", 6, "R" ],
+         [ 7, "#", "$", 8, "L" ],
+         [ 8, "#", "#", 10, "R" ],
+         [ 8, "x", "$", 6, "R" ],
+         [ 8, "$", "$", 8, "L" ],
+         [ 10, "#", "#", 11, "L" ],
+         [ 10, "$", "$", 10, "R" ],
+         [ 11, "#", "#", 17, "L" ],
+         [ 11, "$", "x", 11, "L" ],
+         [ 12, "x", "#", 13, "L" ],
+         [ 12, "$", "x", 16, "L" ],
+         [ 13, "#", "#", 14, "R" ],
+         [ 13, "x", "x", 13, "L" ],
+         [ 13, "$", "$", 14, "R" ],
+         [ 14, "x", "$", 15, "R" ],
+         [ 14, "$", "$", 14, "R" ],
+         [ 15, "#", "#", 12, "L" ],
+         [ 15, "x", "x", 15, "R" ],
+         [ 15, "$", "$", 15, "R" ],
+         [ 16, "#", "#", 17, "L" ],
+         [ 16, "$", "x", 16, "L" ],
+         [ 17, "#", "1", 18, "R" ],
+         [ 17, "0", "1", 18, "R" ],
+         [ 17, "1", "0", 17, "L" ],
+         [ 18, "#", "#", 0, "R" ],
+         [ 18, "0", "0", 18, "R" ],
+         [ 19, "#", "#", "h", "L" ],
+         [ 19, "x", "#", 19, "L" ]
+      ]
+   }
+];
+
+
+var tape;  // type Tape
+var TM;    // type Machine
+var running = false;
+var speedCounter;
+var speed;
+var selectedRowID = null;
+var message;
+var tapeInputMessage;
+var stepBackStack;
+
+var currentInput = null; // information about the current target of keyboard input, if any
+
+var applyUndoInProgress = false;  // data for undo/redo
+var undoList = [];
+var undoCount = 0;
+
+var examplePrograms = [];  // Will contain just the example machines that have valid specifications in the exampleMachines array.
+
+
+function Message(messageElementID, defaultMessage) {
+    this.elem = document.getElementById(messageElementID);
+    this.timeout = null;
+    this.tempMessage = null;
+    this.defaultMessage = defaultMessage !== undefined ? defaultMessage : "&nbsp;";
+    this.setText(defaultMessage);
+}
+Message.prototype.setDefault = function(text) {
+    this.defaultMessage = text;
+    if ( ! this.timeout )
+       this.reset();
+};
+Message.prototype.setText = function(text) {
+    this.elem.innerHTML = text;
+};
+Message.prototype.reset = function() { 
+    this.setTemp(null);
+    this.elem.innerHTML = this.defaultMessage;
+};
+Message.prototype.setTemp = function(text, millisecondsToShow) {
+    if (this.timeout)
+        clearTimeout(this.timeout);
+    this.timeout = null;
+    if (text) {
+        this.elem.innerHTML = text;
+        var me = this;
+        this.timeout = setTimeout(function() {
+            me.timeout = null;
+            me.tempMessage = null;
+            me.elem.innerHTML = me.defaultMessage;
+        }, millisecondsToShow || 3000);
+    }
+};
+
+
+function isState(state, maxState, allowHalt) {
+    if (allowHalt && (state == "h" || state == "H" || state == -1))
+        return true;
+    if ( (typeof state != "number") || Math.round(state) != state || state < 0 || state > maxState )
+        return false;
+    return true;
+}
+
+function isSymbol(symbol, legalSymbols) {
+    if (typeof symbol != "string" || symbol.length != 1 || legalSymbols.indexOf(symbol) < 0)
+        return false;
+    return true;
+}
+
+function Action(newSymbol, newState, direction, max_state, legal_symbols) {
+    legal_symbols = legal_symbols || DEFAULT_BLANK+DEFAULT_SYMBOLS+DEFAULT_WILDCARD;
+    if ( ! isSymbol( newSymbol, legal_symbols) )
+        throw "Illegal new symbol in rule.";
+    this.newSymbol = newSymbol;
+    if ( ! isState( newState, max_state, true) )
+        throw "Illegal new state in rule.";
+    this.newState = (newState === "h" || newState === "H")? -1 : newState;
+    switch (direction) {
+        case "L": case "l":  this.direction = "L"; break;
+        case "R": case "r":  this.direction = "R"; break;
+        case "S": case "s":  this.direction = "S"; break;
+        default:  throw "Illegal direction of motion in rule.";
+    }
+}
+
+function Program(json_spec) {
+    var i;
+    json_spec = json_spec || {};
+    if (typeof json_spec != "object"  || json_spec.length)
+        throw "Illegal program specification; must be an object";
+    this.name = json_spec.name || "Untitled";
+    this.description = json_spec.description || "";
+    this.blank = json_spec.blank || DEFAULT_BLANK;
+    this.symbols = json_spec.symbols || DEFAULT_SYMBOLS;
+    if (this.symbols.indexOf(" ") < 0) {
+        var str = "";
+        for (i = 0; i < this.symbols.length; i++)
+            str += this.symbols.charAt(i) == " " ? this.blank : this.symbols.charAt(i);
+    }
+    this.wildcard = json_spec.wildcard || DEFAULT_WILDCARD;
+    this.all_symbols = this.blank + this.symbols + this.wildcard;
+    this.initial_tape = json_spec.tape || "";
+    if (this.initial_tape)
+        this.initial_position = ("position" in json_spec)? json_spec.position : this.initial_tape.length - 1;
+    else
+        this.initial_position = 0;
+    this.max_state = json_spec.max_state || DEFAULT_MAX_STATE;
+    if ( typeof this.name != "string" )
+        throw "Illegal program name in program specification; must be a string.";
+    if ( typeof this.description != "string" )
+        throw "Illegal program name in program specification; must be a string.";
+    if ( typeof this.blank != "string" || this.blank.length != 1)
+        throw "Illegal blank symbol in program specification; must be a single character string.";
+    if ( typeof this.wildcard != "string" || this.wildcard.length != 1)
+        throw "Illegal wildcard symbol in program specification.";
+    if ( typeof this.symbols != "string" || this.symbols.length < 1 )
+        throw "Illegal symbol list in program specification; must be a single character string.";
+    if ( typeof this.max_state != "number" || Math.round(this.max_state) != this.max_state ||
+                 this.max_state <= 0 || this.max_state > 99)
+        throw "Illegal maximum state number in program specification; must be a number in range 1 to 99.";
+    if (typeof this.initial_tape != "string")
+        throw "Illegal tape contents in program specification; must be a string.";
+    var tc = "";
+    for (i = 0; i < this.initial_tape.length; i++) {
+        var sym = this.initial_tape.charAt(i);
+        if (sym != this.blank && sym != " " && this.symbols.indexOf(sym) < 0)
+            throw "Unknown symbol (" + sym + ") for initial tape in program specification.";
+        tc += sym == this.blank ? " " : sym;
+    }
+    this.initial_tape = tc;
+    if ( typeof this.initial_position != "number" || Math.round(this.initial_position) != this.initial_position)
+        throw "Illegal initial position for machine in program specification; must be an integer.";
+        this.rules = new Array(this.max_state+1);
+    for (i = 0; i <= this.max_state; i++)
+        this.rules[i] = {};
+    if ("rules" in json_spec) {
+        var rules = json_spec.rules;
+        if ( rules.length === undefined)
+            throw "Rules element in program specification is not an array.";
+        for (i = 0; i < rules.length; i++) {
+            if ( !rules[i] || ! rules[i].length || rules[i].length != 5)
+                throw "Illegal value for rule number " + i + " in program.";
+            var oldState = rules[i][0];
+            if ( ! isState(oldState, this.max_state, false) )
+                throw "Illegal old state in rule.";
+            var oldSymbol = rules[i][1];
+            if (oldSymbol == " ")
+                oldSymbol = this.blank;
+            if ( ! isSymbol(oldSymbol, this.all_symbols) )
+                throw "Illegal old symbol in rule.";
+            var newSymbol = rules[i][2];
+            if (newSymbol == " ")
+                newSymbol = this.blank;
+            this.rules[oldState][oldSymbol] = new Action(newSymbol, rules[i][3], rules[i][4], this.max_state, this.all_symbols);
+        }
+    }
+}
+
+
+function Tape(tapeCanvas) {
+    this.canvas = tapeCanvas;
+    this.graphics = tapeCanvas.getContext("2d");
+    this.centerSquare = 0;
+    this.left = [];
+    this.right = [];
+    this.position = 0;
+    this.state = 0;
+    this.hideCurrent = false;
+    this.runningFast = false;
+    this.graphics.font = "45px Serif";
+    this.machineWidth = this.graphics.measureText("99").width + 14;
+}
+Tape.prototype.clear = function() {
+    this.state = 0;
+    this.centerSquare = 0;
+    this.position = 0;
+    this.left = [];
+    this.right = [];
+    this.redraw();
+}
+Tape.prototype.setWidth = function(width) {
+    this.canvas.width = width;
+    this.onscreenCheck();
+    this.redraw();
+};
+Tape.prototype.get = function (location) {
+    var val = location < 0 ? this.left[-location-1] : this.right[location];
+    return (val === undefined)? " " : val;
+};
+Tape.prototype.getCurrent = function() {
+   return this.get(this.position);
+};
+Tape.prototype.put = function(location, symbol) {
+    if (location < 0) {
+        this.left[-location-1] = symbol;
+    }
+    else {
+        this.right[location] = symbol;
+    }
+};
+Tape.prototype.putCurrent = function(symbol) {
+    this.put(this.position, symbol);
+};
+Tape.prototype.getContents = function() {
+    var start = -this.left.length;
+    var end = this.right.length-1;
+    while (start < end && (this.get(start) == " " || this.get(start) === undefined))
+        start++;
+    while (end >= start && (this.get(end) == " " || this.get(end) === undefined))
+        end--;
+    var str = "";
+    for (var i = start; i <= end; i++) {
+        str += this.get(i);
+    }
+    return str;
+};
+Tape.prototype.getContentsStartPosition = function() {
+    var start = -this.left.length;
+    var end = this.right.length-1;
+    while (start < end && (this.get(start) == " " || this.get(start) === undefined))
+        start++;
+    return start;
+};
+Tape.prototype.setContents = function(contentString, machinePositionOnString) {
+    this.left = [];
+    this.right = [];
+    contentString = contentString || " ";
+    if (machinePositionOnString === undefined) {
+        machinePositionOnString = contentString.length - 1;
+    }
+    for (var i = 0; i < contentString.length; i++)
+        this.put(i,contentString.charAt(i));
+    this.centerSquare = machinePositionOnString;
+    this.position = machinePositionOnString;
+    this.redraw();
+};
+Tape.prototype.onscreenCheck = function() {
+    var machineLeft =  this.canvas.width/2 + 40*(this.position - this.centerSquare) - this.machineWidth/2;
+    var cellsOnScreen = Math.round(this.canvas.width/40);
+    var cellsFromEdge = Math.min(10,Math.round(cellsOnScreen/3));    
+    if (machineLeft < 0) {
+        this.centerSquare = Math.ceil(this.position - cellsFromEdge + cellsOnScreen/2);
+    }
+    else if (machineLeft + this.machineWidth > this.canvas.width) {
+        this.centerSquare = Math.floor(this.position - cellsOnScreen/2 + cellsFromEdge);
+    }
+};
+Tape.prototype.cellOnscreenCheck = function(cellNum) {
+    var x = this.canvas.width/2 - 20 - 40*(this.centerSquare - cellNum);
+    if (x < 0) {
+       this.centerSquare--;
+       this.redraw();
+    }
+    else if (x + 40 > this.canvas.width) {
+       this.centerSquare++;
+       this.redraw();
+    }
+};
+Tape.prototype.isInMachine = function(x,y) {
+    var left = this.canvas.width/2 - 20 + 40*(this.position - this.centerSquare);
+    return (y > 5 && y < 65 && x > left && x < left + this.machineWidth);
+};
+Tape.prototype.selectInput = function(x,y) {
+    if (this.isInMachine(x,y)) {
+        setCurrentInput({ kind: "state" });
+    }
+    else if (y > 75 && y < 115) {
+        var cell = this.centerSquare + Math.round((x - this.canvas.width/2) / 40);
+        this.cellOnscreenCheck(cell);
+        setCurrentInput({ kind: "tape", cell: cell });
+    }
+    else {
+        setCurrentInput(null);        
+    }
+}
+Tape.prototype.redraw = function() {
+    var g = this.graphics;
+    var w = this.canvas.width;
+    g.clearRect(0,0,w,this.canvas.height);
+    g.fillStyle = "#E8E8FF";
+    g.fillRect(0,75,w,40);
+    g.strokeStyle = "#0000AA";
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(0,74);
+    g.lineTo(w,74);
+    g.moveTo(0,114);
+    g.lineTo(w,114);
+    var cellCt = 2*Math.floor(w/80) + 3;
+    var x = w/2 - 40*cellCt/2;
+    for (var i = 0; i <= cellCt; i++) {
+        g.moveTo(x,74);
+        g.lineTo(x,114);
+        x += 40;
+    }
+    g.stroke();
+    g.font = "30px Serif";
+    g.fillStyle = "black";
+    x = w/2 - 40*cellCt/2;
+    var cellNum = this.centerSquare - Math.floor(cellCt/2);
+    for (var j = 0; j < cellCt; j++) {
+        var sym = this.get(cellNum);
+        if (sym !== undefined) {
+            var cw = g.measureText(sym).width;
+            g.fillText(sym,x+20-cw/2,104);
+        }
+        cellNum++;
+        x += 40;
+    }
+    if (currentInput && currentInput.kind == "tape") {
+        x = w/2 - 20 - 40*(this.centerSquare - currentInput.cell);
+        g.lineWidth = 4;
+        g.strokeStyle = "cyan";
+        g.strokeRect(x,74,40,40);
+    }
+    x = w/2 - 20 + 40*(this.position - this.centerSquare);
+    if (this.hideCurrent) {
+        g.fillStyle  = "black";
+        g.fillRect(x,74,40,40);
+    }
+    g.fillStyle = "#990000";
+    if (this.runningFast) {
+        g.fillRect(x+3, 65, 34, 9);
+    }
+    else {
+        g.fillRect(x + 15, 65, 10, 9);
+        var mw = this.machineWidth;
+        x = x + 20 - mw/2;
+        g.beginPath();
+        g.moveTo(x+8, 6);
+        g.lineTo(x + mw - 8, 6);
+        g.arcTo(x+mw, 6, x+mw, 14, 8);
+        g.lineTo(x + mw, 58);
+        g.arcTo(x+mw, 64, x+mw-8, 64, 8);
+        g.lineTo(x+8, 64);
+        g.arcTo(x, 64, x, 58, 8);
+        g.lineTo(x, 14);
+        g.arcTo(x, 6, x+8, 6, 8);
+        g.closePath();
+        g.fillStyle = "#FFE8E8";
+        g.fill();
+        g.strokeStyle = "#990000";
+        g.lineWidth = 4;
+        g.stroke();
+        if (currentInput && currentInput.kind == "state") {
+            g.strokeStyle = "cyan";
+            g.strokeRect(x+4,10,mw-8,50);
+        }
+        var str = this.state == -1 ? "h" : ""+this.state;
+        this.graphics.font = "45px Serif";
+        mw = g.measureText(str).width;
+        x = w/2 + 40*(this.position - this.centerSquare) - mw/2;
+        g.fillStyle = "black";
+        g.fillText(str, x, 53);
+    }
+};
+
+
+function Machine(tape) {
+    this.tape = tape;
+    this.state = 0;
+    this.tape.state = 0;
+    this.program = null;
+    this.tape.redraw();
+}
+Machine.prototype.isHalted = function() {
+    return this.state == -1;
+};
+Machine.prototype.step = function() {
+    if (!this.program) {
+        this.program = new Program();
+        this.state = 0;
+        this.tape.state = 0;
+    }
+    if (this.state == -1)
+        throw "Illegal attempt to continue running while machine is halted.";
+    var rules = this.program.rules[this.state];
+    var sym = this.tape.getCurrent();
+    if (sym == " ")
+        sym = this.program.blank;
+    var action;
+    if (rules[sym])
+        action = rules[sym];
+    else if (rules[this.program.wildcard])
+        action = rules[this.program.wildcard];
+    else
+        throw "No rule for state = " + this.state + ", current symbol = " + sym;
+    this.apply(action);
+    this.tape.onscreenCheck();
+};
+Machine.prototype.apply = function(action) {
+    if (action.newSymbol != this.program.wildcard)
+        this.tape.putCurrent(action.newSymbol == this.program.blank ? " " : action.newSymbol);
+    if (action.direction == "L")
+        this.tape.position--;
+    else if (action.direction == "R")
+        this.tape.position++;
+    this.state = action.newState;
+    this.tape.state = this.state;
+    this.tape.redraw();
+};
+Machine.prototype.toJSON = function() {
+    var program = this.program;
+    var json = "{\n";
+    json += '   "name": "' + program.name + '",\n';
+    json += '   "max_state": ' + program.max_state + ',\n';
+    if (program.blank != DEFAULT_BLANK)
+        json += '   "blank": "' + program.blank + '",\n';
+    if (program.wildcard != DEFAULT_WILDCARD)
+        json += '   "wildcard": "' + program.wildcard + '",\n';
+    json += '   "symbols": "' + program.symbols + '",\n';
+    json += '   "tape": "' + tape.getContents() + '",\n';
+    json += '   "position": ' + (tape.position - tape.getContentsStartPosition()) + ',\n';
+    json += '   "rules": [\n';
+    var first = true;
+    for (var i = 0; i <= program.max_state; i++) {
+        var rules = program.rules[i];
+        for (var j = 0; j < program.all_symbols.length; j++) {
+            var sym = program.all_symbols.charAt(j);
+            if (rules[sym]) {
+               if (first) {
+                   first = false;
+               }
+               else {
+                   json += ",\n";
+               }
+               var a = rules[sym];
+               json += '      [ ' + i + ', "' + sym + '", "'+ a.newSymbol;
+               if (a.newState == -1)
+                   json += '", "h", "';
+               else
+                   json += '", ' + a.newState + ', "';
+               json +=  a.direction + '" ]';
+            }
+        }
+    }
+    json += '\n   ]\n';
+    json += '}\n';
+    return json;
+};
+
+
+function StepBackStack(size) {
+   this.size = size;
+   this.reset();
+}
+StepBackStack.prototype.push = function( position, state, symbol ) {
+    if (this.count == this.size) {
+        this.data[this.bottom % this.size] = null;
+        this.bottom++;
+        this.count--;
+    }
+    this.data[this.top % 100] = { position: position, state: state, symbol: symbol };
+    this.top++;
+    this.count++;
+    document.getElementById("stepback-btn").disabled = running;
+};
+StepBackStack.prototype.pop = function() {
+    if (this.count === 0)
+       throw "Attempt to pop from an empty stack.";
+    this.top--;
+    this.count--;
+    var item = this.data[this.top % 100];
+    this.data[this.top % 100] = null;
+    document.getElementById("stepback-btn").disabled = this.count === 0;
+    return item;
+};
+StepBackStack.prototype.reset = function() {
+    this.count = 0;
+    this.data = new Array(this.size);
+    this.top = 0;
+    this.bottom = 0;
+    document.getElementById("stepback-btn").disabled = true;
+};
+
+
+
+function setUpDragging(tape) {
+    var canvas = tape.canvas;
+    var dragging = false;
+    var draggingMachine;
+    var startX; // for mouse only
+    var startCenterSquare;
+    var startPosition;
+    function startDrag(clientX,clientY) {
+        var r = canvas.getBoundingClientRect();
+        var x = clientX - r.left;
+        var y = clientY - r.top;
+        dragging = true;
+        startX = x;
+        draggingMachine = tape.isInMachine(x,y);
+        startCenterSquare = tape.centerSquare;
+        startPosition = tape.position;
+        message.reset();
+    }
+    function continueDrag(clientX) {
+        var r = canvas.getBoundingClientRect();
+        var x = clientX - r.left;
+        var dx = x - startX;
+        var dSquare = Math.round(dx/40);
+        var halfWidth = canvas.width/2;
+        if (draggingMachine) {
+            var newPosition = startPosition + dSquare;
+            if (Math.abs(newPosition - tape.centerSquare)*40 < halfWidth) {
+                tape.position = newPosition;
+                tape.redraw();
+            }
+        }
+        else {
+            tape.centerSquare = startCenterSquare - dSquare;
+            tape.redraw();
+        }
+        tape.redraw();
+    }
+    function endDrag() {
+        dragging = false;
+    }
+    function doMouseDown(evt) {
+        if (running || dragging || evt.button !== 0) {
+            return;
+        }
+        dragging = true;
+        startX = evt.clientX;
+        startY = evt.clientY;
+        var r = canvas.getBoundingClientRect();
+        var x = startX - r.left;
+        var y = startY - r.top;
+        TM.tape.selectInput(x,y);
+        startDrag(startX,startY);
+        canvas.addEventListener("mousemove",doMouseMove,false);
+        document.addEventListener("mouseup",doMouseUp,false);
+    }
+    function doMouseMove(evt) {
+        if (!dragging) {
+            return;
+        }
+        continueDrag(evt.clientX);
+    }
+    function doMouseUp(evt) {
+        if (dragging) {
+            endDrag();
+            canvas.removeEventListener("mousemove",doMouseMove,false);
+            document.removeEventListener("mouseup",doMouseUp,false);
+        }
+    }
+   function doTouchStart(evt){ 
+        if (running || evt.touches.length != 1) {
+           doTouchCancel();
+           return;
+        }
+        if (dragging) {
+            return;
+        }
+        canvas.addEventListener("touchmove", doTouchMove);
+        canvas.addEventListener("touchend", doTouchEnd);
+        canvas.addEventListener("touchcancel", doTouchCancel);
+        startDrag(evt.touches[0].clientX, evt.touches[0].clientY); 
+        evt.preventDefault();
+    }
+    function doTouchMove(evt){
+        if (!dragging)
+           return;
+        if (evt.touches.length != 1) {
+           doTouchCancel();
+           return;
+        }
+        continueDrag(evt.touches[0].clientX); 
+        evt.preventDefault();
+    }
+    function doTouchEnd(evt) {
+        doTouchCancel();
+    }
+    function doTouchCancel() {
+        if (dragging) {
+           canvas.removeEventListener("touchmove", doTouchMove);
+           canvas.removeEventListener("touchend", doTouchEnd);
+           canvas.removeEventListener("touchcancel", doTouchCancel);
+           endDrag();
+        }
+    }
+    canvas.addEventListener("mousedown",doMouseDown,false);
+    canvas.addEventListener("touchstart",doTouchStart,false);
+}
+
+
+function makeTableOfRules(rules, symbols) {
+    var table = document.getElementById("rules");
+    table.innerHTML = "";
+    for (var i = 0; i < rules.length; i++) {
+        for (var j = 0; j < symbols.length; j++) {
+            var sym = symbols.charAt(j);
+            if (rules[i][sym]) {
+                var action = rules[i][sym];
+                var row = document.createElement("tr");
+                table.appendChild(row);
+                row.id = "row-" + i + "-" + j;
+                row.TM_state = i;
+                row.TM_symbol = j;
+                row.addEventListener("mousedown",selectRuleByMouse,false);
+                row.addEventListener("touchstart",selectRuleByTouch,false);
+                var oldsym = (sym == symbols.charAt(symbols.length-1))? 'other' : sym;
+                var newsym = (action.newSymbol == symbols.charAt(symbols.length-1))? 'same' : action.newSymbol;
+                row.innerHTML =
+                      "<td>" + i + "</td>" +
+                      "<td class='border-right'>" + oldsym + "</td>";
+                var td = document.createElement("td");
+                td.innerHTML = newsym;
+                td.TM_edit = "rule_newsymbol";
+                td.addEventListener("mousedown",selectRuleByMouse,false);
+                row.appendChild(td);
+                td = document.createElement("td");
+                td.innerHTML =  action.newState==-1 ? "h" : ""+action.newState;
+                td.TM_edit = "rule_newstate";
+                td.addEventListener("mousedown",selectRuleByMouse,false);
+                row.appendChild(td);
+                td = document.createElement("td");
+                td.innerHTML = action.direction;
+                td.TM_edit = "rule_direction";
+                td.addEventListener("mousedown",selectRuleByMouse,false);
+                row.appendChild(td);
+            }
+        }
+    }
+}
+
+
+function selectRule(state, symbol) {
+    if ( state == -1 || symbol === null || symbol === undefined) {
+        if (selectedRowID)
+            document.getElementById(selectedRowID).className = null;
+        selectedRowID = null;
+        document.getElementById("delete-btn").disabled = true;
+        checkEditRule();
+        return;
+    }
+    if (symbol == " ")
+        symbol = TM.program.blank;
+    var rules = TM.program.rules[state];
+    if (state < 0 || state >= rules.length || TM.program.all_symbols.indexOf(symbol) < 0)
+        throw "Assertion error: illegal state or symbol in selectRule";
+    var action,id;
+    document.getElementById("old-state").value = state<0 ? "h" : "" + state;
+//    console.log("rules[" + symbol + "] = " + rules[symbol] + "   rules[" + TM.program.wildcard + "] = " + rules[TM.program.wildcard]);
+    if (!rules[symbol] && !rules[TM.program.wildcard]) {
+        if (selectedRowID)
+            document.getElementById(selectedRowID).className = null;
+        selectedRowID = null;
+        document.getElementById("delete-btn").disabled = true;
+        document.getElementById("old-symbol").value = symbol;
+        document.getElementById("new-state").value = "h";
+        document.getElementById("new-symbol").value = symbol;
+        document.getElementById("move").value = "R";
+        document.getElementById("edit-btn").innerHTML = "Create Rule";
+    }
+    else {
+        if (!rules[symbol])
+            symbol = TM.program.wildcard;
+        action = rules[symbol];
+        document.getElementById("delete-btn").disabled = false;
+        document.getElementById("old-symbol").value = symbol;
+        document.getElementById("new-state").value = action.newState < 0 ? "h" : "" + action.newState;
+        document.getElementById("new-symbol").value = action.newSymbol;
+        document.getElementById("move").value = action.direction;
+        id = "row-" + state + "-" + TM.program.all_symbols.indexOf(symbol);
+        if (selectedRowID !== id) {
+            if (selectedRowID)
+               document.getElementById(selectedRowID).className = null;
+            selectedRowID = id;
+            document.getElementById(selectedRowID).className = "selected";
+        }
+        document.getElementById("edit-btn").innerHTML = "Change Rule";
+    }
+    checkEditRule();
+}
+function selectRuleFromTM() {
+    var state = TM.state;
+    var symb = TM.tape.getCurrent();
+    selectRule(state,symb);
+}
+function selectRuleByMouse(evt) {
+    if (!running) {
+        if (this.TM_edit) {
+//            console.log("clicked " + this.TM_edit + " in " + this.parentElement.id);
+            setCurrentInput({ kind: this.TM_edit, td: this });
+            this.className = "selected";
+            selectRule(this.parentElement.TM_state, TM.program.all_symbols.charAt(this.parentElement.TM_symbol));
+            evt.stopPropagation();
+        }
+        else {
+            setCurrentInput(null);
+            selectRule(this.TM_state, TM.program.all_symbols.charAt(this.TM_symbol));
+        }
+    }
+}
+function selectRuleByTouch(evt) {
+    if (running || evt.touches.length != 1)
+       return;
+    electRule(this.TM_state, TM.program.all_symbols.charAt(this.TM_symbol));
+}
+
+function checkEditRule() {
+    var state = Number(document.getElementById("old-state").value);
+    var symbol = document.getElementById("old-symbol").value;
+    var id = "row-" + state + "-" + TM.program.all_symbols.indexOf(symbol);
+    if (selectedRowID) {
+        document.getElementById(selectedRowID).className = null;
+        selectedRowID = null;
+    }
+    if (document.getElementById(id)) {
+        document.getElementById(id).className = "selected";
+        selectedRowID = id;
+        document.getElementById("edit-btn").innerHTML = "Change Rule";
+        var action = TM.program.rules[state][symbol];
+        if (!action)
+            throw "Assertion error:  row in table exists but rule does not!";
+        if (action.newSymbol == document.getElementById("new-symbol").value &&
+                (action.newState == document.getElementById("new-state").value ||
+                      action.newState == -1 && document.getElementById("new-state").value == "h") &&
+                action.direction == document.getElementById("move").value ) {
+            document.getElementById("edit-btn").disabled = true;
+            document.getElementById("edit-btn").title = "Disabled because current values match the existing rule.";
+        }
+        else {
+            document.getElementById("edit-btn").disabled = false;
+            document.getElementById("edit-btn").title = "";
+        }
+    }
+    else {
+        document.getElementById("edit-btn").disabled = false;
+        document.getElementById("edit-btn").innerHTML = "Create Rule";
+        document.getElementById("edit-btn").title = "";
+    }
+}
+
+function doEditRule() {
+    var rules = TM.program.rules;
+    var oldstate = Number(document.getElementById("old-state").value);
+    var oldsymbol = document.getElementById("old-symbol").value;
+    var newStateVal = document.getElementById("new-state").value;
+    var newstate = newStateVal == "h" ? -1 : Number(newStateVal);
+    var newsymbol = document.getElementById("new-symbol").value;
+    var direction = document.getElementById("move").value;
+    var symbols = TM.program.all_symbols;
+    var oldsym = (oldsymbol == symbols.charAt(symbols.length-1))? 'other' : oldsymbol;
+    var newsym = (newsymbol == symbols.charAt(symbols.length-1))? 'same' : newsymbol;
+    var id = "row-" + oldstate + "-" + TM.program.all_symbols.indexOf(oldsymbol);
+    var elem = document.getElementById(id);
+    if ( (elem === null) !== (rules[oldstate][oldsymbol] === undefined) )
+        throw "Assertion error:  existence of rule element differs from existence of rule for " + id;
+    var action = new Action(newsymbol,newstate,direction,TM.program.max_state,TM.program.all_symbols);
+    var create = false;
+    if ( ! elem ) {
+        create = true;
+        elem = document.createElement("tr");
+        elem.id = id;
+        elem.TM_state = oldstate;
+        elem.TM_symbol = TM.program.all_symbols.indexOf(oldsymbol);
+        elem.addEventListener("mousedown",selectRuleByMouse,false);
+        elem.addEventListener("touchstart",selectRuleByTouch,false);
+        var holder = document.getElementById("rules");
+        var pos = 0;
+        while (pos < holder.children.length) {
+            if (holder.children[pos].TM_state > oldstate)
+                break;
+            if (holder.children[pos].TM_state == elem.TM_state && holder.children[pos].TM_symbol > elem.TM_symbol)
+                break;
+            pos++;
+        }
+        if (pos == holder.children.length)
+            holder.appendChild(elem);
+        else
+            holder.insertBefore(elem,holder.children[pos]);
+    }
+    var oldAction = rules[oldstate][oldsymbol];
+    rules[oldstate][oldsymbol] = action;
+    elem.innerHTML =
+          "<td>" + oldstate + "</td>" +
+          "<td class='border-right'>" + oldsym + "</td>";
+    var td = document.createElement("td");
+    td.innerHTML = newsym;
+    td.TM_edit = "rule_newsymbol";
+    td.addEventListener("mousedown",selectRuleByMouse,false);
+    elem.appendChild(td);
+    td = document.createElement("td");
+    td.innerHTML =  action.newState==-1 ? "h" : ""+action.newState;
+    td.TM_edit = "rule_newstate";
+    td.addEventListener("mousedown",selectRuleByMouse,false);
+    elem.appendChild(td);
+    td = document.createElement("td");
+    td.innerHTML = action.direction;
+    td.TM_edit = "rule_direction";
+    td.addEventListener("mousedown",selectRuleByMouse,false);
+    elem.appendChild(td);
+    document.getElementById("edit-btn").innerHTML = "Change Rule";
+    selectRule(oldstate,oldsymbol);
+    if (TM.program.name != "Untitled" && !TM.program.name.endsWith("(modified)")) {
+        TM.program.name += " (modified)";
+        var msg = "Machine name = &quot;" + TM.program.name + "&quot;;&nbsp; max_state = " +
+                        TM.program.max_state + ";&nbsp; symbols = &quot;" + TM.program.symbols + "&quot;";
+        message.setDefault(msg);
+        document.getElementById("description").innerHTML = "";
+    }
+    message.reset();
+    stepBackStack.reset();
+    if (create) {
+        addUndoItem("Create Rule",
+            { what: "delete", state: oldstate, symbol: oldsymbol, tr: elem},
+            { what: "add", state: oldstate, symbol: oldsymbol, action: action, elem: elem});
+    }
+    else {
+        addUndoItem("Edit Rule",
+            { state: oldstate, symbol: oldsymbol, action: oldAction},
+            { state: oldstate, symbol: oldsymbol, action: action});
+    }
+}
+
+function doNew() {
+    var oldVal = TM.toJSON();
+    install(new Program());
+    addUndoItem("New Machine", oldVal, TM.toJSON());
+}
+
+function doDeleteSelectedRule() {
+    if ( ! selectedRowID )
+        return;
+    var elem = document.getElementById(selectedRowID);
+    var state = elem.TM_state;
+    var symbol = elem.TM_symbol;
+    symbol = TM.program.all_symbols.charAt(symbol);
+    var action = TM.program.rules[state][symbol];
+    delete TM.program.rules[state][symbol];
+    elem.className = null;
+    document.getElementById("rules").removeChild(elem);
+    selectedRowID = null;
+    document.getElementById("delete-btn").disabled = true;
+    checkEditRule();
+    message.reset();
+    stepBackStack.reset();
+    addUndoItem("Delete Rule",
+       { what: "add", state: state, symbol: symbol, action: action, elem: elem },
+       { what: "delete", state: state, symbol: symbol, tr: elem });
+}
+
+function doSetTapeContents() {
+   setCurrentInput(null);
+   var input = document.getElementById("tape-input").value;
+   var contents = "";
+   for (var i = 0; i < input.length; i++) {
+      var ch = input.charAt(i);
+      if (ch == TM.program.blank)
+          ch = " ";
+      if (ch != " " && TM.program.symbols.indexOf(ch) < 0) {
+          tapeInputMessage.setTemp("<br>Error: '" + ch + "' is not legal", 3000);
+          return;
+      }
+      contents += ch;
+   }
+   var oldVal = TM.tape.getContents();
+   var oldPos = TM.tape.position;
+   TM.tape.setContents(contents);
+   addUndoItem("Set Tape", { contents: oldVal, position: oldPos}, { contents: contents, postion: TM.position} );
+   stepBackStack.reset();
+}
+
+
+function install(program) {
+    selectedRowID = null;
+    TM.program = program;
+    TM.state = 0;
+    TM.tape.state = 0;
+    TM.tape.setContents(program.initial_tape);
+    if ("initial_position" in program)
+       TM.tape.position = program.initial_position;
+    var state = "";
+    var symb = "<option value='" + TM.program.blank + "'>" + TM.program.blank + "</option>";
+    var i;
+    for (i = 0; i <= TM.program.max_state; i++) {
+        state = state + "<option value='" + i + "'>" + i + "</option>";
+    }
+    for (i = 0; i < TM.program.symbols.length; i++) {
+        symb += "<option value='" + TM.program.symbols.charAt(i) + "'>" + TM.program.symbols.charAt(i) + "</option>";
+    }
+    document.getElementById("old-state").innerHTML = state;
+    document.getElementById("new-state").innerHTML =
+        "<option value='h'>h</option>" + state;
+    document.getElementById("old-symbol").innerHTML =
+        symb + "<option value='" + TM.program.wildcard + "'>other</option>";
+    document.getElementById("new-symbol").innerHTML =
+        symb + "<option value='" + TM.program.wildcard + "'>same</option>";
+    makeTableOfRules(program.rules, program.all_symbols);
+    selectRuleFromTM();
+    var msg = "Machine name = &quot;" + TM.program.name + "&quot;;&nbsp; max_state = " +
+                    TM.program.max_state + ";&nbsp; symbols = &quot;" + TM.program.symbols + "&quot;";
+    message.setDefault(msg);
+    document.getElementById("description").innerHTML = TM.program.description;
+    stepBackStack.reset();
+    setButtonStates();
+    tape.redraw();
+}
+
+
+function installExamples() {
+    var list = "";
+    var ct = 0;
+    for (var i = 0; i < exampleMachines.length; i++) {
+        try {
+            var spec = exampleMachines[i];
+            var name = spec.name || "Untitled";
+            if (name.length > 18)
+                name = name.substring(0,17) + "...";
+            var prog = new Program(spec);  // to test for errors
+            examplePrograms[ct] = spec; 
+            list += "<option value='" + ct + "'>" + name + "</option>";
+            ct++;
+        }
+        catch (e) {
+            console.log("Error while parsing example machine number " + i + ": " + e);
+        }
+    }
+    if (ct > 0) {
+        document.getElementById("example-select").innerHTML = list;
+        document.getElementById("load-examples").style.display = "block";
+        return true;
+    }
+    return false;
+}
+
+function doLoadExample() {
+    if (running)
+       doStop();
+    var num = Number(document.getElementById("example-select").value);
+    var oldVal = applyUndoInProgress? null : TM.toJSON();
+    install(new Program(examplePrograms[num]));
+    if (!applyUndoInProgress)
+       addUndoItem("Install Example", oldVal, TM.toJSON());
+}
+
+
+function doResize() {
+   var box = document.getElementById("content").getBoundingClientRect();
+   tape.setWidth(box.width);
+   message.reset();
+}
+
+function doSetSpeed() {
+    speed = Number(document.getElementById("speed-select").value);
+    if (running) {
+        TM.tape.runningFast = speed < 5;
+        TM.tape.hideCurrent = false;
+        speedCounter = 0;
+    }
+    message.reset();
+}
+
+function setCurrentInput(input) {
+    var oldIsRule = currentInput && currentInput.kind.startsWith("rule_");
+    var newIsRule = input && input.kind.startsWith("rule_");
+    if (oldIsRule && (!newIsRule || input.td != currentInput.td))
+        currentInput.td.className = "";    
+    currentInput = input;
+    if (!oldIsRule || !newIsRule)
+        TM.tape.redraw();
+    if (newIsRule)
+        currentInput.td.className = "selected";
+}
+function doKeyDown(evt) {  // handles arrow keys
+    if (running || !currentInput || (document.activeElement && document.activeElement !== document.body))
+        return;
+    var code = evt.keyCode;
+    if (code == 27)
+        setCurrentInput(null);
+    else  if (currentInput.kind == "tape") {
+        if (code == 37) { // left
+            setCurrentInput({kind: "tape", cell: currentInput.cell-1});
+            TM.tape.cellOnscreenCheck(currentInput.cell);
+            evt.preventDefault();
+        }
+        else if (code == 39) { // left
+            setCurrentInput({kind: "tape", cell: currentInput.cell+1});
+            TM.tape.cellOnscreenCheck(currentInput.cell);
+            evt.preventDefault();
+        }
+    }
+    else if (currentInput.kind.startsWith("rule_")) { // editing the action in a rule
+        td = currentInput.td;
+        if (code == 37) { // left
+            if (currentInput.kind == "rule_newstate")
+                setCurrentInput({kind: "rule_newsymbol", td: td.previousSibling});
+            if (currentInput.kind == "rule_direction")
+                setCurrentInput({kind: "rule_newstate", td: td.previousSibling});
+            evt.preventDefault();
+        }
+        else if (code == 39) { // right
+            if (currentInput.kind == "rule_newstate")
+                setCurrentInput({kind: "rule_direction", td: td.nextSibling});
+            if (currentInput.kind == "rule_newsymbol")
+                setCurrentInput({kind: "rule_newstate", td: td.nextSibling});
+            evt.preventDefault();
+        }
+    }
+}
+var inputTimeout = null;
+function doKeyPress(evt) {
+    if (running || !currentInput || (document.activeElement && document.activeElement !== document.body))
+        return;
+    var key;
+    if ("key" in evt)
+        key = evt.key;
+    else
+        key = String.fromCharCode(evt.keyCode);
+    var code = key.charCodeAt(0);
+    var digit, max, maxTens, action, tr, td, oldSymbol, oldState;
+    //console.log(code + " " + evt.key + " " + evt.which + " " + evt.keyCode);
+    if (currentInput.kind == "state") {
+        if (key == 'h' || key == 'H') {  // "h"
+            if (inputTimeout) {
+               clearTimeout(inputTimeout);
+               inputTimeout = null;
+            }
+            TM.state = -1;
+            TM.tape.state = -1;
+            selectRuleFromTM();
+            TM.tape.redraw();
+        }
+        else if (key >= "0" && key <= "9") {  // numeric
+            digit = code - 48;
+            max = TM.program.max_state;
+            maxTens = Math.floor(max/10);
+            if (TM.state >= 0 && inputTimeout && 10*TM.state+digit <= max) {
+                clearTimeout(inputTimeout);
+                inputTimeout = null;
+                TM.state = 10*TM.state+digit;
+                TM.tape.state = TM.state;
+                TM.tape.redraw();
+                selectRuleFromTM();
+            }
+            else if (digit <= max) {
+                TM.state = digit;
+                TM.tape.state = digit;
+                TM.tape.redraw();
+                selectRuleFromTM();
+                if (digit > 0 && digit <= maxTens) {
+                    inputTimeout = setTimeout(function() { inputTimeout = null; }, 500);
+                }
+            }
+            else
+                message.setTemp("Type 'h' or a state number.", 800);
+        }
+        else
+            message.setTemp("Type 'h' or a state number.", 800);
+        setButtonStates();
+    }
+    else if (currentInput.kind == "tape") {
+        if (key == TM.program.blank || key == " ") {
+            if (TM.tape.get(currentInput.cell) != " ")
+                stepBackStack.reset();
+            TM.tape.put(currentInput.cell," ");
+            setCurrentInput({kind: "tape", cell: currentInput.cell+1});
+            TM.tape.cellOnscreenCheck(currentInput.cell);
+            evt.preventDefault();
+        }
+        else if (TM.program.symbols.indexOf(key) >= 0) {
+            if (TM.tape.get(currentInput.cell) != key)
+                stepBackStack.reset();
+            TM.tape.put(currentInput.cell,key);
+            setCurrentInput({kind: "tape", cell: currentInput.cell+1});
+            TM.tape.cellOnscreenCheck(currentInput.cell);
+        }
+        else 
+            message.setTemp("Type one of the legal symbols.",800);
+    }
+    else { // editing the action in a rule
+        td = currentInput.td;
+        tr = td.parentElement;
+        oldstate = tr.TM_state;
+        oldsymbol = TM.program.all_symbols.charAt(tr.TM_symbol);
+        action = TM.program.rules[oldstate][oldsymbol];
+        //console.log(action.newState + "  " + action.newSymbol + " " + action.direction);
+        if (currentInput.kind == "rule_direction") {
+            if (key == "s" || key == "S")
+                changeRule("direction","S");
+            else if (key == "r" || key == "R")
+                changeRule("direction","R");
+            else if (key == "l" || key == "L")
+                changeRule("direction","L");
+            else if (code < 37 || code > 40)
+                message.setTemp("Type a legal direction (L, R, or S)", 800);
+        }
+        else if (currentInput.kind == "rule_newsymbol") {
+            if (key == " " || key == TM.program.blank) {
+                changeRule("newSymbol",TM.program.blank);
+                evt.preventDefault();
+            }
+            else if ( TM.program.symbols.indexOf(key) >= 0 || key == TM.program.wildcard )
+                changeRule("newSymbol",key);
+            else if (code < 37 || code > 40)
+                message.setTemp("Type a legal symbol",800);
+        }
+        else if (currentInput.kind == "rule_newstate") {
+             if (key == "h" || key == "H")
+                 changeRule("newState",-1);
+            else if (key >= "0" && key <= "9") {  // numeric
+                digit = code - 48;
+                max = TM.program.max_state;
+                maxTens = Math.floor(max/10);
+                if (action.newState >= 0 &&
+                             inputTimeout && 10*action.newState+digit <= max) { 
+                    clearTimeout(inputTimeout);
+                    intputTimeout = null;
+                    changeRule("newState",10*action.newState+digit);
+                }
+                else if (digit <= max) { 
+                    changeRule("newState",digit);
+                    if (digit > 0 && digit <= maxTens) {
+                        inputTimeout = setTimeout(function() { inputTimeout = null; }, 500);
+                    }
+                }
+                else
+                    message.setTemp("Type 'h' or a state number.", 800);
+            }
+            else 
+                message.setTemp("Type 'h' or a state number.", 800);
+        }
+    }
+    function changeRule(what, newVal) {
+        if (action[what] == newVal)
+            return;
+        stepBackStack.reset();
+        var oldAction = new Action(action.newSymbol,action.newState,action.direction);
+        action[what] = newVal;
+        td.innerHTML = (newVal == -1)? "h" : (newVal == TM.program.wildcard)? "same" : ""+newVal;
+        if (tr.id == selectedRowID) {
+            document.getElementById("new-state").value = action.newState == -1 ? "h" : ""+action.newState;
+            document.getElementById("new-symbol").value = action.newSymbol;
+            document.getElementById("move").value = action.direction;
+        }
+        if (TM.program.name != "Untitled" && !TM.program.name.endsWith("(modified)")) {
+            TM.program.name += " (modified)";
+            var msg = "Machine name = &quot;" + TM.program.name + "&quot;;&nbsp; max_state = " +
+                            TM.program.max_state + ";&nbsp; symbols = &quot;" + TM.program.symbols + "&quot;";
+            message.setDefault(msg);
+            document.getElementById("description").innerHTML = "";
+        }
+        addUndoItem("Edit Rule",
+            { state: oldstate, symbol: oldsymbol, action: oldAction},
+            { state: oldstate, symbol: oldsymbol, action: new Action(action.newSymbol,action.newState,action.direction)});
+    }
+}
+
+function tick() {
+   if (!running) {
+       TM.tape.hideCurrent = false;
+       TM.tape.redraw();
+       return;
+   }
+   speedCounter++;
+   if (speed > 20 && Math.floor(2*speed/3) == speedCounter) {
+       TM.tape.hideCurrent = true;
+       TM.tape.redraw();
+   }
+   if (speedCounter == speed) {
+       TM.tape.hideCurrent = false;
+       doStep();
+       speedCounter = 0;
+   }
+   if (running)
+       requestAnimationFrame(tick);
+}
+
+function doStep() {
+    var ok = true;
+    if (currentInput)
+        setCurrentInput(null);
+    try {
+        var position = TM.tape.position;
+        var state = TM.state;
+        var symbol = TM.tape.getCurrent();
+        TM.step();
+        stepBackStack.push(position,state,symbol);
+    }
+    catch (e) {
+        message.setText(e);
+        ok = false;
+    }
+    if (!running || speed >= 15)
+       selectRuleFromTM(TM);
+    if (!running) {
+       if (ok)
+           message.reset();
+       document.getElementById("reset-btn").disabled = TM.state === 0;
+       if (TM.isHalted())
+          setButtonStates();
+    }
+    else if (!ok || TM.isHalted())
+        doStop();
+}
+
+function doStepBack() {
+    if (stepBackStack.count === 0) {
+        message.setTemp("No steps available to undo");
+        return;
+    }
+    var step = stepBackStack.pop();
+    TM.tape.position = step.position;
+    TM.tape.putCurrent(step.symbol);
+    TM.state = step.state;
+    TM.tape.state = step.state;
+    TM.tape.onscreenCheck();
+    TM.tape.redraw();
+    selectRuleFromTM();
+    setButtonStates();
+    if (stepBackStack.count === 0)
+        message.setTemp("No more step backs available at this time.", 1500);
+}
+
+function doRun() {
+    if (running)
+       return;
+    running = true;
+    TM.tape.runningFast = speed < 5;
+    speedCounter = 0;
+    requestAnimationFrame(tick);
+    setButtonStates();
+    message.reset();
+}
+
+
+function doStop() { 
+    running = false;
+    if (TM.tape.runningFast) {
+        TM.tape.runningFast = false;
+        TM.tape.redraw();
+    }
+    setButtonStates();
+    selectRuleFromTM(TM);
+}
+
+function doReset() {
+    TM.state = 0;
+    TM.tape.state = 0;
+    TM.tape.redraw();
+    setButtonStates();
+    selectRuleFromTM(TM);
+    message.reset();
+    stepBackStack.reset();
+}
+
+function setButtonStates() {
+    document.getElementById("step-btn").disabled = running || TM.isHalted();
+    document.getElementById("stepback-btn").disabled = running || stepBackStack.count === 0;
+    document.getElementById("run-btn").disabled = running || TM.isHalted();
+    document.getElementById("stop-btn").disabled = !running;
+    document.getElementById("reset-btn").disabled = TM.state === 0;
+    document.getElementById("edit-btn").disabled = running || disableEditButton();
+    document.getElementById("tape-input-btn").disabled = running;
+    function disableEditButton() {
+        var state = Number(document.getElementById("old-state").value);
+        var symbol = document.getElementById("old-symbol").value;
+        var action = TM.program.rules[state][symbol];
+        if (!action)
+           return false;
+        return action.newSymbol == document.getElementById("new-symbol").value &&
+                (action.newState == document.getElementById("new-state").value ||
+                      action.newState == -1 && document.getElementById("new-state").value == "h") &&
+                action.direction == document.getElementById("move").value;
+    }
+}
+
+//---------------------- Undo/Redo ---------------------------------------
+
+function doUndo() {
+    if (undoCount > 0) {
+        if (running)
+            doStop();
+        setCurrentInput(null);
+        var item = undoList[undoCount-1];
+        undoCount--;
+        document.getElementById("undo").disabled = (undoCount === 0);
+        document.getElementById("undo").innerHTML = undoCount? ("Undo " + undoList[undoCount-1].name) : "Undo";
+        document.getElementById("redo").disabled = false;
+        document.getElementById("redo").innerHTML = "Redo " + item.name;
+        applyUndoItem(item.name, item.oldValue);
+    }
+}
+
+function doRedo() {
+    if (undoCount < undoList.length) {
+        if (running)
+            doStop();
+        setCurrentInput(null);
+        var item = undoList[undoCount];
+        undoCount++;
+        document.getElementById("undo").disabled = false;
+        document.getElementById("undo").innerHTML = "Undo " + item.name;
+        document.getElementById("redo").disabled = (undoCount == undoList.length);
+        document.getElementById("redo").innerHTML = (undoCount < undoList.length)? ("Redo " + undoList[undoCount].name) : "Redo";
+        applyUndoItem(item.name, item.newValue);
+    }
+}
+
+function addUndoItem(name, oldValue, newValue) {
+    if (applyUndoInProgress) {
+        return;
+    }
+//    console.log("old value = " + oldValue + "\nnew value = " + newValue);
+    undoList.length = undoCount;
+    if (name == "Edit Rule" && undoCount > 0) {
+        var prev = undoList[undoCount-1];
+        if (prev.name == "Edit Rule" && prev.oldValue.state == oldValue.state && prev.oldValue.symbol == oldValue.symbol) {
+            prev.newValue = newValue;  // combine undo's that edit the same rule
+            return;
+        }
+    }
+    undoList.push( { name: name, oldValue: oldValue, newValue: newValue } );
+    if (undoList.length > 100) {
+        undoList.shift();
+    }
+    undoCount = undoList.length;
+    document.getElementById("undo").disabled = false;
+    document.getElementById("undo").innerHTML = "Undo " + name;
+    document.getElementById("redo").disabled = true;
+    document.getElementById("redo").innerHTML = "Redo";
+}
+
+function applyUndoItem(name, value) {
+    applyUndoInProgress = true;
+    switch (name) {
+        case "Set Tape":
+            TM.tape.setContents(value.contents,value.position);
+            break;
+        case "New Machine":
+        case "Install Example":
+        case "Import JSON":
+            install(new Program(JSON.parse(value)));
+            break;
+        case "Delete Rule":
+        case "Create Rule":
+            if (value.what == "add") {
+                TM.program.rules[value.state][value.symbol] = value.action;
+                var holder = document.getElementById("rules");
+                var pos = 0;
+                while (pos < holder.children.length) {
+                    if (holder.children[pos].TM_state > value.state)
+                        break;
+                    if (holder.children[pos].TM_state == value.state && holder.children[pos].TM_symbol > value.elem.TM_symbol)
+                        break;
+                    pos++;
+                }
+                if (pos == holder.children.length)
+                    holder.appendChild(elem);
+                else
+                    holder.insertBefore(value.elem,holder.children[pos]);
+                selectRule(value.elem.TM_state, TM.program.all_symbols.charAt(value.elem.TM_symbol));
+            }
+            else { // delete
+                if (selectedRowID && selectedRowID == value.tr.id)
+                    selectRule(null);
+                document.getElementById("rules").removeChild(value.tr);
+                delete TM.program.rules[value.state][value.symbol];
+            }
+            break;
+        case "Edit Rule":
+            TM.program.rules[value.state][value.symbol] = value.action;
+            var id = "row-" + value.state + "-" + TM.program.all_symbols.indexOf(value.symbol);
+            var elem = document.getElementById(id);
+            var symbols = TM.program.all_symbols;
+            var oldsym = (value.symbol == symbols.charAt(symbols.length-1))? 'other' : value.symbol;
+            var newsym = (value.action.newSymbol == symbols.charAt(symbols.length-1))? 'same' : value.action.newSymbol;
+            elem.innerHTML =
+                  "<td>" + value.state + "</td>" +
+                  "<td class='border-right'>" + oldsym + "</td>";
+            var td = document.createElement("td");
+            td.innerHTML = newsym;
+            td.TM_edit = "rule_newsymbol";
+            td.addEventListener("mousedown",selectRuleByMouse,false);
+            elem.appendChild(td);
+            td = document.createElement("td");
+            td.innerHTML =  value.action.newState==-1 ? "h" : ""+value.action.newState;
+            td.TM_edit = "rule_newstate";
+            td.addEventListener("mousedown",selectRuleByMouse,false);
+            elem.appendChild(td);
+            td = document.createElement("td");
+            td.innerHTML = value.action.direction;
+            td.TM_edit = "rule_direction";
+            td.addEventListener("mousedown",selectRuleByMouse,false);
+            elem.appendChild(td);
+            selectRule(value.state,value.symbol);
+            break;
+    }
+    applyUndoInProgress = false;
+}
+    //   { what: "delete", state: state, symbol: symbol, tr: elem });
+
+
+//----------------------------
+
+function doImportJSON() {
+    if (running)
+        doStop();
+    document.getElementById("JSONtextinput").value = "";
+    document.getElementById("jsonimportbg").style.display = "block";
+    document.getElementById("jsonimport").style.display = "block";
+    document.addEventListener("keydown", doKey, false);
+    document.getElementById("cancelJSONimport").onclick = dismiss;
+    document.getElementById("applyJSONimport").onclick = apply;
+    document.getElementById("grabcurrent").onclick = grabCurrent;
+    function apply() {
+        var text = document.getElementById("JSONtextinput").value.trim();
+        if (text === "") {
+            alert("Enter a legal value before Applying\n(or use Cancel)");
+            return;
+        }
+        var json, prog;
+        try {
+            json = JSON.parse(text);
+        }
+        catch (e) {
+            alert("The text from the input box is not legal JSON:\n" + e);
+            return;
+        }
+        try {
+            prog = new Program(json);
+        }
+        catch (e) {
+            alert("Error in program:\n" + e);
+            return;
+        }
+        var oldVal = applyUndoInProgress? null : TM.toJSON();
+        install(prog);
+        if ( ! applyUndoInProgress)
+            addUndoItem("Import JSON", oldVal, text);
+        dismiss();
+    }
+    function dismiss() {
+        document.getElementById("jsonimportbg").style.display = "none";
+        document.getElementById("jsonimport").style.display = "none";
+        document.removeEventListener("keydown", doKey, false);
+    }
+    function grabCurrent() {
+        document.getElementById("JSONtextinput").value = TM.toJSON();
+    }
+    function doKey(evt) {
+        var code = evt.keyCode;
+        if (code == 27) {
+            dismiss();
+        }
+    }
+}
+
+
+function init() {
+    message = new Message("message");
+    try {
+       var tapeCanvas = document.getElementById("tape-canvas");
+       tape = new Tape(tapeCanvas);
+    }
+    catch (e) {
+        message.setText("Sorry.  This page requires canvas graphics, but it is not available.");
+       return;
+    }
+    TM = new Machine(tape);
+    setUpDragging(tape);
+    window.onresize = doResize;
+    doResize();
+    document.getElementById("run-btn").onclick = doRun;
+    document.getElementById("stop-btn").onclick = doStop;
+    document.getElementById("step-btn").onclick = doStep;
+    document.getElementById("stepback-btn").onclick = doStepBack;
+    stepBackStack = new StepBackStack(100);
+    document.getElementById("speed-select").value = "15";
+    speed = 15;
+    document.getElementById("speed-select").onchange = doSetSpeed;
+    document.getElementById("reset-btn").onclick = doReset;
+    document.getElementById("step-btn").disabled = false;
+    document.getElementById("run-btn").disabled = false;
+    document.getElementById("stop-btn").disabled = true;
+    document.getElementById("reset-btn").disabled = true;
+    document.getElementById("old-state").onchange = checkEditRule;
+    document.getElementById("old-symbol").onchange = checkEditRule;
+    document.getElementById("new-symbol").onchange = checkEditRule;
+    document.getElementById("new-state").onchange = checkEditRule;
+    document.getElementById("move").onchange = checkEditRule;
+    document.getElementById("edit-btn").onclick = doEditRule;
+    document.getElementById("new-btn").onclick = doNew;
+    document.getElementById("delete-btn").onclick = doDeleteSelectedRule;
+    document.getElementById("delete-btn").disabled = true;
+    document.getElementById("tape-input-btn").onclick = doSetTapeContents;
+    document.getElementById("tape-input").value = "";
+    document.getElementById("load-btn").onclick = doLoadExample;
+    document.getElementById("import-json-btn").onclick = doImportJSON;
+    document.addEventListener("keydown",doKeyDown,false);
+    document.addEventListener("keypress",doKeyPress,false);
+    document.getElementById("tape-input").onfocus = noinput;
+    document.getElementById("undo").onclick = doUndo;
+    document.getElementById("redo").onclick = doRedo;
+    document.getElementById("undo").disabled = true;
+    document.getElementById("redo").disabled = true;
+    var elems = document.getElementsByTagName("select");
+    for (i = 0; i < elems.length; i++)
+        elems[i].onfocus = noinput;
+    elems = document.getElementsByTagName("button");
+    for (i = 0; i < elems.length; i++)
+        elems[i].onfocus = noinput;
+    tapeInputMessage = new Message("tape-input-message","");
+    if (installExamples())
+       install(new Program(examplePrograms[0]));
+    else
+        install(new Program());
+    function noinput() {
+        //console.log("somthing was focussed");
+        setCurrentInput(null);
+    }
+}
+
+</script>
+</head>
+<body onload="init();">
+<div id="content">
+
+<h2>Turing Machine Simulator <span style="font-size:66%">(<a href="TM-info.html"><b>Click here</b></a> for info and instructions)</span></h2>
+
+<noscript>
+<p class="message">Sorry. This page requires JavaScript, which is not available.</p>
+</noscript>
+
+<p id="description"></p>
+
+<p id="message" class="message">&nbsp;</p>
+    
+<div id="tape-holder">
+<canvas id="tape-canvas" width=100 height=120></canvas>
+</div>
+
+<div id="editor-holder">
+<table cellspacing=0 cellpading=6>
+<tr valign="center"><td><b style="font-size:133%">Rule Editor</b></td>
+</td><td>
+    <div style="display: inline-block; margin-left:30px; margin-right: 30px">
+    <table cellspacing=0 cellpadding=4 bgcolor=white border=0>
+    <tr align=center>
+    <td><b>OldState</b></td><td><b>OldSymbol</b></td>
+           <td><b>NewSymbol</b></td><td><b>NewState</b></td><td><b>Move</b></td></tr>
+    <tr align=center>
+    <td><select id="old-state"></select></td>
+    <td><select id="old-symbol"></select></td>
+    <td><select id="new-symbol"></select></td>
+    <td><select id="new-state"></select></td>
+    <td><select id="move">
+         <option value="L">L</option>
+         <option value="R">R</option>
+         <option value="S">S</option>
+    </select></td>
+    </tr>
+    </table>
+    </div>
+</td>
+<td><button id="edit-btn">Create Rule</button></td></tr></table>
+</div>
+
+<table id="bottom-table" cellspacing=0 cellpadding=0>
+<tr valign="top"><td>
+<div id="controls">
+    <div class="group">
+    <p><button id="run-btn">Run</button>
+       <button id="stop-btn" style="margin-left:10px">Stop</button>
+    </p>
+    <p><label>Run Speed: <select id="speed-select">
+        <option value="1">fastest</option>
+        <option value="4">fast</option>
+        <option value="15">moderate</option>
+        <option value="40">slow</option>
+        <option value="80">slowest</option>
+    </select></label></p>
+    <p><button id="step-btn" title="Execute one step of the computation">Step</button>
+       <button id="stepback-btn" style="margin-left:10px" title="Undo one step in the computation.">Step Back</button>
+    </p>
+    <p><button id="reset-btn">Reset State to Zero</button></p>
+    </div>
+    <div class="group">
+    <p id="load-examples" style="display:none">
+        <button id="load-btn">Install Example:</button><br>
+        <select style="margin-left:20px" id="example-select"></select>
+    </p>
+    </div>
+    <div class="group">
+    <p><button id="tape-input-btn">Set tape contents to:</button><br>
+        <input type="text" id="tape-input" style="margin-left:30px" size="15" placeholder="(empty)">
+        <span id="tape-input-message" style="color:red"></span>
+    </p>
+    <p><button id="new-btn">New Turing Machine</button></p>
+    <p></p><button id="delete-btn">Delete Selected Rule</button></p>
+    </div>
+    <div class="group">
+    <p><button id="undo">Undo</button></p>
+    <p><button id="redo">Redo</button></p>
+    </div>
+    <div class="group">
+        <p><button id="import-json-btn" title="Put up an input box into which you can copy-and-paste the JSON code for an example, or get the XML for the current example.">Show Import/Export</button></p>
+    </div>
+</div>
+</td><td>
+<div id="rules-holder">
+<table id="rules-table" cellspacing=0 width=450>
+<tr><th>Old<br>State</th><th class="border-right">Old<br>Symbol</th>
+      <th>New<br>Symbol</th><th>New<br>State</th><th>Move</th></tr>
+<tbody id="rules">
+</tbody>
+</table>
+</td></tr>
+</table>
+</div>
+
+</div>
+
+
+<div id="jsonimportbg">
+</div>
+<div id="jsonimport">
+<p>Turing Machine examples can be coded as "JSON documents."<br>
+You can copy-and-paste the JSON code for an example<br>
+into this text input box.  Click "Apply" to import the<br>
+example.  Click "Cancel" or press ESC to cancel. The <br>
+"Grab Current Example" button loads the JSON for the<br>
+example that is currently shown in the program; this<br>
+allows you to save the example (or even edit it by hand).</p>
+<p><button style="margin-left:50px" id="applyJSONimport">Apply</button>
+<button style="margin-left:20px" id="cancelJSONimport">Cancel</button>
+<button style="margin-left:20px" id="grabcurrent">Grab Current Example</button></p>
+<p><textarea rows="21" cols="55" id="JSONtextinput" placeholder="(JSON code goes here)"></textarea>
+</div>
+
+
+</body>
+</html>

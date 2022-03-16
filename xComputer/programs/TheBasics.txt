@@ -1,0 +1,86 @@
+; Welcome to xComputer!  For complete information, please read
+; the "information and instructions" link.  You can also get some 
+; help by hovering you mouse over interface elements on this
+; web page.
+
+; This file contains a fairly simple program written in the
+; assembly language of xComputer.  It illustrates a few basic
+; assembly language instructions and the format of assembly
+; language programs.  (Note that a semicolon (;) and anything
+; that follows it on a line is a comment, not part of the
+; actual program.)
+
+; This program computes the sum of a list of numbers.  The
+; list can only contain non-zero numbers.  A zero marks
+; the end of the list.  The list of numbers is at the end
+; of this file.  They are actually treated by the computer
+; as part of the program:  A number on a line by itself
+; is simply stored in memory.  An instruction, on the
+; other hand, is translated into a number that represents
+; that instruction in machine language.  It is that
+; number that is actually stored in memory.
+
+; To run a program, click the "Load Program into xComputer"
+; button that is located below the program editor.  The program 
+; will be translated into assembly language and loaded into
+; memory.  Once the program is in memory, you can run it by clicking
+; on the "Run" button.  There is a run speed pop-up menu for
+; selecting the speed at which the program runs.  Alternatively,
+; you can use the "Step" or "Cycle" button to move through
+; the execution of the program manually, step-by-step.
+
+; Here is the actual program code.  Each instruction has a 
+; comment that says what it does:
+
+lod-c 30  ;  Load the constant 30 into the AC register.
+sto 25    ;  Store the value (30) from AC into location 25.
+
+lod-c 0   ; Load 0 into the AC.
+sto 26    ; Store the 0 into location 26.
+
+lod-i 25  ; The value in location 25 is an address of some
+          ;    memory location.  Get the value from that
+          ;    address and put it into the AC.  (The "i"
+          ;    indicates what is called indirect addressing.)
+          
+jmz 12    ; If the value in the AC is zero (indicating 
+          ;    end of the list of numbers) then jump
+          ;    to location 12, where the program will halt.
+          
+add 26    ; Add the number in location 26 (the sum of the
+          ;    previous numbers) to the AC (which contains
+          ;    the next number from the list).
+sto 26    ; Put the number from the AC into location 26.
+
+lod 25    ; Load the number from location 25 into the AC.
+inc       ; Add one to the number in the AC.
+sto 25    ; Put the number from AC into location 25, so
+          ;   location 25 now contains the location of the
+          ;   next number in the list.
+
+jmp 4     ; Jump to location 4, to get the next number
+          ;    from the list.  NOTE:  Locations are numbered
+          ;    starting from zero!
+          
+hlt       ; This is a halt instruction, which tells the
+          ;    computer to stop execution.  (It is in
+          ;    location number 12.)
+
+@30  ; This is a special command that says that the following
+     ; items are to be stored in memory starting "AT" location
+     ; number 30.
+     
+26   ; These numbers will be in memory starting at
+17   ;    location 30.  The computer will add them
+-34  ;    and leave the answer in location 26.
+15
+12
+-23
+-7
+19
+87
+11
+-73
+21
+0
+

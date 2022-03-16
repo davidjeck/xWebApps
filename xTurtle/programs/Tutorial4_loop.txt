@@ -1,0 +1,85 @@
+{ xTurtle Tutorial Example #4:  Loops
+
+  A loop is used to repeat a sequence
+  of statements over and over.  Some
+  method must be provided to exit from
+  the loop.
+  
+  In xTurtle, the beginning of a loop
+  is marked with LOOP, and the end
+  is marked with END LOOP.
+}
+
+LOOP  { start of a loop }
+   forward(4)  { draw a line }
+   back(4)     { return to center }
+   turn(5)     { rotate 5 degrees }
+   EXIT IF heading = 0  { maybe exit }
+END LOOP { marks end of loop }
+
+  { In the preceding loop, the
+     repeated statements draw a
+     line radiating out from a
+     center point, and then rotate
+     the turtle.  Each time 
+     through the loop, the 
+     computer asks itself, "Is
+     heading = 0".  If the answer 
+     is yes, then the loop ends
+     and the computer goes on to
+     the next statement following
+     the loop.  If the answer is
+     no, the computer continues
+     to execute the loop.   (The
+     heading is the direction 
+     that the turtle is facing.) }
+     
+PenUp
+MoveTo(-2.5,-6)
+PenDown
+
+DECLARE count
+count := 0
+gray
+
+LOOP
+   forward(5)
+   turn(45)
+   count := count + 1
+   EXIT IF count = 8
+END LOOP
+   { In this loop, the computer
+     adds 1 to count each time
+     it goes through the loop.
+     After it does this 8 times,
+     the value of count will be 8.
+     At that time, the loop will
+     end.  The net result is that
+     an 8-sided polygon has
+     been drawn.  This is an
+     example of a counting loop. }
+
+{ As a final example, the 
+  following example computes
+  the average of 100 randomly
+  chosen numbers.  You should
+  expect the average to be close
+  to 0.5. }
+  
+DECLARE total, average
+total := 0
+count := 0  { This was already declared }
+
+LOOP
+   total := total + random
+   count := count + 1
+   EXIT IF count = 100
+END LOOP
+
+average := total / 100
+
+PenUp
+MoveTo(-8,8)
+PenDown
+blue
+DrawText("The average was #average.")

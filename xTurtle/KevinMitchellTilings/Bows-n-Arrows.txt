@@ -1,0 +1,66 @@
+{
+ Star polygon tiling from cover of 
+ "Tilings and Patterns: An Introduction"
+ by Grunbaum & Shepard}
+
+declare rad
+rad:=1.5
+declare side
+side:=2*rad*sin(36)
+declare perp
+perp:=rad*cos(36)
+
+sub bow(side)
+declare ct
+ct:=0
+face(-90)
+penDown
+  loop
+    forward(side)
+    turn(72)
+    ct:= ct+1
+    exit if ct=5
+  end loop
+ct:=0
+face(90)
+  loop
+    turn(72)
+    forward(side)
+    ct:= ct+1
+    exit if ct=4
+  end loop
+end sub
+
+sub vArrow(side)
+declare ct
+ct:=0
+face(0)
+penDown
+  loop
+    forward(side)
+    turn(72)
+    ct:= ct+1
+    exit if ct=5
+  end loop
+ct:=0
+face(180)
+  loop
+    turn(72)
+    forward(side)
+    ct:= ct+1
+    exit if ct=4
+  end loop
+end sub
+
+penUp
+fork(6)
+move((forkNumber-3)*(2*(rad+perp)+side),0)
+fork(6)
+move(0,(forkNumber-3)*(2*(rad+perp)+side))
+fork(2)
+move((forkNumber-1)*(rad+perp+side/2),(forkNumber-1)*(rad+perp+side/2))
+bow(side)
+
+penUp
+move(-side/2,-rad-perp)
+vArrow(side)

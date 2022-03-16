@@ -1,0 +1,90 @@
+; Example: 3N+1 sequences
+
+; This file doesn't illustrate anything in particular about
+; the xComputer.  It's just that I really like the 3N+1
+; problem.
+
+; Starting from any positive integer N, the "3N+1 sequence"
+; for N is computed as follows:  If N is 1, then stop; the
+; sequence is complete.  Otherwise, if N is even then divide
+; N by 2.  Otherwise (if N is odd), multiply N by three and
+; add 1.  The question is whether this sequence terminates
+; for ALL starting values N.  The answer is not known at 
+; this time.
+
+; This program computes 3N+1 sequences for various values
+; of N, starting from 1.  For each sequence, it counts
+; the number of terms in the sequence.  The values are
+; stored in memory in successive memory locations.
+
+; Run this at "Fastest" speed, and watch it in graphics
+; mode to see the random-looking series of sequence
+; lengths that are generated.  Or watch locations
+; 42, 43, and 44 (labeled by num, N and ct), which are
+; where all the computational action takes place.
+; Watch the graphics display!
+
+
+       lod-c 1    ; Let num = 1.  "Num" is the starting
+       sto num    ;   value for the current sequence
+       
+       lod-c 100  ; 100 is location in memory where
+       sto loc    ;   first answer is to be stored.
+
+loop1: lod num    ; "Loop1" computes one sequence; begin by
+       sto N      ;    initializing N to the starting value
+                  ;    for the sequence.
+
+       lod-c 1    ; "Ct" keeps track of the number of terms
+       sto ct     ;     in the sequence; start counting at 1.
+
+loop2: lod N      ; "Loop2" computes one term in the sequence.
+       dec        ; Test if N=1 by subtracting 1 from it and
+       jmz next   ;    testing if the answer is 0.  If so, this
+                  ;    sequence is complete; jump to "next" to
+                  ;    get ready for the next sequence.
+       and-c 1    ; Compute bitwise logical AND of 1 with N-1.
+       jmz odd    ; If the answer is 0, N is odd; jump to
+                  ;    location "odd" to handle that case.
+       lod N      ; Otherwise, N is even; divide N by 2 by
+       shr        ;    shifting it right, and putting the
+       sto N      ;    result back into N.  Then jump to
+       jmp count  ;    "count" where this term in the sequence
+                  ;    is counted.
+odd:   lod N      ; If N is odd, multiply it by 3 by adding it
+       add N      ;    it to itself twice.  Then add 1.
+       jmf error  ;    If any of these additions produces a
+       add N      ;    result greater than 65535, the FLAG
+       jmf error  ;    register is set.  This indicates an
+       add-c 1    ;    error: "Number too large for this
+       jmf error  ;    computer".  Jump to "error" if the
+       sto N      ;    FLAG is set.
+
+count: lod ct     ; Count this term in the sequence by
+       inc        ;    incrementing the value of ct.
+       sto ct
+       jmp loop2  ; Return to start of "loop2" to do the
+                  ;    next term in the sequence.
+
+next:  lod ct     ; The 3N+1 sequence for the current starting
+       sto-i loc  ;    value, num, is complete.  Store the
+       lod loc    ;    number of terms in the sequence in the
+       inc        ;    location given by the value of loc,
+       sto loc    ;    then add 1 to loc.
+       lod num    ; Also add 1 to num to give the starting
+       inc        ;    value for the next sequence.
+       sto num    ;
+       jmp loop1  ; Jump to "loop1" to do the next sequence.
+
+error: lod-c 0    ; A term in the current sequence has
+       dec        ; exceeded 65535.  Store -1 (computed
+       sto ct     ; as zero minus one) in ct and jump to
+       jmp next   ; "next" to get ready for the next sequence.
+
+num:   0   ; starting value of sequence
+ct:    0   ; number of terms in the sequence
+N:     0   ; current value of N in sequence
+loc:   0   ; address where answer is to be stored
+
+5#    0    ; Put 5 extra zeros in memory, just to leave space
+

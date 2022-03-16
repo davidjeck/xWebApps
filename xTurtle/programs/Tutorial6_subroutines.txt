@@ -1,0 +1,86 @@
+{ xTurtle Tutorial Example #6:  Subroutines
+
+  It is possible to define subroutines 
+  and functions that can be used just
+  like built-in subroutines, such as
+  forward(x), and built-in functions,
+  such as sqrt(x).  A subroutine is
+  just a list of statements to be
+  executed.  A function is similar, 
+  except it returns a value to be
+  used in further computation. }
+  
+SUB Triangle   { Begin definition of
+                 a subroutine named
+                 "Triangle". }
+  forward(3)
+  turn(120)
+  forward(3)  { Statements to define }
+  turn(120)   {    what the subroutine }
+  forward(3)  {    does. }
+  turn(120)
+
+END SUB  { Marks the end of the subroutine. }
+
+{ Defining this subroutine has not
+  actually drawn anything.  When the
+  subroutine is called by using its
+  name as a statement, the commands
+  inside the subroutine are exeuted. }
+  
+Triangle  { Call the subroutine to
+            draw a triangle. }
+            
+SUB Square(length)  { Define a subroutine
+                      that has a parameter called
+                      "length".  A value for the
+                      parameter will be supplied
+                      when the subroutine is called. }
+  forward(length)
+  turn(90)
+  forward(length)  { Statements to define }
+  turn(90)         {    what the subroutine }
+  forward(length)  {    does. }
+  turn(90)
+  forward(length)
+  turn(90)
+
+END SUB  { Marks the end of the subroutine. }
+
+PenUp
+MoveTo(-6,-6)
+PenDown
+blue
+
+Square(5)  { Draw a 5-by-5 square }
+PenUp MoveTo(-5,-5) PenDown
+Square(3)  { Draw a 3-by-3 square }
+PenUp MoveTo(-4,-4) PenDown
+Square(1)  { Draw a 1-by-1 square }
+
+
+FUNCTION Area(length,width)
+    { Begin definition of a function
+      named "Area", with two parameters
+      named "length" and "width" }
+      
+   DECLARE val  { This is a local variable,
+                  for use inside this
+                  function only. }
+                  
+   val := length * width  { Compute a value. }
+   
+   RETURN val  { Specify the value to be
+                 returned by the function. }
+
+END FUNCTION
+
+DECLARE answer
+answer := Area(5,7)  { Call the function Area
+                       with parameter values
+                       5 and 7. }
+                       
+PenUp MoveTo(-7,7) Pendown
+green
+
+DrawText("A 5-by-7 rectangle has area #answer.")

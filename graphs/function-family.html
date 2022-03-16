@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<!--
+    Web page written by David Eck, http://math.hws.edu/eck/index.html
+    This page depends on JavaScritp files xfunctions-jan2014.js and
+    slider-canvas-for-function-family.js.
+    You can do anything you like with this web page and with the code, but
+    if you use a substantial portion of it, you should include attribution.
+-->
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Family of Functions</title>
+<style>
+   canvas.slider {
+       display:block;
+   }
+   body {
+       background-color: #D8D8D8;
+       margin-left: 15px;
+   }
+</style>
+<script src="xfunctions-jan2014.js"></script>
+<script src="slider-canvas-for-function-family.js"></script>
+<script>
+    
+var canvas, graphics, parser, variable;
+
+var aslider, bslider, cslider, dslider;
+
+var aparam, bparam, cparam, dparam;
+var amin = -5, amax = 5;
+var bmin = -5, bmax = 5;
+var cmin = -5, cmax = 5;
+var dmin = -5, dmax = 5;
+
+var coords, axes, graph;
+
+function graphIt() {
+    document.getElementById("message").innerHTML = "&nbsp;";
+    document.getElementById("definition").style.backgroundColor = "white";
+    var expstr = document.getElementById("definition").value;
+    graph.setExpression(null);
+    var expression;
+    try {
+        expression = parser.parse(expstr);
+    }
+    catch (e) {
+        document.getElementById("message").innerHTML = "Error in function: " + e;
+        coords.draw(graphics,0,0,canvas.width,canvas.height);
+        document.getElementById("definition").style.backgroundColor = "pink";
+        return;
+    }
+    graph.setExpression(expression);
+    coords.draw(graphics,0,0,canvas.width,canvas.height);
+}
+
+function doApplyLimits() {
+    var error = null;
+    var xmin = Number( document.getElementById("xmin").value.trim() );   
+    var xmax = Number( document.getElementById("xmax").value.trim() );   
+    var ymin = Number( document.getElementById("ymin").value.trim() );   
+    var ymax = Number( document.getElementById("ymax").value.trim() );
+    if (isNaN(xmin))
+        error = "The data entered for xmin is not a legal number";
+    else if (isNaN(xmax))
+        error = "The data entered for xmax is not a legal number";
+    else if (isNaN(ymin))
+        error = "The data entered for ymin is not a legal number";
+    else if (isNaN(ymax))
+        error = "The data entered for ymax is not a legal number";
+    else if (xmax <= xmin)
+        error = "The value of xmax must be greater than the value of xmin";
+    else if (ymax <= ymin)
+        error = "The value of ymax must be greater than the value of ymin";
+    if (error) {
+        document.getElementById("message").innerHTML = "Error in limits: "+ error;
+        graph.setExpression(null);
+        coords.draw(graphics,0,0,canvas.width,canvas.height);
+    }
+    else {
+        coords.setLimits(xmin,xmax,ymin,ymax);
+        if (document.getElementById("equalize").checked)
+            coords.equalizeAxes();
+        graphIt();
+    }
+}
+
+function doSliderChanged(whichSlider) {
+    if (whichSlider =="a") {
+        var aval = aslider.value(0);
+        if (aval != aparam.getValue()) {
+            aslider.setValue(0, aval);
+            aparam.setValue(aval);
+            graphIt();
+        }
+    }
+    else if (whichSlider == "b") {
+        var bval = bslider.value(0);
+        if (bval != bparam.getValue()) {
+            bslider.setValue(0, bval);
+            bparam.setValue(bval);
+            graphIt();
+        }
+    }
+    else if (whichSlider == "c") {
+        var cval = cslider.value(0);
+        if (cval != cparam.getValue()) {
+            cslider.setValue(0, cval);
+            cparam.setValue(cval);
+            graphIt();
+        }
+    }
+    else if (whichSlider == "d") {
+        var dval = dslider.value(0);
+        if (dval != dparam.getValue()) {
+            dslider.setValue(0, dval);
+            dparam.setValue(dval);
+            graphIt();
+        }
+    }
+}
+
+function doSliderLimits() {
+    var error = null;
+    var amin1 = Number( document.getElementById("amin").value.trim() );   
+    var amax1 = Number( document.getElementById("amax").value.trim() );   
+    var bmin1 = Number( document.getElementById("bmin").value.trim() );   
+    var bmax1 = Number( document.getElementById("bmax").value.trim() );   
+    var cmin1 = Number( document.getElementById("cmin").value.trim() );   
+    var cmax1 = Number( document.getElementById("cmax").value.trim() );   
+    var dmin1 = Number( document.getElementById("dmin").value.trim() );   
+    var dmax1 = Number( document.getElementById("dmax").value.trim() );   
+    if (isNaN(amin1))
+        error = "The data entered for amin is not a legal number";
+    else if (isNaN(amax1))
+        error = "The data entered for amax is not a legal number";
+    else if (isNaN(bmin1))
+        error = "The data entered for bmin is not a legal number";
+    else if (isNaN(bmax1))
+        error = "The data entered for bmax is not a legal number";
+    else if (isNaN(cmin1))
+        error = "The data entered for cmin is not a legal number";
+    else if (isNaN(cmax1))
+        error = "The data entered for cmax is not a legal number";
+    else if (isNaN(dmin1))
+        error = "The data entered for dmin is not a legal number";
+    else if (isNaN(dmax1))
+        error = "The data entered for dmax is not a legal number";
+    else if (amax1 <= amin1)
+        error = "The value of amin must be less than the value of amax";
+    else if (bmax1 <= bmin1)
+        error = "The value of bmin must be less than the value of bmax";
+    else if (cmax1 <= cmin1)
+        error = "The value of cmin must be less than the value of cmax";
+    else if (dmax1 <= dmin1)
+        error = "The value of dmin must be less than the value of dmax";
+    if (error) {
+        document.getElementById("message").innerHTML = "Error in slider limits: "+ error;
+        graph.setExpression(null);
+        coords.draw(graphics,0,0,canvas.width,canvas.height);
+    }
+    else {
+        document.getElementById("message").innerHTML = "&nbsp;";
+        amin = amin1;
+        amax = amax1;
+        bmin = bmin1;
+        bmax = bmax1;
+        cmin = cmin1;
+        cmax = cmax1;
+        dmin = dmin1;
+        dmax = dmax1;
+        if (aparam.getValue() < amin) {
+            aparam.setValue(amin);
+            aslider.setValue(0, amin);
+        }
+        else if (aparam.getValue() > amax) {
+            aparam.setValue(amax);
+            aslider.setValue(0, amax);
+        }
+        if (bparam.getValue() < bmin) {
+            bparam.setValue(bmin);
+            bslider.setValue(0, bmin);
+        }
+        else if (bparam.getValue() > bmax) {
+            bparam.setValue(bmax);
+            bslider.setValue(0, bmax);
+        }
+        if (cparam.getValue() < cmin) {
+            cparam.setValue(cmin);
+            cslider.setValue(0, cmin);
+        }
+        else if (cparam.getValue() > cmax) {
+            cparam.setValue(cmax);
+            cslider.setValue(0, cmax);
+        }
+        if (dparam.getValue() < dmin) {
+            dparam.setValue(dmin);
+            dslider.setValue(0, dmin);
+        }
+        else if (dparam.getValue() > dmax) {
+            dparam.setValue(dmax);
+            dslider.setValue(0, dmax);
+        }
+        aslider.setMinMax(0,amin,amax);
+        bslider.setMinMax(0,bmin,amax);
+        cslider.setMinMax(0,cmin,amax);
+        dslider.setMinMax(0,dmin,amax);
+        graphIt();
+    }
+}
+
+function toSliderPosition(min,max,x) {
+    if (x < min)
+       x = min;
+    if (x > max)
+       x = max;
+    return Math.round( (x-min)/(max-min) * 300)
+}
+
+function format(x) {
+    if (isNaN(x) || x == Infinity || x == -Infinity)
+       return "undefined";
+    else if (x == 0)
+       return "0";
+    else if (Math.abs(x) < 5e-3 || Math.abs(x) > 5000)
+        return x.toPrecision(3);
+    else if (Math.abs(x) > 500)
+        return x.toFixed(1);
+    else if (Math.abs(x) > 50)
+        return x.toFixed(2);
+    else
+        return x.toFixed(3);
+}
+
+function init() {
+    canvas = document.getElementById("canvas");
+    graphics = canvas.getContext("2d");
+    if (graphics == null) {
+        document.getElementById("message").innerHTML = 
+            "Your browser does not have canvas support, which is required by this page!";
+        return;
+    }
+    parser = new xfunctions.Parser();
+    aparam = parser.defineVariable("a");
+    aparam.setValue(1);
+    bparam = parser.defineVariable("b");
+    bparam.setValue(1);
+    cparam = parser.defineVariable("c");
+    dparam = parser.defineVariable("d");
+    variable = parser.defineVariable("x");
+    coords = new xfunctions.CoordinateRect();
+    coords.setLimits(-5,5,-5,5);
+    axes = new xfunctions.Axes("x","y");
+    graph = new xfunctions.Graph1D(null,variable);
+    aslider = new SliderCanvas("aslider");
+    bslider = new SliderCanvas("bslider");
+    cslider = new SliderCanvas("cslider");
+    dslider = new SliderCanvas("dslider");
+    aslider.onChange = function() { doSliderChanged("a") };
+    bslider.onChange = function() { doSliderChanged("b") };
+    cslider.onChange = function() { doSliderChanged("c") };
+    dslider.onChange = function() { doSliderChanged("d") };
+    aslider.addSlider({label: "a", min:amin, max:amax, value:aparam.getValue(), step:0.001, decimals:3});
+    bslider.addSlider({label: "b", min:bmin, max:bmax, value:bparam.getValue(), step:0.001, decimals:3});
+    cslider.addSlider({label: "c", min:cmin, max:cmax, value:cparam.getValue(), step:0.001, decimals:3});
+    dslider.addSlider({label: "d", min:dmin, max:dmax, value:dparam.getValue(), step:0.001, decimals:3});
+    aslider.draw();
+    bslider.draw();
+    cslider.draw();
+    dslider.draw();
+    document.getElementById("equalize").checked = true;
+    document.getElementById("xmin").value="-5";
+    document.getElementById("xmax").value="5";
+    document.getElementById("ymin").value="-5";
+    document.getElementById("ymax").value="5";
+    document.getElementById("amin").value="" + amin;
+    document.getElementById("amax").value="" + amax;
+    document.getElementById("bmin").value="" + bmin;
+    document.getElementById("bmax").value="" + bmax;
+    document.getElementById("cmin").value="" + cmin;
+    document.getElementById("cmax").value="" + cmax;
+    document.getElementById("dmin").value="" + dmin;
+    document.getElementById("dmax").value="" + dmax;
+    document.getElementById("definition").value = "a*sin(b*x + c) + d";
+    document.getElementById("definition").onchange = graphIt;
+    coords.draw(graphics,0,0,canvas.width,canvas.height);
+    coords.borderWidth = 2;
+    coords.add(axes);
+    coords.add(graph);
+    coords.equalizeAxes();
+    graphIt();
+}
+
+</script>
+<head>
+<body onload="init()" style="background-color: lightGray">
+
+<h2>Graphs of a Parameterized Family of Functions</h2>
+
+<noscript><p style="color:red">Sorry, but this page requires JavaScript.</p></noscript>
+
+<p>This page graphs functions that can include parameters a, b, c, and d, as well as the variable x.<br>
+Drag the slider to change the parameter values.  For informatino about what is legal in a function<br>
+definition, see <a href="grapher.html">grapher.html</a>.</p>
+
+
+<p>
+xmin:&nbsp;<input type=text size=12 id="xmin">
+<span style="margin-left:1cm">xmax:&nbsp;<input type=text size=12 id="xmax"></span>
+<button onclick="doApplyLimits()" style="margin-left:2cm">Apply Limits</button>
+<br>
+ymin:&nbsp;<input type=text size=12 id="ymin">
+<span style="margin-left:1cm">ymax:&nbsp;<input type=text size=12 id="ymax"></span>
+<input type="checkbox" id="equalize" onchange="doApplyLimits()" style="margin-left:2cm"><label for="equalize">Equalize Axes</label>
+</p>
+
+<p style="color:#990000; font-weight: bold" id="message">&nbsp;</p>
+
+<p><b>f(x) =</b> <input type="text" size="50" id="definition">
+<button onclick="graphIt()">Graph It</button></p>
+<table border=0>
+<tr valign="bottom">
+<td>amin: <input type="text" size="6" id="amin">&nbsp;&nbsp;
+<td>amax: <input type="text" size="6" id="amax">&nbsp;&nbsp;
+<td><button onclick="doSliderLimits()">Apply</button>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<td><canvas class="slider" id="aslider" width="400" height="40"></canvas>
+<tr valign="bottom">
+<td>bmin: <input type="text" size="6" id="bmin">&nbsp;&nbsp;
+<td>bmax: <input type="text" size="6" id="bmax">&nbsp;&nbsp;
+<td><button onclick="doSliderLimits()">Apply</button>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<td><canvas class="slider" id="bslider" width="400" height="40"></canvas>
+<tr valign="bottom">
+<td>cmin: <input type="text" size="6" id="cmin">&nbsp;&nbsp;
+<td>cmax: <input type="text" size="6" id="cmax">&nbsp;&nbsp;
+<td><button onclick="doSliderLimits()">Apply</button>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<td><canvas class="slider" id="cslider" width="400" height="40"></canvas>
+<tr valign="bottom">
+<td>dmin: <input type="text" size="6" id="dmin">&nbsp;&nbsp;
+<td>dmax: <input type="text" size="6" id="dmax">&nbsp;&nbsp;
+<td><button onclick="doSliderLimits()">Apply</button>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<td><canvas class="slider" id="dslider" width="400" height="40"></canvas>
+</table>
+
+<div>
+<canvas id="canvas" width=800 height=580 style="background-color: white; margin-top:8px"></canvas>
+</div>
+
+
+
+
+</body>
+</html>

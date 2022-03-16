@@ -1,0 +1,34 @@
+{
+ Semi-regular 4.6*.4.6*.4.6* uniform tiling
+ using rgular star polygons.}
+
+declare side
+side:=1.75
+declare hshift
+hshift:=sqrt(2)*side*cos(30)
+declare vshift
+vshift:=side*(sqrt(2)-sin(15)+cos(15))
+
+sub motif(side)
+face(45)
+penDown
+declare ct
+ct:=0
+  loop
+   forward(side)
+   turn(150)
+			forward(side)
+   turn(-90)
+   ct:= ct+1
+   exit if ct=6
+  end loop
+end sub
+
+penUp
+fork(6)
+move((forkNumber-4)*2*hshift,0)
+fork(6)
+move(0,(forkNumber-4)*2*vshift)
+fork(2)
+move((forkNumber-1)*hshift,(forkNumber-1)*vshift)
+motif(side)

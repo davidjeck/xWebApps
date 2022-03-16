@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+
+<!--
+    Web page written by David Eck, http://math.hws.edu/eck/index.html
+    You can do anything you like with this web page and with the code, but
+    if you use a substantial portion of it, you should include attribution.
+-->
+
+<html>
+
+<!--  This page solves pentominos puzzles on various size boards.
+      One option is to run without stopping, showing only solutions,
+      until all solutions have been found -- a web worker is used
+      for that option, if avilable.  The web worker requires the
+      file pentominos-worker.js.
+-->
+
+<head>
+<meta charset="UTF-8">
+<title>jsPentominosSolver</title>
+<style>
+    body {
+        background-color: #DDDDFF;
+    }
+    canvas {
+        display: block;
+        background-color: #333333;
+        margin-left: 50px;
+    }
+    #options, #controls, #style {
+        padding: 0 6px;
+        background-color: white;
+        border: thin solid black;
+        margin: 10px;
+        float: left;
+    }
+    #canvas-holder {
+        clear: both;
+    }
+</style>
+
+<script>
+    "use strict";
+    
+//------------- Pentominos data independent of UI  ---------
+    
+   /**
+    * This data structure represents the pieces.  There are 12 pieces, and each piece can be rotated
+    * and flipped over.  Some of these motions leave the peice changed because of symmetry.  Each distinct 
+    * position of each piece has a line in this array.  Each line has 9 elements.  The first element is
+    * the number of the piece, from 1 to 12.  The remaining 8 elements describe the shape of the piece
+    * in the following peculiar way:  One square is assumed to be at position (0,0) in a grid; the square is
+    * chosen as the "top-left" square in the piece, in the sense that all the other squares are either to the
+    * right of this square in the same row, or are in lower rows.  The remaining 4 squares in the piece are
+    * encoded by 8 numbers that give the row and column of each of the remaining squares.   If the eight numbers
+    * that describe the piece are (a,b,c,d,e,f,g,h) then when the piece is placed on the board with the top-left 
+    * square at position (r,c), the remaining squares will be at positions (r+a,c+b), (r+c,c+d), (r+e,c+f), and
+    * (r+g,c+h).  This representation is used in the canPlay(), putPiece(), and removePiece() methods. 
+    */
+   var full_piece_data = [
+      [ 1, 0,1,0,2,0,3,0,4 ],  // Describes piece 1 (the "I" pentomino) in its horizontal orientation.
+      [ 1, 1,0,2,0,3,0,4,0 ],  // Describes piece 1 (the "I" pentomino) in its vertical orientation.
+      [ 2, 1,-1,1,0,1,1,2,0 ], // The "X" pentomino, in its only orientation.
+      [ 3, 0,1,1,0,2,-1,2,0 ], // etc....
+      [ 3, 1,0,1,1,1,2,2,2 ],
+      [ 3, 0,1,1,1,2,1,2,2 ],
+      [ 3, 1,-2,1,-1,1,0,2,-2 ],
+      [ 4, 1,0,2,0,2,1,2,2 ],
+      [ 4, 0,1,0,2,1,0,2,0 ],
+      [ 4, 1,0,2,-2,2,-1,2,0 ],
+      [ 4, 0,1,0,2,1,2,2,2 ],
+      [ 5, 0,1,0,2,1,1,2,1 ],
+      [ 5, 1,-2,1,-1,1,0,2,0 ],
+      [ 5, 1,0,2,-1,2,0,2,1 ],
+      [ 5, 1,0,1,1,1,2,2,0 ],
+      [ 6, 1,0,1,1,2,1,2,2 ],
+      [ 6, 1,-1,1,0,2,-2,2,-1 ],
+      [ 6, 0,1,1,1,1,2,2,2 ],
+      [ 6, 0,1,1,-1,1,0,2,-1 ],
+      [ 7, 0,1,0,2,1,0,1,2 ],
+      [ 7, 0,1,1,1,2,0,2,1 ],
+      [ 7, 0,2,1,0,1,1,1,2 ],
+      [ 7, 0,1,1,0,2,0,2,1 ],
+      [ 8, 1,0,1,1,1,2,1,3 ],
+      [ 8, 1,0,2,0,3,-1,3,0 ],
+      [ 8, 0,1,0,2,0,3,1,3 ],
+      [ 8, 0,1,1,0,2,0,3,0 ],
+      [ 8, 0,1,1,1,2,1,3,1 ],
+      [ 8, 0,1,0,2,0,3,1,0 ],
+      [ 8, 1,0,2,0,3,0,3,1 ],
+      [ 8, 1,-3,1,-2,1,-1,1,0 ],
+      [ 9, 0,1,1,-2,1,-1,1,0 ],
+      [ 9, 1,0,1,1,2,1,3,1 ],
+      [ 9, 0,1,0,2,1,-1,1,0 ],
+      [ 9, 1,0,2,0,2,1,3,1 ],
+      [ 9, 0,1,1,1,1,2,1,3 ],
+      [ 9, 1,0,2,-1,2,0,3,-1 ],
+      [ 9, 0,1,0,2,1,2,1,3 ],
+      [ 9, 1,-1,1,0,2,-1,3,-1 ],
+      [ 10, 1,-2,1,-1,1,0,1,1 ],
+      [ 10, 1,-1,1,0,2,0,3,0 ],
+      [ 10, 0,1,0,2,0,3,1,1 ],
+      [ 10, 1,0,2,0,2,1,3,0 ],
+      [ 10, 0,1,0,2,0,3,1,2 ],
+      [ 10, 1,0,1,1,2,0,3,0 ],
+      [ 10, 1,-1,1,0,1,1,1,2 ],
+      [ 10, 1,0,2,-1,2,0,3,0 ],
+      [ 11, 1,-1,1,0,1,1,2,1 ],
+      [ 11, 0,1,1,-1,1,0,2,0 ],
+      [ 11, 1,0,1,1,1,2,2,1 ],
+      [ 11, 1,0,1,1,2,-1,2,0 ],
+      [ 11, 1,-2,1,-1,1,0,2,-1 ],
+      [ 11, 0,1,1,1,1,2,2,1 ],
+      [ 11, 1,-1,1,0,1,1,2,-1 ],
+      [ 11, 1,-1,1,0,2,0,2,1 ],
+      [ 12, 0,1,1,0,1,1,2,1 ],
+      [ 12, 0,1,0,2,1,0,1,1 ],
+      [ 12, 1,0,1,1,2,0,2,1 ],
+      [ 12, 0,1,1,-1,1,0,1,1 ],
+      [ 12, 0,1,1,0,1,1,1,2 ],
+      [ 12, 1,-1,1,0,2,-1,2,0 ],
+      [ 12, 0,1,0,2,1,1,1,2 ],
+      [ 12, 0,1,1,0,1,1,2,0 ]
+    ];
+   
+    var piece_data;
+   
+    var remove_for_symmetry = [ // By removing pieces, we can eliminate solutions that
+                                // are just reflections/rotations of other solutions.
+      [ 9,10 ],  // Pieces to remove for symmetry type 0 = SYMMETRY_V, etc.
+      [ 8,10 ], 
+      [ 9,10 ],
+      [ 8,9,10 ],
+      [ 1 ],
+      [ 1 ],
+      [ 12, 13, 14 ],
+      [ 8,9,10],
+      [ 1,8,9,10]
+    ];
+    
+   var SYMMETRY_NONE = -1,   // Possibly symmetry types of a board, used in GameThread.checkSymmetries
+       SYMMETRY_V = 0,    // vertical reflection symmetry (symmetry about a vertical line)
+       SYMMETRY_H = 1,    // horizontal reflection symmetry (symmetry about a horizontal line)
+       SYMMETRY_R180 = 2, // 180 degree rotation symmetry
+       SYMMETRY_HV = 3,   // horizontal and vertical reflection symmetery, implies R180
+       SYMMETRY_D1 = 4,   // reflection symmetry about diagonal 1
+       SYMMETRY_D2 = 5,   // reflection symmetry about diagonal 2
+       SYMMETRY_D1D2 = 6, // reflection symmetry about both diagonals, implies R180
+       SYMMETRY_R90 = 7,  // 90 degree rotation symmetry, implies R180, R270
+       SYMMETRY_ALL = 8;  // all 8 symmetries (only possible on a square board)
+
+    var rows, cols;   // board size
+    var board;        // 2D array containing contents of the board
+    
+    var checkForBlocking = false;
+    var symmetryCheck = false;
+    
+    var blockCheckData;
+    var blockCheckCt = 0;
+    var extraEmptySpaces;
+    
+    var stack;  // Stack for the recursive backtracking solution function.
+    var frame;  // Data for current level of the recursion
+    var used;  // used[i] tells if piece #i is on the board, for 1 from 1 to 12
+    var usedCt;
+    
+    var piecesForSolution;  // How many pieces fit on the board
+    var symmetryType;  // Symmtery type of the board, given by one of the above constants
+    var moves;  // How many moves?  A move means placing a piece on the board.
+    var solutions;  // How many solutions have been found?
+    
+   
+//--------------------- Stuff used in the UI -----------------------------------------
+   
+    var pieceColor = [  // pieceColor[i] is the color for pentomino #i, for i = 1 to 12
+         "black",  // pieceColor[0] is the color of a blocked square.
+         "#C80000",
+         "#9696FF",
+         "#00C8C8",
+         "#FF96FF",
+         "#00C800",
+         "#96FFFF",
+         "#969600",
+         "#0000C8",
+         "#FF9696",
+         "#C900C0",
+         "#FFFF96",
+         "#96FF96"
+    ];
+    
+    
+    var canvas;
+    var graphics;
+    var styleIsColored = true;
+    var ticksBetweenMoves = 1;
+    var speedCounter = 0;
+    
+    var squareSize, topOffset, leftOffset;
+    
+    var blockedCt;
+    var spareSpaces;
+    
+    var draw_while_running;
+
+    var INITIALIZING = 0,           // setting up a new board
+        RUNNING = 1,                // solving, showing each step
+        RUNNING_TILL_SOLUTION = 2,  // solving, stop when a solution is found, no redraw until solved
+        PAUSED = 3,                 // idle, in the middle of a solution
+        STEP = 4,                   // temporary state while doing one step, will revert to paused
+        WAITING_FOR_WORKER = 5,     // waiting for web worker to find a solution, will draw when found, but will continue until DONE
+        WAITING_FOR_SOLUTION = 6,   // same as WAITING_FOR_WORKER, if Web Worker is not supported
+        DONE = 7;                   // all solutions have been found, board is empty, only possible action is Clear
+    var state = null; // Will be set to INIIALIZING when setBoardSize() is first called.
+    var solving;  // Same as  !(INITIALIZING || DONE)
+    var running;  // Same as RUNNING || RUNNING_TILL_SOLUTION || WAITING_FOR_SOLUTION -- states using requestAnimationFrame
+        
+
+//---------------------- finding a solution ------------------------
+    
+    function solutionStart() {
+        stack = [];
+        used = [0,0,0,0,0,0,0,0,0,0,0,0,0];
+        usedCt = 0;
+        moves = 0;
+        solutions = 0;
+        var row=0, col=0;
+        while (board[row][col] == 0) {  // find the first empty square
+            col++;
+            if (col > cols) {
+                col = 0;
+                row++;
+            }
+        }
+        frame = [row,col,-1];  // location of piece and piece number; -1 means no piece played yet
+        extraEmptySpaces = spareSpaces - blockedCt;
+        checkForBlocking = document.getElementById("blocking").checked;
+        if (checkForBlocking) {
+            blockCheckCt = 0;
+            blockCheckData = new Array(rows);
+            for (var r = 0; r < rows; r++) {
+                blockCheckData[r] = new Array(cols);
+                for (var c = 0; c < cols; c++) {
+                    blockCheckData[r][c] = 0;
+                }
+            }
+        }
+        piece_data = full_piece_data;
+        symmetryCheck = document.getElementById("symmetry").checked;
+        if (symmetryCheck && symmetryType != SYMMETRY_NONE && piecesForSolution >= 12) { 
+            symmetryType = checkForSymmetries();
+            if (symmetryType != SYMMETRY_NONE) {
+                piece_data = [];
+                for (var i = 0; i < full_piece_data.length; i++) {
+                    var remove = false;
+                    var removedPieces = remove_for_symmetry[symmetryType];
+                    for (var j = 0; j < removedPieces.length; j++) {
+                        if (removedPieces[j] == i) {
+                            remove = true;
+                        }
+                    }
+                    if (!remove) {
+                        piece_data.push(full_piece_data[i]);
+                    }
+                }
+            }
+        }
+    }
+    
+    function solutionStep() {  // return true/false to say if board changed
+        var changed = false;
+        if (frame[2] == 63) {  // empty space was left at (frame[0],frame[1])
+            board[frame[0]][frame[1]] = -1;
+            extraEmptySpaces++;
+        }
+        else {
+            if (frame[2] >= 0) { 
+                removePiece(piece_data[frame[2]], frame[0], frame[1], draw_while_running);
+                used[ piece_data[frame[2]][0] ] = 0;
+                usedCt--;
+                changed = true;
+            }
+            frame[2]++;
+            while (frame[2] < piece_data.length) {  // find the next piece to place  
+                if ( !used[piece_data[frame[2]][0]] && canPlay(piece_data[frame[2]], frame[0], frame[1])) {
+                    if (checkForBlocking) {
+                        playPiece(piece_data[frame[2]], frame[0], frame[1], false);
+                        if (obviousBlockExists()) {
+                            removePiece(piece_data[frame[2]], frame[0], frame[1], false);
+                            frame[2]++;
+                            continue;
+                        }
+                        else if (draw_while_running) {
+                            playPiece(piece_data[frame[2]], frame[0], frame[1], true);
+                        }
+                    }
+                    else {
+                        playPiece(piece_data[frame[2]], frame[0], frame[1], draw_while_running);
+                    }
+                    moves++;
+                    used[ piece_data[frame[2]][0] ] = 1;
+                    usedCt++;
+                    changed = true;
+                    if (usedCt == piecesForSolution) {
+                        return changed;
+                    }
+                    stack.push(frame);
+                    var row = frame[0];
+                    var col = frame[1];
+                    while (row < rows && board[row][col] != -1) {
+                        col++;
+                        if (col == cols) {
+                            col = 0;
+                            row++;
+                        }
+                    }
+                    frame = [row,col,-1];
+                    return changed;
+                }
+                frame[2]++;
+            }
+            if (extraEmptySpaces > 0) { // leave space empty
+                extraEmptySpaces--;
+                board[frame[0]][frame[1]] = -2;
+                stack.push(frame);
+                var row = frame[0];
+                var col = frame[1];
+                while (row < rows && board[row][col] != -1) {
+                    col++;
+                    if (col == cols) {
+                        col = 0;
+                        row++;
+                    }
+                }
+                frame = [row,col,-1];
+                return changed;
+            }
+        }
+        if (stack.length == 0) {  // no solution
+            return changed;
+        }
+        frame = stack.pop();
+        return changed;
+    }
+    
+    function step() {
+        if (!solving) {
+            return;
+        }
+        if (state == RUNNING) {        
+            speedCounter++;
+            if (speedCounter < ticksBetweenMoves) {
+                requestAnimationFrame(step);
+                return;
+            }
+            speedCounter = 0;
+        }
+        var repeats = (state == RUNNING_TILL_SOLUTION || state == WAITING_FOR_SOLUTION)? 1000 : 1;
+        for (var i = 0; i < repeats; i++) {
+            do {
+                var changed = solutionStep();
+                if ( stack.length == 0 && frame[2] == piece_data.length) {
+                    setState(DONE);
+                    return;
+                }
+                if (usedCt == piecesForSolution) {
+                    solutions++;
+                    if (state == WAITING_FOR_SOLUTION) {
+                        document.getElementById("bottommessage").innerHTML =
+                               solutions + " solutions found so far; " + moves + " moves.";
+                        drawBoard();
+                        i = repeats;
+                        break;
+                    }
+                    else {
+                        setState(PAUSED);
+                        return;
+                    }
+                }
+            } while (!changed);
+        }
+        if (state == STEP) {
+            setState(PAUSED);
+        }
+        else if (running) {
+            requestAnimationFrame(step);
+        }
+    }
+    
+    function canPlay(pieceData, row, col) {
+        if (board[row][col] != -1) {
+            return false;
+        }
+        for (var i = 1; i < pieceData.length; i+= 2) {
+            var r = row + pieceData[i];
+            var c = col + pieceData[i+1];
+            if (r < 0 || r >= rows || c < 0 || c >= cols || board[r][c] != -1) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    function playPiece(pieceData, row, col, drawNow) { // assume the move has already been checked as legal!
+        var p = pieceData[0];  // number of the piece
+        board[row][col] = p;
+        for (var i = 1; i < pieceData.length; i+= 2) {
+            var r = row + pieceData[i];
+            var c = col + pieceData[i+1];
+            board[r][c] = p;
+        }
+        if (drawNow) {
+            if (!styleIsColored) {
+                drawBoard(); // cop out -- just redraw everything
+                return;
+            }
+            graphics.fillStyle = pieceColor[pieceData[0]];
+            graphics.fillRect(leftOffset + col*squareSize + 1,
+                        topOffset + row*squareSize + 1, squareSize-2, squareSize-2);
+            for (i = 1; i < pieceData.length; i += 2) {
+                r = row + pieceData[i];
+                c = col + pieceData[i+1];
+                graphics.fillRect(leftOffset + c*squareSize + 1,
+                        topOffset + r*squareSize + 1, squareSize-2, squareSize-2);                
+            }
+        }
+    }
+    
+    function removePiece(pieceData, row, col, drawNow) { // assume the is known to be there!
+        board[row][col] = -1;
+        for (var i = 1; i < pieceData.length; i+= 2) {
+            var r = row + pieceData[i];
+            var c = col + pieceData[i+1];
+            board[r][c] = -1;
+        }
+        if (drawNow) {
+            if (!styleIsColored) {
+                drawBoard(); // cop out -- just redraw everything
+                return;
+            }
+            graphics.fillStyle = "white";
+            graphics.fillRect(leftOffset + col*squareSize + 1,
+                        topOffset + row*squareSize + 1, squareSize-2, squareSize-2);
+            for (i = 1; i < pieceData.length; i += 2) {
+                r = row + pieceData[i];
+                c = col + pieceData[i+1];
+                graphics.fillRect(leftOffset + c*squareSize + 1,
+                        topOffset + r*squareSize + 1, squareSize-2, squareSize-2);                
+            }
+        }
+    }
+    
+    function obviousBlockExists() { // Check whether the board has a region that can never be filled because of the number of squares it contains.
+       blockCheckCt++;
+       var forcedEmptyCt = 0;
+       for (var r = 0; r < rows; r++)
+          for (var c = 0; c < cols; c++) {
+             var blockSize = countEmptyBlock(r,c);
+             if (blockSize % 5 == 0)
+                continue;
+             forcedEmptyCt += blockSize % 5;
+             if (forcedEmptyCt > extraEmptySpaces)
+                return true;
+          }
+       return false;
+    }
+    
+    function countEmptyBlock(r, c) {  // Find the size of one empty region on the board; recursive routine called by obviousBlockExists.
+       if (blockCheckData[r][c] == blockCheckCt || board[r][c] != -1)
+          return 0;
+       var i, c1 = c, c2 = c;
+       while (c1 > 0 && blockCheckData[r][c1-1] < blockCheckCt && board[r][c1-1] == -1)
+          c1--;
+       while (c2 < cols-1 && blockCheckData[r][c2+1] < blockCheckCt && board[r][c2+1] == -1)
+          c2++;
+       for (i = c1; i <= c2; i++)
+          blockCheckData[r][i] = blockCheckCt;
+       var ct = c2 - c1 + 1;
+       if (r > 0)
+          for (i = c1; i <= c2; i++)
+             ct += countEmptyBlock(r-1,i);
+       if (r < rows-1)
+          for (i = c1; i <= c2; i++)
+             ct += countEmptyBlock(r+1,i);
+       return ct;
+    }
+    
+//-------------------------  Web Workers -----------------------------------------
+
+    var worker = null;  // is non-null only when the speed is "Solutions Only / NO PAUSE"
+                        // and then only if web workers are available.  If the file
+                        // pentominos-worker.js is not available, the program will
+                        // still function, without web workers.
+    
+    function startWorker() {
+         //console.log("Starting worker");
+         try {
+            worker = new Worker("pentominos-worker.js");
+         }
+         catch(e) {
+            //console.log("error while trying to start worker: " + e)
+            return false;
+         }
+         var data = [];
+         data.push(board,stack,frame,used,usedCt,moves,solutions);
+         data.push(checkForBlocking,extraEmptySpaces,piece_data,piecesForSolution);
+         worker.onmessage = processWorker;
+         worker.postMessage(data);
+         return true;
+    }
+    
+    function continueWorker() {
+        if (worker) {
+            worker.postMessage("continue");
+        }
+    }
+    
+    function processWorker(msg) {
+        board = msg.data[0];
+        rows = board.length;
+        cols = board[0].length;
+        stack = msg.data[1];
+        frame = msg.data[2];
+        used = msg.data[3];
+        usedCt = msg.data[4];
+        moves = msg.data[5];
+        solutions = msg.data[6];
+        var done = msg.data[7];
+        if (done) {
+            setState(DONE);
+        }
+        else {
+            requestAnimationFrame(function() {
+                document.getElementById("bottommessage").innerHTML =
+                       solutions + " solutions found so far; " + moves + " moves.";
+                drawBoard();
+                if (worker) {
+                    worker.postMessage("continue");
+                }
+            });            
+        }
+    }
+        
+    function stopWorker() {
+        if (worker) {
+            //console.log("Terminating worker");
+            worker.terminate();
+            worker = null;
+        }
+    }
+
+//-------------------------- control and board maintenance functions --------------
+    
+    function setState(newState) {
+        var oldState = state;
+        state = newState;
+        if (oldState == WAITING_FOR_WORKER && worker) {
+            stopWorker();
+        }
+        if (newState == DONE || newState == INITIALIZING) {
+            solving = false;
+        }
+        else if (oldState == INITIALIZING) { // changing to "solving"
+            solving = true;
+            solutionStart();
+        }
+        switch (state) {
+            case INITIALIZING:
+                document.getElementById("bottommessage").innerHTML = "&nbsp;";
+                var message;
+                if (spareSpaces == 0)
+                    message = "Click Run or Step to start solving.";
+                else if (blockedCt == spareSpaces)
+                    message = "Click Run or Step to start solving (or click a black square).";
+                else if (blockedCt == 0)
+                    message = "Click up to " + (spareSpaces-blockedCt) + " squares.";
+                else
+                    message = "Click up to " + (spareSpaces-blockedCt) + " more squares.";
+                document.getElementById("message").innerHTML = message;
+            break;
+            case RUNNING:
+                document.getElementById("message").innerHTML = "Running...";
+                document.getElementById("bottommessage").innerHTML =
+                           solutions + " solutions found so far.";
+            break;
+            case RUNNING_TILL_SOLUTION:
+                document.getElementById("message").innerHTML = "Looking for solution...";
+                document.getElementById("bottommessage").innerHTML =
+                           solutions + " solutions found so far.";
+            break;
+            case PAUSED:
+                document.getElementById("message").innerHTML = "Click Run or Step to continue...";
+                document.getElementById("bottommessage").innerHTML =
+                           solutions + " solutions found so far; " + moves + " moves.";
+                if (oldState == RUNNING_TILL_SOLUTION) {
+                    drawBoard();
+                }
+            break;
+            case WAITING_FOR_WORKER:  // (state will be set to WAITING_FOR_SOLUTION if Web Worker not supported)
+                if (symmetryCheck) {
+                    document.getElementById("message").innerHTML = "Looking for solutions, taking symmetry into account...";
+                }
+                else {
+                    document.getElementById("message").innerHTML = "Looking for solutions...";
+                }
+                document.getElementById("bottommessage").innerHTML =
+                           solutions + " solutions found so far; " + moves + " moves.";
+                if ( ! (window.Worker && startWorker()) ) {
+                    state = WAITING_FOR_SOLUTION;
+                }
+            break;
+            case DONE:
+                solving = false;
+                document.getElementById("message").innerHTML =
+                     "DONE.  All possibilities checked.  Click Reset to continue.";
+                document.getElementById("bottommessage").innerHTML =
+                      solutions == 0 ? "No Solutions, " + moves + " moves." :
+                                       solutions + " solutions found, " + moves + " moves.";
+                if (oldState == RUNNING_TILL_SOLUTION) {
+                    drawBoard();
+                }
+            break;
+        }
+        document.getElementById("reset").style.display =
+              (state != INITIALIZING && blockedCt > 0)? "inline" : "none";
+        document.getElementById("symmetry").disabled = state != INITIALIZING || piecesForSolution < 12;
+        document.getElementById("blocking").disabled = state != INITIALIZING;
+        document.getElementById("size").disabled = state != INITIALIZING;
+        document.getElementById("rows").disabled = state != INITIALIZING;
+        document.getElementById("cols").disabled = state != INITIALIZING;
+        document.getElementById("run").disabled =
+                 state != INITIALIZING && state != PAUSED;
+        document.getElementById("pause").disabled =
+                 state == PAUSED || state == INITIALIZING || state == DONE;
+        document.getElementById("step").disabled =
+                 state != INITIALIZING && state != PAUSED;
+        draw_while_running = state != RUNNING_TILL_SOLUTION && state != WAITING_FOR_SOLUTION;
+        drawBoard();  // Make sure it's correct
+        if (state == STEP) {
+            running = false;
+            step();
+        }
+        else {
+            var newrunning = state == RUNNING || state == RUNNING_TILL_SOLUTION || state == WAITING_FOR_SOLUTION;
+            if (newrunning != running) {
+                running = newrunning;
+                if (running) {
+                    step();
+                }
+            }
+        }
+    }
+    
+    function checkForSymmetries() { // Determines what kind of symmetry the board has
+        var H, V, D1, D2, R90, R180;
+        var i,j;
+        V = true;
+        for (i = 0; V && i < rows; i++) {
+            for (j = 0; j < cols/2; j++) {
+               if ( (board[i][j] == -1) != (board[i][cols-j-1] == -1)) {
+                  V = false;
+               }
+            }
+        }
+        if (rows != cols)
+            R90 = false;
+        else {
+          R90 = true;
+          for (i = 0; R90 && i < rows-1; i++) {
+             for (j = 0; j < cols; j++)
+                if ( (board[i][j] == -1) != (board[rows-j-1][i] == -1)) {
+                   R90 = false;
+                }
+          }
+       }
+       if (R90) { // If symmetric under 90-degree rotation, only possibiliites are 8-way or pure rotational symmetry
+          if (V)
+             return SYMMETRY_ALL;
+          else
+             return SYMMETRY_R90;
+       }
+       H = true;
+       for (i = 0; H && i < rows/2; i++) {
+            for (j = 0; j < cols; j++) 
+                if ( (board[i][j] == -1) != (board[rows-i-1][j] == -1) ) {
+                   H = false;
+                }
+       }
+       R180 = true;
+       for (i = 0; R180 && i < rows; i++) {
+          for (j = 0; j < (cols+1)/2; j++)
+             if ( (board[i][j] == -1) != (board[rows-i-1][cols-j-1] == -1) ) {
+                R180 = false;
+             }
+       }
+       if (rows != cols) 
+          D1 = D2 = false;
+       else {
+          D1 = true;
+          for (i = 1; D1 && i < rows; i++)
+             for (j = 0; j < i; j++)
+                if ( (board[i][j] == -1) != (board[j][i] == -1) ) {
+                   D1 = false;
+                }
+          D2 = true;
+          for (i = 0; D2 && i < rows-1; i++)
+             for (j = 0; j < rows-i-1; j++)
+                if ( (board[i][j] == -1) != (board[rows-j-1][rows-i-1] == -1) ) {
+                   D2 = false;
+                }
+       }
+       if (D1) { // can't also have H or V, since then R90 would be true
+          if (D2)
+             return SYMMETRY_D1D2;
+          else
+             return SYMMETRY_D1;
+       }
+       else if (H) { // can't also have D2, since then R90 would be true
+          if (V)
+             return SYMMETRY_HV;
+          else
+             return SYMMETRY_H;
+       }
+       else if (D2)
+          return SYMMETRY_D2;
+       else if (V)
+          return SYMMETRY_V;
+       else if (R180)
+          return SYMMETRY_R180;
+       else
+          return SYMMETRY_NONE;
+    }
+
+
+    function drawBoard() {
+        graphics.fillStyle = "#333333";
+        graphics.fillRect(0,0,canvas.width,canvas.height);
+        var r,c;
+        if (styleIsColored) {
+            for (r = 0; r < rows; r++) {
+                for (c = 0; c < cols; c++) {
+                    if (board[r][c] < 0) { // empty square (-1 for available; -2 for square left empty)
+                        graphics.fillStyle = "white";
+                    }
+                    else {
+                        var piece = board[r][c];
+                        graphics.fillStyle = pieceColor[piece];
+                    }
+                    graphics.fillRect(leftOffset + c*squareSize + 1,
+                            topOffset + r*squareSize + 1, squareSize-2, squareSize-2);
+                }
+            }
+        }
+        else {
+            for (r = 0; r < rows; r++) {
+                for (c = 0; c < cols; c++) {
+                    graphics.fillStyle = (board[r][c] == 0)? "black" : (board[r][c] < 0)? "#DDDDDD" : "white";
+                    graphics.fillRect(leftOffset + c*squareSize + 1,
+                            topOffset + r*squareSize + 1, squareSize-2, squareSize-2);
+                    graphics.fillStyle="#EEEEEE";
+                    if (c < cols-1 && board[r][c] > 0 && board[r][c] == board[r][c+1]) {
+                        graphics.fillRect(leftOffset + (c+1)*squareSize - 1.5,
+                                           topOffset + r*squareSize + 1, 3, squareSize-2);
+                    }
+                    if (r < rows-1 && board[r][c] > 0 && board[r][c] == board[r+1][c]) {
+                        graphics.fillRect(leftOffset + c*squareSize +1,
+                                           topOffset + (r+1)*squareSize - 1.5, squareSize-2, 3);
+                    }
+                }
+            }
+        }
+    }
+    
+    function setBoardSize(r, c) {
+        rows = r;
+        cols = c;
+        var squares = rows*cols;
+        if (squares >= 60) {
+            piecesForSolution = 12;
+            spareSpaces = squares - 60;
+            document.getElementById("symmetry").disabled = false;
+            document.getElementById("symlabel").title = "";
+        }
+        else {
+            piecesForSolution = Math.floor(squares/5);
+            spareSpaces = squares - 5*piecesForSolution;
+            document.getElementById("symmetry").disabled = true;
+            document.getElementById("symmetry").checked = false;
+            document.getElementById("symlabel").title = "Disabled because the board holds less than 12 pieces";
+        }
+        squareSize = 50;
+        if (squareSize*cols > window.innerWidth - 70) {
+            squareSize = Math.floor( (window.innerWidth-70)/cols );
+        }
+        var topOfCanvas = canvas.getBoundingClientRect().top;
+        if (squareSize*rows > window.innerHeight - topOfCanvas - 60) {
+            squareSize = Math.max(25, Math.floor((window.innerHeight - topOfCanvas - 64)/rows) );
+        }
+        var width = squareSize*cols + 4;
+        var height = squareSize*rows + 4;
+        canvas.width = width;
+        canvas.height = height;
+        leftOffset = Math.floor((canvas.width - cols*squareSize)/2);
+        topOffset = Math.floor((canvas.height - rows*squareSize)/2);
+        doClear();
+    }
+    
+    function mouse2row(y) {
+        var row = Math.floor( (y-topOffset)/squareSize );
+        return ( row < 0 || row >= rows )? -1 : row;
+    }
+    
+    function mouse2col(x) {
+        var col = Math.floor( (x-leftOffset)/squareSize );
+        return ( col < 0 || col >= cols )? -1 : col;
+    }
+    
+    
+//--------------------- responding to events -----------------------------
+    
+    function doMouseDown(evt) {  // mouse/touch events select black squares during initialization
+        if (state == DONE) { // Clicking after all solutions are found will do a reset, then process the click
+             doReset();
+        }
+        if (state != INITIALIZING) {
+            return;
+        }
+        var r = canvas.getBoundingClientRect();
+        var x = Math.round(evt.clientX - r.left);
+        var y = Math.round(evt.clientY - r.top);
+        handleClick(x,y);
+    }
+    function doTouch(evt) {
+        if (evt.touches.length != 1) {
+           return;
+        }
+        evt.preventDefault();
+        if (state == DONE) { 
+             doReset();
+        }
+        if (state != INITIALIZING) {
+            return;
+        }
+        var r = canvas.getBoundingClientRect();
+        var x = evt.touches[0].clientX - r.left;
+        var y = evt.touches[0].clientY - r.top;
+        handleClick(x,y);
+    }
+    function handleClick(x,y) {
+        var row = mouse2row(y);
+        var col = mouse2col(x);
+        if (row < 0 || col < 0 || row >= rows || col >= cols) {
+            return;
+        }
+        var val = board[row][col];
+        var newval;
+        if (val == -1) {
+            if (blockedCt >= spareSpaces) {
+                return;
+            }
+            newval = 0;
+            blockedCt++;
+        }
+        else {
+            newval = -1;
+            blockedCt--;
+        }
+        board[row][col] = newval;
+        drawBoard();
+        if (blockedCt == spareSpaces) {
+            document.getElementById("message").innerHTML =
+                    "Click Run or Step to start solving (or click a black square).";
+        }
+        else {
+            document.getElementById("message").innerHTML = "Click up to " +
+                  (spareSpaces-blockedCt) + " more squares.";
+        }
+    }
+    
+    function doSpeedChange() {
+        var ticks = Number(document.getElementById("speed").value);
+        var inProgress = running || (state == WAITING_FOR_WORKER);
+        if (ticks > 0) {
+            ticksBetweenMoves = ticks;
+            if (inProgress && state != RUNNING) {
+                setState(RUNNING);
+            }
+        }
+        else if (inProgress) {
+            if (ticks == -1) {
+                if (state != RUNNING_TILL_SOLUTION)
+                    setState(RUNNING_TILL_SOLUTION);
+            }
+            else  {
+                if (state != WAITING_FOR_SOLUTION && state != WAITING_FOR_WORKER)
+                    setState(WAITING_FOR_WORKER);
+            }
+        }
+    }
+    
+    function doSizeChange() {
+       if (state != INITIALIZING) {
+           return;
+       }
+       var val = document.getElementById("size").value;
+       if (val == "custom") {
+           document.getElementById("sizeboxes").style.display = "block";
+           document.getElementById("rows").value = "" + rows;
+           document.getElementById("cols").value = "" + cols;
+           document.getElementById("sizeerror").innerHTML = "";
+       }
+       else {
+           document.getElementById("sizeboxes").style.display = "none";
+           var sizes = val.split(",");
+           var r = Number(sizes[0]);
+           var c = Number(sizes[1]);
+           if (rows == r && cols == c) {
+               return;
+           }
+           setBoardSize(r,c);
+       }
+    }
+    
+    function doSizeboxChange() {
+        var r = Number(document.getElementById("rows").value.trim());
+        if (isNaN(r)) {
+            document.getElementById("sizeerror").innerHTML = "Rows is not a number.";
+            return;
+        }
+        var c = Number(document.getElementById("cols").value.trim());
+        if (isNaN(c)) {
+            document.getElementById("sizeerror").innerHTML = "Columns is not a number.";
+            return;
+        }
+        if (r < 3) {
+            document.getElementById("sizeerror").innerHTML = "Rows must be at least 3";
+            return;
+        }
+        if (c < 3) {
+            document.getElementById("sizeerror").innerHTML = "Columns must be at least 3";
+            return;
+        }
+        if (r > 25) {
+            document.getElementById("sizeerror").innerHTML = "Rows can be at most 25";
+            return;
+        }
+        if (c > 25) {
+            document.getElementById("sizeerror").innerHTML = "Columns can be at most 25";
+            return;
+        }
+        if (r*c < 12) {
+            document.getElementById("sizeerror").innerHTML = "Need at least 12 squares.";
+            return;
+        }
+        if (r*c > 100) {
+            document.getElementById("sizeerror").innerHTML = "Can have at most 100 squares.";
+            return;
+        }
+        document.getElementById("sizeerror").innerHTML = "";
+        if (rows == r && cols == c) {
+            return;
+        }
+        setBoardSize(r,c);
+    }
+    
+    function doClear() {
+        board = new Array(rows);
+        for (var i = 0; i < rows; i++) {
+            board[i] = new Array(cols);
+            for (var j = 0; j < cols; j++) {
+                board[i][j] = -1;
+            }
+        }
+        blockedCt = 0;
+        drawBoard();
+        setState(INITIALIZING);
+    }
+   
+    function doReset() {
+        for (var i = 0; i < rows; i++) {
+            for (var j = 0; j < cols; j++) {
+                if (board[i][j] != 0) {
+                    board[i][j] = -1;
+                }
+            }
+        }
+        drawBoard();
+        setState(INITIALIZING);
+    }
+   
+    function doRun() {
+        var ticks = Number(document.getElementById("speed").value);
+        if (ticks == -1) {
+            setState(RUNNING_TILL_SOLUTION);
+        }
+        else if (ticks == -2) {
+            setState(WAITING_FOR_WORKER);
+        }
+        else {
+            setState(RUNNING);
+        }
+    }
+   
+    function doPause() {
+        setState(PAUSED);
+    }
+    
+    function doStep() {
+        setState(STEP);
+    }
+    
+    function doStyleChange() {
+        var newval = document.getElementById("colored").checked;
+        if (newval == styleIsColored) {
+            return;
+        }
+        styleIsColored = newval;
+        drawBoard();
+    }
+    
+
+//-------------------- initialization, called when page has loaded --------------
+
+    function init() {
+        try {
+            canvas = document.getElementById("canvas");
+            graphics = canvas.getContext("2d");
+            if (!graphics) {
+                throw "error";
+            }
+        }
+        catch (e) {
+            document.getElementById("error").innerHTML =
+                    "<hr><h3>Sorry, can't get graphics context, which is required to use this page.<h3><hr>";
+            return;
+        }
+        canvas.addEventListener("mousedown",doMouseDown,false);
+        canvas.addEventListener("touchstart",doTouch);
+        document.getElementById("blocking").checked = checkForBlocking;
+        document.getElementById("symmetry").checked = symmetryCheck;
+        document.getElementById("speed").value = "" + ticksBetweenMoves;
+        document.getElementById("speed").onchange = doSpeedChange;
+        document.getElementById("rows").onchange = doSizeboxChange;
+        document.getElementById("cols").onchange = doSizeboxChange;
+        document.getElementById("size").value = "8,8";
+        document.getElementById("size").onchange = doSizeChange;
+        document.getElementById("clear").onclick = doClear;
+        document.getElementById("reset").onclick = doReset;
+        document.getElementById("run").onclick = doRun;
+        document.getElementById("pause").onclick = doPause;
+        document.getElementById("step").onclick = doStep;
+        document.getElementById("colored").checked = true;
+        document.getElementById("colored").onchange = doStyleChange;
+        document.getElementById("white").onchange = doStyleChange;
+        setBoardSize(8,8);
+    }
+    
+</script>
+</head>
+
+<body onload="init()">
+
+    <h2 style="margin-bottom:3px">Pentominos Puzzle Solver</h2>
+    <h3 style="margin-top:3px"><a href="pentominos-info.html">Click here</a> for info and instructions.)</h3>
+    
+    <hr>
+
+    <div id="error"><noscript><hr><h3>Sorry, this page requires JavaScript.</h3></noscript></div>
+
+    <div id="controls">
+    <p><button id="clear" title="Clear the board and restart.">Clear and Reset</button>
+       <button id="reset" style="display:none" title="Remove pieces but not black squares, and restart.">Reset</button></p>
+    <p><button id="run">Run</button>
+       <button id="pause">Pause</button>
+       <button id="step">Step</button></p>
+    <p>Speed for "Run":<br>
+        <select id="speed" style="margin-left:20px">
+           <option value="-2">Solutions Only / NO PAUSE</option>
+           <option value="-1">Run to Next Solution</option>
+           <option value="1">Very Fast</option>
+           <option value="4">Fast</option>
+           <option value="12">Moderate</option>
+           <option value="30">Slow</option>
+           <option value="60">Very Slow</option>
+        </select>
+    </p>
+    </div>
+    <div id="options">
+        <p><label id="symlabel"><input type="checkbox" id="symmetry">Symmetry Check</label><br>
+        <label><input type="checkbox" id="blocking">Check for Obvious Blocking</label></p>
+        <p style="margin-bottom: 4px">Board Size:
+            <select id="size">
+               <option value="8,8">8 rows by 8 columns</option>
+               <option value="10,6">10 rows by 6 columns</option>
+               <option value="12,5">12 rows by 5 columns</option>
+               <option value="15,4">15 rows by 4 columns</option>
+               <option value="20,3">20 rows by 3 columns</option>
+               <option value="7,9">7 rows by 9 columns</option>
+               <option value="8,9">8 rows by 9 columns</option>
+               <option value="11,6">11 rows by 6 columns</option>
+               <option value="13,5">13 rows by 5 columns</option>
+               <option value="custom">Custom</option>
+            </select></p>
+        <p id="sizeboxes" style="margin-top:4px; display:none">
+               <span style="margin-left: 10px">Rows:</span><input type="text" id="rows" size="4" maxlength="4">
+               <span style="margin-left: 10px">Colunms:</span><input type="text" id="cols" size="4" maxlength="4">
+               <br><span style="color:#AA0000" id="sizeerror"></span>
+        </p>
+    </div>
+    <div id="style">
+       <p>Style:<br>
+       <label><input type="radio" name="style" id="colored" style="margin-left:10px">Colored</label><br>
+       <label><input type="radio" name="style" id="white" style="margin-left:10px">White</label>
+       </p>
+    </div>
+    
+    
+    <div id="canvas-holder">
+    <hr>
+    <p id="message">&nbsp;</p>
+    <canvas width="404" height="404" id="canvas"></canvas>
+    <p id="bottommessage">&nbsp;</p>
+    </div>
+    
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Random Walk</title>
+
+<script>
+
+var graphics;  // A graphics context used for drawing on the canvas.
+var width,height;
+
+var posX;  // x-coordinate of the current green square position.
+var posY;  // y-coordinate of the current green square position.
+
+var posX_r;  // x-coordinate of the current red square position.
+var posY_r;  // y-coordinate of the current red square position.
+
+var posX_b;  // x-coordinate of the current blue square position.
+var posY_b;  // y-coordinate of the current blue square position.
+
+var animating = true;
+var slow = false;
+var small = false;
+var symmetric = false;
+var threecolor = false;
+
+function updateGreen() {
+   var size = small ? 5 : 10;
+   switch(Math.floor(4*Math.random())) {
+       case 0:
+          posX += size;
+          if (posX > canvas.width-size)
+             posX = 0;
+          break;
+       case 1:
+          posY += size;
+          if (posY > canvas.height-size)
+             posY = 0;
+          break;
+       case 2:
+          posX -= size;
+          if (posX < 0)
+             posX = canvas.width-size;
+          break;
+       case 3:
+          posY -= size;
+          if (posY < 0)
+             posY = canvas.height-size;
+          break;
+   }
+   var data = graphics.getImageData(posX,posY,1,1).data;
+   var r = data[0];
+   var g = data[1];
+   var b = data[2];
+   if (g < 250) {
+      g += 25;
+      graphics.fillStyle = "rgb(" + r + "," + g + "," + b + ")";   
+      graphics.fillRect(posX,posY,10,10);
+      if (symmetric) {
+          graphics.fillRect((canvas.width-10) - posX,posY,10,10);
+          graphics.fillRect(posX,(canvas.height-10) - posY,10,10);
+          graphics.fillRect((canvas.width-10) - posX,(canvas.height-10) - posY,10,10);
+      }
+   }
+}
+
+function updateRed() {
+   var size = small ? 5 : 10;
+   switch(Math.floor(4*Math.random())) {
+       case 0:
+          posX_r += size;
+          if (posX_r > canvas.width-size)
+             posX_r = 0;
+          break;
+       case 1:
+          posY_r += size;
+          if (posY_r > canvas.height-size)
+             posY_r = 0;
+          break;
+       case 2:
+          posX_r -= size;
+          if (posX_r < 0)
+             posX_r = canvas.width-size;
+          break;
+       case 3:
+          posY_r -= size;
+          if (posY_r < 0)
+             posY_r = canvas.height-size;
+          break;
+   }
+   var data = graphics.getImageData(posX_r,posY_r,1,1).data;
+   var r = data[0];
+   var g = data[1];
+   var b = data[2];
+   if (r < 250) {
+      r += 25;
+      graphics.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+      graphics.fillRect(posX_r,posY_r,10,10);
+      if (symmetric) {
+          graphics.fillRect((canvas.width-10) - posX_r,posY_r,10,10);
+          graphics.fillRect(posX_r,(canvas.height-10) - posY_r,10,10);
+          graphics.fillRect((canvas.width-10) - posX_r,(canvas.height-10) - posY_r,10,10);
+      }
+   }
+}
+
+function updateBlue() {
+   var size = small ? 5 : 10;
+   switch(Math.floor(4*Math.random())) {
+       case 0:
+          posX_b += size;
+          if (posX_b > canvas.width-size)
+             posX_b = 0;
+          break;
+       case 1:
+          posY_b += size;
+          if (posY_b > canvas.height-size)
+             posY_b = 0;
+          break;
+       case 2:
+          posX_b -= size;
+          if (posX_b < 0)
+             posX_b = canvas.width-size;
+          break;
+       case 3:
+          posY_b -= size;
+          if (posY_b < 0)
+             posY_b = canvas.height-size;
+          break;
+   }
+   var data = graphics.getImageData(posX_b,posY_b,1,1).data;
+   var r = data[0];
+   var g = data[1];
+   var b = data[2];
+   if (b < 250) {
+      b += 25;
+      graphics.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+      graphics.fillRect(posX_b,posY_b,10,10);
+      if (symmetric) {
+          graphics.fillRect((canvas.width-10) - posX_b,posY_b,10,10);
+          graphics.fillRect(posX_b,(canvas.height-10) - posY_b,10,10);
+          graphics.fillRect((canvas.width-10) - posX_b,(canvas.height-10) - posY_b,10,10);
+      }
+   }
+}
+
+function frame() {
+   if (!animating)
+       return;
+   var count = slow ? 3 : 15;
+   for (var i = 0; i < count; i++) {
+       updateGreen();
+       if (threecolor) {
+           updateRed();
+           updateBlue();
+       }
+   }
+   requestAnimationFrame(frame);
+}
+
+function restart() { 
+    graphics.fillStyle = "black";
+    graphics.fillRect(0,0,canvas.width,canvas.height);
+    if (threecolor) {
+        posX = 75 + Math.floor((canvas.width-150)*Math.random());
+        posY = 50 + Math.floor((canvas.height-100)*Math.random());
+        posX_r = 75 + Math.floor((canvas.width-150)*Math.random());
+        posY_r = 50 + Math.floor((canvas.height-100)*Math.random());
+        posX_b = 75 + Math.floor((canvas.width-150)*Math.random());
+        posY_b = 50 + Math.floor((canvas.height-100)*Math.random());
+    }
+    else {
+        posX = canvas.width/2; 
+        posY = canvas.height/2;
+    }
+    if (!animating) {
+       animating = true;
+       document.getElementById("anim").checked = true;
+       frame();
+    }
+}
+
+
+function init() {
+   var canvas = document.getElementById("canvas");
+   var pictures = [];
+   if ( ! canvas || ! canvas.getContext ) {
+      document.getElementById("message").innerHTML =
+                 "Sorry, your browser doesn't support the canvas element.";
+      return;
+   }
+   else {
+       graphics = canvas.getContext("2d");
+   }
+   width = canvas.width;  // width and height should must divisble by 20!
+   height = canvas.height;
+   posX = canvas.width/2;
+   posY = canvas.height/2;
+   document.getElementById("anim").checked = animating;
+   document.getElementById("slow").checked = slow;
+   document.getElementById("small").checked = small;
+   document.getElementById("sym").checked = symmetric;
+   document.getElementById("three").checked = threecolor;
+   document.getElementById("anim").onchange = function() {  
+       var old = animating;
+       animating = document.getElementById("anim").checked;    
+       if (animating && !old)
+           frame();
+   }
+   document.getElementById("slow").onchange = function() { 
+      slow = document.getElementById("slow").checked;
+   }
+   document.getElementById("small").onchange = function() {
+      small = document.getElementById("small").checked;
+      if (!small) {
+         posX = 10*Math.floor( posX/10 );
+         posY = 10*Math.floor( posY/10 );
+         console.log(posX + " " + posY);
+      }
+   }
+   document.getElementById("sym").onchange = function() { 
+      symmetric = document.getElementById("sym").checked;
+      restart();
+   }
+   document.getElementById("three").onchange = function() { 
+      threecolor = document.getElementById("three").checked;
+      restart();
+   }
+   
+   if (animating) {
+       frame();
+   }
+}
+
+</script>
+</head>
+<body onload="init()">
+
+   <noscript><p style="color:red">Sorry, this page requires JavaScript.</p></noscript>
+   
+   <h2>Random Walks on a Canvas</h2>
+
+   <p id="message">Walkers brighten the places they visit!</p>
+
+   <p>
+       <input type="checkbox" id="anim"> <label for="anim">Run</label>
+       <input type="checkbox" id="slow" style="margin-left:1cm"> <label for="slow">Slower</label>
+       <input type="checkbox" id="small" style="margin-left:1cm"> <label for="small">Smaller</label>
+       <input type="checkbox" id="sym" style="margin-left:1cm"> <label for="sym">Symmetric</label>
+       <input type="checkbox" id="three" style="margin-left:1cm"> <label for="three">3-color</label>
+       <button style="margin-left:1.5cm" onclick="restart()">Restart</button>
+   </p>
+  
+   <div> 
+        <canvas id="canvas" width="800" height="600" style="background-color: black"></canvas>
+   </div>
+   
+   <p>(Try checking Smaller, Symmetric, and 3-color!)</p>
+   
+</body>
+
+</html>

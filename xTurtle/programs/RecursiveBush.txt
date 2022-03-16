@@ -1,0 +1,51 @@
+
+{ This program defines a recursive subroutine that
+  draws bush-like pictures.  A second subroutine,
+  TestBush, is defined to call bush with
+  reasonable parameters.  The TestBush subroutine
+  is called at the end the program. }
+   
+SUB bush(size,depth)
+   declare ct,angle,branchCt,length
+   IF depth = 0 then
+       green
+       forward(size) back(size)
+   OR IF depth > 0 then
+       bush(2*size/3,depth-2)
+       rgb(0.4,0.3,0.1)
+       forward(size/2)
+       branchCt := 1+randomInt(2)
+       angle := (30 + randomInt(70))/(branchCt - 1)
+       turn(-angle*(branchCt-1)/2)
+       length := size/4 + size/2*random
+       bush(length,depth-1)
+       ct := 1
+       LOOP
+           turn(angle)
+           length := size/4 + size/2*random
+           bush(length,depth-1) 
+           ct := ct + 1
+           EXIT IF branchCt = ct
+       END LOOP
+       turn(-angle*(branchCt-1)/2)
+       PenUp
+       back(size/2)
+       PenDown
+   END IF
+END SUB
+
+SUB TestBush
+  clear
+  penUp
+  moveTo(0,-8)
+  penDown
+  face(90)
+  bush(14,5)
+END SUB
+
+{ The preceding SUB definitions only
+  defined the subroutines.  To actually
+  see them, you have to call them.
+  The following will draw a sample bush. }
+
+TestBush
