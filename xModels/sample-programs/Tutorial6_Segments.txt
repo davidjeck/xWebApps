@@ -1,0 +1,50 @@
+; Tutorial 6: Segments
+
+; An animation can have "segments."  For example, the command
+; "animate 30 50" creates an animation with a segment that
+; contains 31 frames, followed by a segment that contains
+; 51 frames.  The segments are "spliced" together because
+; the final frame of the first segment is the same as
+; the first frame of the second segment.  The total number
+; of frames is 81.
+
+; This file defines an animation with four segments.
+
+animate 90 90 90 90 ; four segments, each with 90 frames
+
+define flap [
+   square scale 5 3
+          xtranslate 5
+ ]
+ 
+define paddles [
+   hsb 0 1 1  ; Gives a color by hue, saturation, brightness.
+   flap yrotate 0:0:0:0:360
+   hsb 0.125 1 1
+   flap yrotate 0:45:45:45:360      ; Eight flaps rotate
+   hsb 0.25 1 1                     ; into position during
+   flap yrotate 0:90:90:90:360      ; the first segment of
+   hsb 0.375 1 1                    ; the animation.  After
+   flap yrotate 0:135:135:135:360   ; that, the y-rotation of
+   hsb 0.5 1 1                      ; each flap remains
+   flap yrotate 0:180:180:180:360   ; constant for the next
+   hsb 0.625 1 1                    ; two segments.  Then
+   flap yrotate 0:225:225:225:360   ; all the flaps rotate back
+   hsb 0.75 1 1                     ; to their original
+   flap yrotate 0:270:270:270:360   ; positions.
+   hsb 0.875 1 1
+   flap yrotate 0:305:305:305:360
+]   
+ 
+ 
+background black
+ 
+paddles 
+   yrotate 0:0:360:720:720
+   xrotate 15:15:15:375:375
+; The entire "paddles" object rotates around the y-axis
+; during each of the second and third segments.  In the
+; third segment, the object is ALSO rotating about the
+; x-axis.  (There is an extra, constant 15 degree rotation
+; about the x-axis to make the object easier to view.
+

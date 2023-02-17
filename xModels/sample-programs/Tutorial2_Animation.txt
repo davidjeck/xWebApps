@@ -1,0 +1,68 @@
+; xModels Tutorial 2:  Animation
+
+; Moving images are more interesting than still images.
+; An animated image is displayed on the computer screen
+; by showing a sequence of "frames" in rapid succession,
+; with small changes from one frame to the next.  In
+; xModels, a number range such as 1:5 is used to specify
+; a value that changes from frame to frame in the animation.
+; For 1:5, the value is 1 in the first frame and is 5 in
+; the last frame.  Between the first and last frame, the
+; value changes by the same amount in each frame.  This
+; file defines an animated scene for xModels.
+
+
+animate 60  ; An animated scene MUST begin with the
+            ; word animate, followed by a specification of
+            ; the number of frames in the animation.  Here,
+            ; there will be 61 frames, numbered from 0 to 60.
+            ; (You can have comments and blank space before
+            ; the word animate, but nothing else.)
+
+background yellow ; The "background" command is used to
+            ; specify a background color for the scene.
+            ; A background command can appear anywhere in
+            ; the program, but can only be used once.
+
+square scale 1:5 rotate 0:90 ; Specifies a different
+            ; square in each scene.  The first square has
+            ; size 1 and is not rotated at all.  The
+            ; second square is a little bigger and is
+            ; rotated a bit (by 1.5 degrees, to be exact).
+            ; The last square will be 5 units large and
+            ; rotated through an angle of 90 degrees.
+
+circle scale 1:5 5:1 translate 6 6 ; This starts out
+       ; as a 5-by-1 ellipse and ends up as a 1-by-5
+       ; ellipse.  The translate command moves it
+       ; to the upper right corner of the display area.
+
+blue
+
+cube scale 2 translate -6:6 -7  ; The cube moves
+      ; along the bottom of the screen, from the
+      ; point (-6,7) to (6,7). 
+
+line scale 4      ; A four-unit long line that
+   rotate 0:180   ; rotates from 0 to 180 degrees.
+   translate 0 7  ; The rotating line is moved 7 units
+                  ; upwards.  (Note: this line is blue.)
+
+red
+
+line scale 4       ; A four-unit long line that
+   translate 0 7   ; is moved seven units upwards
+   rotate 0:180    ; and from there rotates through
+                   ; 180 degrees about the origin.  (Note
+                   ; that the order in which the
+                   ; transformations are applied makes a
+                   ; big difference.  (This line is red.)
+
+; To see the animation, first click the "Compile and Apply!)
+; button below the program, then click the "Run Animation"
+; button that is next to the image.  When you run the 
+; animation, note how the image of the cube changes as it 
+; moves, and note the difference in the motions of the 
+; two lines: The blue line rotates about its own center,
+; while the red line rotates about the origin.)
+

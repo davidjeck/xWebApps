@@ -1,0 +1,82 @@
+; xModels Tutorial 4:  Complex Objects
+
+; The real power of xModels (what there is of it) comes from
+; fact that it is a "hierarchical" modeling language.  You
+; can combine several objects into one complex object,
+; which can then be treated as a unit.  Transformations
+; applied to a complex object apply to the object as a
+; whole.  A complex object can even include other complex
+; objects.  It is also possible to define a name to 
+; represent an object.  Then the name can be
+; used in the scene, just as if it were one of the
+; predefined objects such as "square" and "cone".
+
+animate 60  ; This will be a 60-frame animation
+
+[       ; A complex object begins with a "[" and ends with "]".
+
+   square scale 4  ; Transformations can be applied to the
+                   ; objects inside a complex object.   
+
+   [   ; Complex objects can be nested inside other objects.
+      circle translate 5
+      circle translate -5
+   ] rotate 45:-45  ; The rotation command applies to the
+                    ; complex object consisting of two
+                    ; two circles.
+   
+   red ; A complex object can contain color commands
+       ; in addition to objects
+
+   line scale 8 rotate 90 xtranslate -4:4
+   
+   magenta
+   
+   square scale 11 ; This square encloses the other objects.
+   
+] scale 0.5:1    ; The entire complex object grows from
+                 ; half of its basic size to 1 times
+                 ; that size.
+                 
+; Note: At this point, the drawing color is black.
+;       The color change INSIDE the object has no
+;       effect outside.  (On the other hand, a color
+;       change made BEFORE the object does "leak into"
+;       a complex object.)
+
+
+define wheel [  ; Begin the defintion of an object named "wheel".
+   circle
+   line              ; A wheel contains a circle and three
+   line rotate 60    ; lines, which act as spokes.
+   line rotate -60
+]   ; The end of the definition
+
+; "Wheel" has been defined, but no wheel has been put into
+; the scene.  Now we add two wheels with different
+; colors, sizes, and rotation speeds to the scene:
+
+wheel scale 2 rotate 0:720 xtranslate -8  ; This one is black.
+
+green
+
+wheel scale 4 rotate 0:-180 xtranslate 8
+
+
+; A defined object can be used inside the definition
+; of another object.
+
+
+define wagon [
+   red
+   square scale 4 2
+   blue
+   wheel scale 2 rotate 0:-720 translate -2 -1
+   wheel scale 2 rotate 0:-720 translate 2 -1
+]
+
+wagon ytranslate -8        ; A wagon rolls across the bottom of
+      xtranslate -10:10    ;    the screen
+
+
+    

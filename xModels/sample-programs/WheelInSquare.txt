@@ -1,0 +1,30 @@
+
+; This example shows a wheel rolling along the inside
+; of a square.
+
+animate 15 15 15 15 ; The animation cosists of 4 segments,
+                    ;    with 15 frames each.  During each
+                    ;    segement, the wheel rolls along
+                    ;    one side of the square.
+
+
+define wheel [ ; Define a new type of object,
+   red         ;      with the name "wheel".
+   circle
+   line
+   line rotate 60
+   line rotate 120
+]
+
+
+square scale 13  ; A 13-by-13 square
+
+wheel scale 3            ; A rotating, moving wheel
+      rotate 0::::720
+      xtranslate  -5:5:5:-5:-5
+      ytranslate  5:5:-5:-5:5
+
+; Note how the rotation is specified as 0::::720.
+; The four consecutive colons mean that the change
+; from 0 to 720 takes place over all four segments
+; of the animation.

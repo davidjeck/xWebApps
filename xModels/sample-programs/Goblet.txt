@@ -1,0 +1,21 @@
+; This file uses the "lathe" command to specify a
+; three-dimensional object that looks something like 
+; a goblet.
+
+animate 30
+
+viewDistance 100  ; Goblet looks better from farther away;
+                  ; Default viewdistance is 20.
+
+background yellow  ; Background color is yellow
+
+blue               ; Goblet will be blue
+
+define goblet [  ; Define a "goblet" object
+   lathe 15 0,0.5 5,1 6,7 6.3,7 5,0.5 0.5,0 0.5,-5 4,-6 0,-6
+]
+
+goblet 
+   yrotate 0:24    ; Spin the goblet,
+   zrotate -25     ;  And tilt it so it can be seen better
+   xrotate 15

@@ -1,0 +1,88 @@
+; xModels Tutorial 6:  Polygons, Lathing and Extrusion
+
+; xModels has a "polygon" for creating polygon objects.
+; The polygon command takes a list of (x,y) points and
+; connects them with line segments.  An example is given below.
+; Modeling real objects (like cars or faces) in 3D requires
+; that they be approximated with large numbers of polygons,
+; perhaps thousands of polygons per object.  You won't want
+; to do anything so complicated with xModels-3D.  But it
+; does have two ways of producing fairly complicated, but also
+; fairly regular, objects.  The methods are called lathing
+; and extrusion.  The idea is to take a figure consisting
+; of a connected sequence of line segments in the xy-plane.
+; Some specified number of copies of this figure are made and
+; then more line segments are added to join the copies.
+
+
+animate 30
+
+
+; In lathing, the copies are made by rotating the original
+; figure about the y-axis.  The command for doing lathing
+; is "lathe":
+
+lathe 8  0,5 1,1 3,0 1,-1 0,-5  ; The first parameter is the number of
+                                ; copies; then comes the list of points.
+                                ; Only (x,y) coordinates are given; the
+                                ; points lie in the plane z = 0.
+     yrotate 0:45  ; You can apply transformations
+                   ; to lathed objects.
+
+; Compare the figure produced by the above to the polygon
+; made with the same points:
+
+polygon 0,5 1,1 3,0 1,-1 0,-5
+      xtranslate 6  ; Move it over so you can see it.
+
+; The extra vertical line from (0,-5) back to (0,5), which
+; is added to close the polygon, is not used in the lathing
+; operation.  The remaining sides form the figure that is
+; rotated about the y-axis in the lathe command.
+
+; Here are more examples:
+
+red
+
+lathe 12 1,2 2,-2  ; Lathing a single line, to make a "lamp shade".
+    xrotate 0:360  ; Tumble it about the x-axis
+    xtranslate -7
+
+blue
+
+lathe 4  2 1:-1  3 0  4 0 ; You can use number ranges 
+     translate -4 7       ;        in the point list!
+
+; Extrusion is not quite so interesting as lathing.  In
+; extrusion, the copies of the original figure are made
+; by translating the original in the z-direction, instead
+; of by rotating it.  The copies are spaced one unit apart, 
+; although you can change that, of course, by scaling
+; in the z direction.  The extruded figure extends
+; equally far behind the xy-plane as it does in front
+; of it.  The command for doing extrusion is "extrude".
+; Here, for example, is a 3D "E":
+
+cyan
+
+extrude 2                          ; The number of copies.
+        0,0 0,5 3,5 3,4 1,4 1,3    ; The list of points.
+        2,3 2,2 1,2 1,1 3,1 3,0 0,0
+   translate -7.5,-9.5,0
+
+; And here is an example that rotates so you can see
+; it better:
+
+magenta
+
+extrude 5 -2,-2 0,2 2,-2 ; Extrude 5 copies of an inverted "V"
+    yrotate -30:30
+    translate 3 -6.5
+    
+; Finally, the polygon command can be used with just two points.
+; This gives a line between the two points, and it's an easy way
+; to specify a line by specifying its endpoints.
+
+green
+polygon 0,9 10,9:5
+

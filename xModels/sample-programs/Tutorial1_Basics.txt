@@ -1,0 +1,106 @@
+; xModels Tutorial 1:  Basic Ideas
+
+; A program written in the xModels scene description
+; language is basically a list of the objects in the
+; scene, with "transformations" that say how the objects
+; are sized, oriented, and placed.  And there are a few
+; other things that can occur in xModels programs.  This
+; scene description contains examples of the basic objects
+; and some of the transformations that can be used
+; in an xModels program.  It also shows how to use color.
+
+; A semicolon, like the one at the left is the beginning
+; of a "comment" which is ignored by the computer.  A
+; comment can start anywhere on a line, and it ends at 
+; the end of that line.
+
+
+square  ; A square is one type of basic object.
+        ; Putting its name in the scene description
+        ; adds a square to the image.  A basic square
+        ; is a rather small square at the center of
+        ; the image.  Like other basic objects, its
+        ; size is 1.  For a square, that means that
+        ; the length of each side is 2.  Like other
+        ; basic object, it is centered at the origin,
+        ; which is the center of the image.
+        
+square scale 3 ; This is ANOTHER square in the same
+        ; image.  The transformation "scale 3" placed
+        ; after an object causes that object to be
+        ; magnified by a factor of 3.  Every point in
+        ; the object is moved away from the origin to
+        ; three times its original distance.  Since
+        ; the basic square was centered at the origin, 
+        ; a scaled square is also centered at the
+        ; origin.
+        
+red ; The command "red" tells the computer to draw the
+    ; following objects, up to the next color change
+    ; in red.  Other color commands include green,
+    ; blue, cyan, magenta, yellow, black, white, and gray.
+    ; (It is also possible to specify "RGB" colors
+    ; and "HSB" colors.  See the full documentation for
+    ; details.)
+    
+circle translate 6 6 ; A "circle" object is a circle with
+    ; diameter 1 at the center of the screen, but the 
+    ; "translate" transformation that is applied to the
+    ; circle moves it over 6 units and up 6 units from its 
+    ; original position.  This will show in the image as a 
+    ; small, red circle centered at the point (6,6).
+    
+circle scale 5 translate -6 6  ; Transformations can
+    ; be combined.  The circle is FIRST scaled by
+    ; a factor of 5, and then the resulting object
+    ; is moved 6 units to the left and 6 units up.
+    ; The result is a circle of diameter 5 centered
+    ; at the point (-6,6).  The drawing color is 
+    ; still red for this circle,
+    
+blue  ; Color changes to blue for following objects.
+
+square scale 5    ; Start with a square,
+   rotate 30      ; rotate it 30 degrees about the origin,
+   translate 6 -6 ; then move it 6 units over and 6 down.
+      ; (Note that you don't have to list all the
+      ;  transformations on one line.)
+      
+square scale 6 2  ; A scale command can also have two or  
+  translate -5 -5 ; three parameters.  "scale 6 2" magnifies
+                  ; by a factor of 6 horizontally and
+                  ; 2 vertically.  Scaling a square in
+                  ; this way gives a rectangle.
+
+green
+
+cube scale 4 translate 5 0  ; A 1-by-1-by-1 cube is
+    ; magnified by a factor of 4 and translated
+    ; 5 units to the right.  3D objects are drawn as
+    ; "wireframe" models.  That is, only the edges
+    ; are shown.
+    
+cone scale 4 translate -5 0 ; The cone shows up
+    ; 5 units to the left of its default position
+    ; at the origin.
+
+magenta ; A bright purple-ish color
+
+cylinder scale 4 translate 0 5 ; The cylinder
+    ; shows up 5 units above the origin
+    
+line  scale 6 translate 0 -7 ; Finally, a humble line.
+    ; The basic line is one unit long, extending along
+    ; the x-axis from (-0.5,0) to (0.5,0).
+    ; Here, it is scaled to a length of 6 and moved
+    ; down 7 units.
+
+; To see the scene described by the program, click the
+; "Compile and Apply!? button.  You should be able to find 
+; all the objects listed above in the picture.  The colors 
+; will help you identify them.  The 3-dimensional objects will
+; look sort-of distorted because they are being projected
+; onto the screen from the point (0,0,20).  The near side
+; of the cube, for example, looks bigger than the far
+; side (as it should, really).
+

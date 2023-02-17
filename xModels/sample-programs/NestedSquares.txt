@@ -1,0 +1,37 @@
+; This program describes an animation that shows a set of
+; nested, rotating squares. 
+
+; This example is a relatively complex, "hierarchical" model.
+
+animate 120 
+background black
+
+[       ; Begins specification of a hierarchical object.
+  red   ; Change drawing color to red.
+  square scale 11      ; An 11-by-11 square.
+  line xtranslate 5    ; A line, placed to just touch the square.
+  line xtranslate -5   ; Another line...
+  [ cyan
+    square scale 9
+    line rotate 90 ytranslate 4
+    line rotate 90 ytranslate -4
+    [ yellow
+      square scale 7
+      line xtranslate 3
+      line xtranslate -3
+      [ white
+        square scale 5
+        line rotate 90 ytranslate 2
+        line rotate 90 ytranslate -2
+        [ magenta
+          square scale 3
+          line xtranslate 1
+          line xtranslate -1
+          [ green
+            square
+          ] xrotate 0:1080 ; A ":" indicates a range of values,
+        ] yrotate 0:900 
+      ] xrotate 0:720
+    ] yrotate 0:540  ; A transformation afte a "["
+  ] xrotate 0:360    ;   applies to all the objects
+] yrotate 0:180      ;   enclosed between [ and ]

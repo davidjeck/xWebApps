@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>xModels Info</title>
+
+<style>
+   body {
+      background-color: gray;
+      margin-top: 0;
+      margin-bottom: 0;
+   }
+   #content {
+      max-width: 750px;
+      margin: 0 auto;
+      padding: 5px 15px;
+      border-left: thin solid black;
+      border-right: thin solid black;
+      background-color: #F8F8F8;
+   }
+   h1, h2, h3 {
+       color: #003388;
+   }
+   .cmd, pre {
+      color: #770000;
+      font-weight: bold
+   }
+   .nw, .menu {
+      font-weight: bold;
+      color: #005555;
+   }
+   li {
+       margin-top: 5pt;
+   }
+   p {
+       text-indent: 25pt;
+   }
+   p.np {
+       text-indent: 0;
+   }
+</style>
+
+</head>
+<body">
+
+<div id="content">
+
+<h1>xModels Info</h1>
+<hr>
+
+<p>Computer-generated graphics images are usually constructed in
+two stages: <span class="nw">modeling</span> followed
+by <span class="nw">rendering</span>.  In the modeling stage,
+a geometric representation of the objects in the scene is constructed.
+The rendering stage produces the actual image, based on information
+in the model.</p>
+
+<p>The <a href="xModels.html">xModels web app</a> lets you describe
+scenes in a simple <span class="nw">scene description language</span>.
+Scenes are rendered as <span class="nw">wireframe models</span>,
+a very minimal kind of rendering which shows just the edges of all the
+objects in the scene &mdash; even edges that are behind other objects.
+The main point of the app is not to produce fancy images; the point
+is to learn some of the basic ideas of geometric modeling, not to
+produce attractive or realistic images.</p>
+
+<p>(I wrote the original xModels program in the 1990s to use with
+my book, <cite>The Most Complex Machine</cite>,
+which was a survey of  the field of computer science. Even though the 
+book is now largely outdated, the principles illustrated
+by the program are still valid.  The original
+program was written for Macintosh computers.  It was later translated
+into Java, and now into the current version that runs on the Web.)</p>
+
+<hr>
+<h3>The xModels Interface</h3>
+
+<p>xModels is designed to be easy to use. This section
+describes the program's interface, but the major thing you 
+need to learn about is the scene description language which
+is discussed in the other sections of this page.</p>
+
+<p>The <a href="xModels.html">xModels web page</a> has two main areas.  
+At the top is a text editor where a scene description can be entered.  And on
+the bottom is a large rectangle where the image will be
+displayed.  Each area also includes some controls.</p>
+
+<p>Above the text area is a popup menu that lists the scene descriptions
+that are available.  (Note that scene descriptions are also referred to
+as "xModels programs.")  Selecting an item from the popup menu will
+show the corresponding program in the text editor.  Selecting
+"[New Scene Description]" from the popup menu will clear the text editor and let you
+enter a new xModels program.  The web page attempts to load nine 
+sample programs into the popup menu.  The first six samples are tutorial 
+examples that you can read to learn about the xModels scene description language.
+You can probably learn enough about the language by
+reading the tutorial examples to create your own scenes.</p>
+
+<p>Beneath the text editor is a "Compile and Apply" button.  Click that
+button to render the image described by the program in the editor.  But if
+there are syntax errors in the program, an error message will be displayed
+below the text editor instead.  In the case of an error, the input cursor
+in the text editor will be moved to the point in the program where
+the error was found.  Only the first syntax error in the program is
+found and reported.</p>
+
+<p>Turning to the image display area, note that there is an input box
+above the image rectangle.  Type commands from the xModels scene
+description language, and press return:
+The commands will be applied to the image.  (Or if there is
+a syntax error in the commands, then the error will be reported.)
+This can be a great way to experiment with the scene description
+language!</p>
+
+<p>There is also a column of controls to the left of the image.
+Clicking the "Clear and Reset" button will make the program forget
+any xModels commands that have been executed and will clear the
+image area.</p>
+
+<p>The remaining controls in the graphics area allow you to
+control animated scenes.  The animation capabilities of xModels
+are discussed later on the page and in several of the tutorial
+examples.</p>
+
+
+<hr>
+<h3 id="language">The Scene Description Language</h3>
+
+<p>Scenes in xModels are described in terms of three coordinates, x, y, and z.
+The computer's screen is the xy-plane, with the origin (0,0) at the center
+of the image.  The positive y-axis extends upwards from this point,
+and the positive x-axis points to the right.  The positive z-axis points directly out
+from the screen towards the viewer, so that points in front of the screen have
+positive z-values, and points behind the screen have negative z-values.  This is
+a standard coordinate system for three-dimensional computer graphics.  Of course,
+when a scene is rendered, all the points are <span class="nw">projected</span> onto the
+screen, that is, onto the xy-plane.  But conceptually, the actual model can
+extend into 3D space.</p>
+
+<p>The image display area includes the square region with -10&nbsp;&lt;&nbsp;x&nbsp;&lt;10
+and -10&nbsp;&lt;&nbsp;y&nbsp;&lt;10.  Since the display area in not square,
+it can actually extends beyond this range in the x direction.  There is no
+way to increase or decrease the basic square region that is displayed, so scenes
+must be sized to fit into this region.  (It is easy to scale objects up or down
+in size to fit.)</p>
+
+<p>The three-dimensional world is projected onto the xy-plane from a point
+on the positive z-axis.  The z-coordinate of this point is called the
+<span class="nw">view&nbsp;distance</span>, and its value can be specified as part of
+a scene description.  (This name is somewhat deceptive.  Since the display
+area always shows the same rectangle in the xy-plane, objects lying in that plane don't
+look any different as the viewDistance changes.  The view distance affects object
+that lie in front of or behind the xy-plane.)  The viewDistance can be set to "infinity" to
+give what is called a <span class="nw">parallel projection</span>.</p>
+
+<p>Fundamentally, a scene description for xModels is a list of objects
+that appear in the scene, plus a few special commands.  There are predefined commands,
+such as <span class="cmd">circle</span> and <span class="cmd">cube</span>,
+for adding objects to a scene, and predefined commands, such as 
+<span class="cmd">red</span>, for changing the color that is used to draw objects.
+There are special commands for specifying the background color,  view distance, 
+and animation parameters.  There is also a special command for defining 
+new objects and color names.</p>
+
+<p>I should note that a scene description can contain comments.
+A comment begins with a semicolon (;) and continues until the end of
+the line.  For multiline comments, a semicolon is required on each line.
+A comment doesn't have to start at the beginning of a line.  Comments 
+in a program are for human readers; they are ignored by the computer.</p>
+
+<p>Except in the case of comments, xModels doesn't pay attention
+to ends-of-line.  They are treated just like spaces.  You can lay out
+your program any way you like on the page.</p>
+
+<p>The xModels language is not case-sensitive:  Upper and lower case letters
+are considered to be equivalent, so that for example, you can use <i>xrotate</i>,
+<i>xRotate</i>, and <i>XROTATE</i> interchangeably.
+Names can consist of letters, digits, and
+the underscore character&nbsp;(_).  A name must begin with a letter or with
+an underscore.  Names can be of any length.</p>
+
+<p>Numbers can include decimal points and exponential notation.
+For example:  0, -17, 3.14, .5, 1.2e5.  With just a few exceptions,
+anyplace where a number can appear in a program, a <span class="nw">number
+range</span> can also appear.  Number ranges are used with animation, as 
+described later on this page.  Examples of number ranges are 1:10, -1:3:10,
+and 12::0.  (The only places where number ranges cannot be substituted for
+numbers are in an <span class="cmd">animate</span> command and
+for the first parameter of a <span class="cmd">lathe</span>
+or <span class="cmd">extrude</span> command.)</p>
+
+<p>As a final preliminary point, I will note that commas can be included
+in a program to help make it more readable by humans.  However, the computer
+ignores commas.  More specifically, it treats them exactly the same as
+spaces.</p>
+
+<h3>Special Commands</h3>
+
+<p>The special commands in the xModels scene description language are <span class="cmd">animate</span>,
+<span class="cmd">viewDistance</span>, <span class="cmd">background</span>, and
+<span class="cmd">define</span>.</p>
+
+<p>If the <span class="cmd">animate</span> command occurs at all in a program,
+<b>it must be the first word</b> in the program (not counting any comments that might
+precede it).  This command, which is used to specify the number of frames
+in an animation, is explained below.</p>
+
+<p>The <span class="cmd">viewDistance</span> command specifies the point
+along the z-axis that is used as the center of projection.  An (x,y,z) point
+is projected onto the xy-plane by drawing a line from the center of projection
+through the point (x,y,z) and finding the (x,y) point where it intersects
+the xy-plane.  Points with larger z-coordinates than the  projection point are not displayed.  The
+<span class="cmd">viewDistance</span> command must be followed by
+a parameter that specifies the z-coordinate of the projection point.
+The parameter can be any positive number.  If the scene is an animation,
+the parameter can be a number range.  The parameter can also be the word
+<span class="cmd">infinity</span> which specifies projection from
+infinity.  A program can contain at most one viewDistance command.
+(However, you can use a <span class="cmd">viewDistance</span> command in the input box above
+the image to change the view distance for an existing scene.) The 
+<span class="cmd">viewDistance</span> command does not have to
+come at the beginning of the program; however, it applies to the entire scene
+in any case.
+If no view distance is specified, a default value of 20 is used.  </p>
+
+<p>The <span class="cmd">background</span> command is used to specify
+the background color for the scene.  This command must be followed by
+a color specification, which can be either a color name or an
+RGB or HSB color, as discussed below.
+The <span class="cmd">background</span> command can only be specified
+once in a program.  (But you can change the background of the current
+image by entering a <span class="cmd">background</span> command in
+the text input box above the image.)  The default background color, if none
+is specified, is white.</p>
+
+<p>The <span class="cmd">define</span> command can be used to give a name to
+an object.  Once a named object has been defined, it can be used in the same
+way as any of the built-in objects, including in other
+<span class="cmd">define</span> commands.
+The word <span class="cmd">define</span> must be followed
+by the name that is being defined, and then by the specification of the object
+itself.  An object is generally a complex object, enclosed between
+[ and&nbsp;], but that is not a requirement if the object specification
+consists of a single command.  Defining an object does
+<b>not</b> make the object appear in the scene.  To do that, you have
+to include the defined name as part of the scene description.  The following
+example defines a "wheel" to consist of a circle and three
+lines:</p>
+
+<pre>              define wheel [
+                   circle
+                   line
+                   line rotate 60
+                   line rotate -60
+              ]
+</pre>
+
+<p class=np>You could then use the command <span class="cmd">wheel</span>
+to add a wheel to the scene.  Here is an example that defines a
+<span class="cmd">triangle</span> command.  The definition is a single
+command, so it does not have to be enclosed between [&nbsp;and&nbsp;].
+</p>
+
+<pre>                define triangle polygon -1,-1 1,-1, 0,2
+</pre>
+
+<p class=np>It is also possible to define new color names.  For example:</p>
+                
+<pre>                define purple magenta 
+                
+                define pink rgb 1 0.5 0.5
+</pre>
+
+<p class=np>For color definitions, the definition should <b>not</b> be enclosed
+between [&nbsp;and&nbsp;].</p>
+
+
+
+<h3>Color Commands</h3>
+
+<p>The xModels scene description language has several predefined command
+for specifying colors.
+When a color command is given, it sets the drawing color to be used
+for all subsequent objects, up until the next color change.  Color changes
+inside complex objects, that is between [&nbsp;and&nbsp;], have no effect past the
+closing&nbsp;].  The default drawing color, if no color command has
+been given, is black.</p>
+
+<p>A color can be specified by one of the following color names:
+<span class="cmd">red</span>, <span class="cmd">green</span>,
+<span class="cmd">blue</span>, <span class="cmd">cyan</span>,
+<span class="cmd">magenta</span>, <span class="cmd">yellow</span>,
+<span class="cmd">black</span>, <span class="cmd">white</span>,
+<span class="cmd">gray</span>, <span class="cmd">lightGray</span>,
+or <span class="cmd">darkGray</span>.  You can add new color names with
+the <span class="cmd">define</span> command.</p>
+
+<p>Color can also be specified
+with the <span class="cmd">rgb</span> command and with the <span class="cmd">hsb</span>
+command.  The <span class="cmd">rgb</span> command lets you specify a color
+by giving its red, blue, and green components.  It requires three parameters
+to specify the three values.  The values must be between 0 and 1, inclusive.
+For example:</p>
+
+<pre>         rgb  0.5 0 0.5    ;  specifies a purple color
+         rgb  0:1 0 0      ;  specifies a range of colors from black to red
+</pre>
+
+<p>The <span class="cmd">hsb</span> command is similar, except it specifies
+a color by giving its hue, saturation, and brightness components.  Again, these
+values must be between 0 and&nbsp;1.  (You can look this up in a graphics
+textbook if you don't know what it means.)</p>
+
+
+<h3>Objects</h3>
+
+<p>There are six predefined objects in xModels:
+<span class="cmd">line</span>, <span class="cmd">square</span>,
+<span class="cmd">circle</span>, <span class="cmd">cube</span>,
+<span class="cmd">cone</span>, and <span class="cmd">cylinder</span>.
+These objects are sized so that each object just fits inside
+a 1-by-1-by-1 cube, centered at the origin.  The <span class="cmd">line</span>
+object stretches along the x-axis from (-0.5,0) to (0.5,0).  The
+<span class="cmd">square</span> object has vertices at
+(-0.5,-0.5), (0.5,-0.5), (0.5,0.5), and (-0.5,0.5).  The <span class="cmd">circle</span> has center
+(0,0) and radius 0.5.  The <span class="cmd">cone</span> is oriented to point
+upwards along the y-axis; it has height&nbsp;1, and the diameter of its base is&nbsp;1.
+The <span class="cmd">cylinder</span> also has
+a vertical orientation, with height and diameter equal to&nbsp;1.  
+To include one of these objects, just list its
+name in the scene description.  Usually, the name will be followed by
+a transformation that affects the size, position, and orientation of the
+object.</p>
+
+<p>There are also four commands for creating an object out of a list of
+points.  These commands are <span class="cmd">polygon</span>,
+<span class="cmd">polygon_3d</span>, <span class="cmd">lathe</span>,
+and <span class="cmd">extrude</span>.</p>
+<p>The <span class="cmd">polygon</span>
+command takes a list of parameters that specify a sequence of (x,y) points.
+The polygon consists of these points joined by lines.  Note that there
+must be an even number of parameters, since there are two parameters per
+point.  For example, the following command creates a triangle:</p>
+
+<pre>             polygon  0,0 4,0 2,2</pre>
+
+<p class=np>The commas in this command are optional.  (Remember that commas
+are treated exactly like spaces.)
+It's legal to have a polygon command with just two points.  In that case,
+it specifies a line.  The polygon-3d is similar, except that it takes
+a list of (x,y,z) points.</p>
+
+<p>The <span class="cmd">lathe</span> command takes a list of (x,y) points, joins those points with
+line segments, and then rotates the resulting curve about the y-axis to
+obtain a three-dimensional object.  The original curve is actually copied
+several times, at different angles of rotation.  These copies are then joined
+with further line segments.  The number of copies must be specified as
+the first parameter to the <span class="cmd">lathe</span> command.  The remaining
+parameters specify the (x,y) points.  For example, the following command
+makes four rotated copies of the line segment from (0,5) to (3,0) and
+then connects them with lines to produce a pyramid:</p>
+
+<pre>             lathe 4  0,5  3,0</pre>
+
+<p class=np>It is legal to have a lathe command with just one point.  The result will be
+a regular n-sided polygon lying in the xz-plane.</p>
+
+<p>The <span class="cmd">extrude</span> command is similar to
+<span class="cmd">lathe</span> in that it makes several copies of a curve
+that lies in the xy-plane, and it then joins those copies with lines.  However, 
+<span class="cmd">extrude</span> makes the copies by translating the
+original curve along the z-axis.  Each copy is separated from the next
+by one unit along the z-axis.  The z-values are centered about&nbsp;0.
+for example, for <span class="cmd">extrude&nbsp;2</span>,
+the two z-values are -0.5 and 0.5.</p>
+
+<p>Besides all these basic objects, you can make <span class="nw">complex
+objects</span>.  A complex object is a list of items enclosed between
+a left bracket, [, and a right bracket,&nbsp;].  It can include objects
+and color specifications.  Each object in a complex object can be
+followed by its own set of transformations, as described below.  The
+commands in a complex object can be basic objects, named objects created with
+the <span class="cmd">define</span> command, nested complex
+objects, and color commands.  A color change inside a complex object
+affects the following commands inside the complex object, but it does
+not affect things outside the complex object.</p>
+
+<p>Because of the ability to nest complex objects inside other
+complex objects, xModels is said to use <span class="nw">hierarchical
+models</span>.</p>
+
+
+<h3>Transformations</h3>
+
+<p>Any object can be followed by a list of one or more transformations
+that affect the size, position, and orientation of that object.  This 
+includes complex objects.  Any transformation applied to a complex object
+is applied to that object as a whole.  If an object inside a complex
+object has its own transformations, they are applied first, followed
+by the overall transformation of the object as a whole.</p>
+
+<p>A transformation consists of a word specifying the type of transformation,
+followed by one or more parameters.  For example, the command 
+<span class="cmd">rotate&nbsp;30</span> specifies that the object
+is to be rotated through an
+angle of 30 degrees about the z-axis.  Some transformations take a variable
+number of parameters.  For example, <span class="cmd">scale&nbsp;3</span>
+will magnify the object by a factor of 3 in all directions, while
+<span class="cmd">scale&nbsp;2,6,0.5</span> will scale it by
+factors of 2 in the x-direction, 6 in the y-direction, and 0.5 in the
+z-direction.</p>
+
+<p>When an object is followed by several transformations, they are applied
+in the order given.  For example, in</p>
+
+<pre>           square  xtranslate 5  rotate 30</pre>
+
+<p class=np>the square is first translated 5 units in the positive x-direction, and
+is then rotated by 30 degrees about the origin.  Putting the transformations
+in the opposite order:</p>
+
+<pre>           square  rotate 30  xtranslate 5</pre>
+
+<p class=np>gives a different result, since the square is first rotated and then
+translated.</p>
+
+<p>Here is a list of the transformations used in xModels, where A, B, C,
+D, E, F, and G are numbers (or possibly, in the case of an animation, number ranges):</p>
+
+<ul>
+<li><span class="cmd">scale A B C</span> &mdash; Scales by factors of A in the x direction,
+B in the y direction, and C in the z direction.  Scaling by a fractional amount makes
+an object smaller.  Scaling by a negative amount reflects the object through the
+corresponding coordinate plane.  The scaling is centered at the
+origin; all other points move away from or towards the origin.  
+<li><span class="cmd">scale A B</span> &mdash; same as "scale A B B".
+<li><span class="cmd">scale A</span> &mdash; same as "scale A A A".
+<li><span class="cmd">xscale A</span> &mdash; same as "scale A 1 1"; scales in x-direction only.
+<li><span class="cmd">yscale A</span> &mdash; same as "scale 1 A 1"; scales in y-direction only.
+<li><span class="cmd">zscale A</span> &mdash; same as "scale 1 1 A"; scales in z-direction only.
+<li><span class="cmd">translate A B C</span> &mdash; Moves each point (x,y,z) to
+(x+A,y+B,z+C). The effect is to move the object A units in the x-direction, B units
+in the y-direction, and C units in the z-direction.
+<li><span class="cmd">translate A B</span> &mdash; same as "translate A B 0".
+<li><span class="cmd">translate A</span> &mdash; same as "translate A 0 0"; same as "xtranslate A".
+<li><span class="cmd">xtranslate A</span> &mdash; same as "translate A 0 0"; moves an object A units in the x-direction.
+<li><span class="cmd">ytranslate A</span> &mdash; same as "translate 0 A 0"; moves an object A units in the y-direction.
+<li><span class="cmd">ztranslate A</span> &mdash; same as "translate 0 0 A"; moves an object A units in the z-direction.
+<li><span class="cmd">xrotate A</span> &mdash; Rotates everything though an angle of A degrees about the
+x-axis.  The x-axis is fixed, and everything else pivots around it.  The direction to
+use for positive angles is determined by the "right-hand rule": Point the thumb
+of your right hand in the direction of the positive axis, and the fingers of your
+right hand will curl in the direction of a positive angle.
+<li><span class="cmd">yrotate A</span> &mdash; Rotates everything though an angle of A degrees about the
+y-axis.
+<li><span class="cmd">zrotate A</span> &mdash; Rotates everything though an angle of A degrees about the
+z-axis.
+<li><span class="cmd">rotate A</span> &mdash; same as "zrotate A".  In the xy-plane,
+this looks like a rotation about the origin, with positive angles representing counterclockwise
+rotation and negative angles, clockwise rotation.
+<li><span class="cmd">rotate A about B C</span> &mdash; Rotate through an angle
+of A degrees about the line that starts at the point (B,C,0) and extends in the
+same direction as the positive z-axis.  In the xy-plane, this is just rotation 
+about the point (B,C).
+<li><span class="cmd">rotate A about line B C D</span> &mdash; Rotate by an
+angle of A degrees about the line that goes from the origin, (0,0,0), to the
+point (B,C,D).  (The two words "about line" can also be written
+as a single word "aboutline".)  If (B,C,D) = (0,0,0), nothing happens.
+<li><span class="cmd">rotate A about line B C D E F G</span> &mdash; Rotate by an
+angle of A degrees about the line that goes from the point (B,C,D) to the
+point (E,F,G). 
+<li><span class="cmd">xSkew A</span> &mdash; This is the transformation
+which moves (x,y,z) to (x+Ay,y,z).  Lines that were perpendicular to the
+xz-plane are tilted (or "skewed") to the left or right.
+<li><span class="cmd">ySkew A</span> &mdash; This is the transformation
+which moves (x,y,z) to (x,y+Ax,z).
+<li><span class="cmd">xyShear A B</span> &mdash; This is the transformation
+which moves (x,y,z) to (x+Az,y+Bz,z).  Lines perpendicular to the
+xy-plane are skewed.  (I have not included a complete set of skew/shear
+transformations, because I don't expect them to be used much.)
+</ul>
+
+<p>Note that although xModels is a 3-dimensional graphics program, you can 
+restrict yourself to two dimensions if you want.  The names and semantics
+of the transformations were chosen so that all the two-dimensional transformations
+are available with reasonable names.  This explains the otherwise odd
+<span class="cmd">rotate A about&nbsp;B&nbsp;C</span>, for
+example.</p>
+
+<p>It is important to understand what a list of transformations does to an 
+object.  All the transformations are applied to the object before it is displayed.
+So, <span class="cmd">square scale&nbsp;2&nbsp;5</span> is just a way
+of specifying a 2-by-5 rectangle, and <span class="cmd">circle translate&nbsp;5</span>
+is just a way of specifying a circle centered at the point (5,0).  You don't
+actually see the object moving or changing shape.  For that,
+you have to use an animation and specify a range of values for
+the transformation.   In that case, each frame of the animation gets its own
+transformation to specify the shape or position of the object in that frame.
+The object can change from one frame to the next, because a different
+transformation is used in each frame.</p>
+
+<h3>Animation</h3>
+
+<p>An animation is just a sequence of frames.  Each frame contains a 
+separate image.  If the images don't change too much from one frame to the
+next, the viewer will perceive continuous motion when the frames are
+played back in rapid succession.</p>
+
+<p>In xModels, a scene description that starts with the command
+<span class="cmd">animate&nbsp;N</span>, where N is a positive
+integer, is an animation with N+1 frames.  The frames are numbered from
+0 to N.  (You should think of N as the number of intervals between
+frames.)  Then, to get any kind of motion or change in the animation, 
+you need to make some quantity change from frame to frame.  This is
+done by using a number range in place of a number.  A number range consists
+of a starting value, followed by a colon, followed by a final value.
+In each frame of the animation, the number range represents a different
+value.  For example, in an 11-frame animation, the number range
+0:5 represents 0 in frame 0, 0.5 in frame 1, 1 in frame 2, ...,
+and 5 in frame 11.  Thus, the scene description:</p>
+
+<pre>              animate 10
+              circle scale 0:5
+</pre>
+
+<p class=np>shows a circle that grows from a size of 0 in the first frame to 
+a size of 5 in the last frame.  And</p>
+
+<pre>              animate 30
+              square scale 5 rotate 0:90
+</pre>
+
+<p class=np>shows a 5-by-5 square pivoting through a 90-degree turn about the origin.
+Note that the value 5 in this example is the same in each frame.  You don't
+need to use a number range for each value in an animation &mdash; only for the
+values that you actually want to change during the animation.</p>
+
+<p>By adding additional parameters to the animate command, you can make
+"segmented animations."  For example, the command
+<span class="cmd">animate&nbsp;30&nbsp;50</span> specifies an
+animation with two segments.  The first segment has 31 frames, and the
+second segment has 51.  The final frame of the first segment is also the
+first frame of the second segment, so there are 81 frames in all.  (Remember
+that the numbers 30 and 50 actually specify the number of intervals between frames.)
+An animation can contain any number of segments. The first frame of the
+animation, the last frame, and any frame that is on the boundary
+between two segments are called <span class="nw">key frames</span>.</p>
+
+<p>A number range used in a segmented animation must specify a value for
+each of the key frames.  Thus, it must have exactly as many colons as
+there are segments in the animation.  For example, the number range 10:5:7 
+could be used in a two-segment animation.  During the first segment, 
+the value ranges from 10 to 5, and during the second segment, it ranges
+from 5 to 7.  The number range 0:0:10  has the constant value 0 throughout
+the first segment, and then its value ranges from 0 to 10 during the
+second segment.  Sometimes, you want a quantity that changes at a
+constant rate during the whole animation, rather than at different
+rates in different segments.  The notation for doing this is to use
+two or more colons in a row, with no numbers  between.  For
+example, 0::10  represents a quantity that varies evenly from 0 to 10
+across both segments of a two-segment animation.</p>
+
+<p>The xModels web page has a set of controls for controlling animations,
+located to the left of the image display area.  There is a "Run&nbsp;Animation"
+button for starting or resuming an animation, a "Pause&nbsp;Animation" button
+for pausing a running animation, and a "Next&nbsp;Frame" button that will
+display just the next single frame of an animation that is paused.  These
+buttons are only enabled when using them makes sense.</p>
+
+<p>A "Frames per Second" popup menu controls the speed at which an
+animations run, ranging from 60 frames per second down to 1 frame per second.</p>
+
+<p>And an "Animation Style" menu specifies what
+happens in an animation when the last frame is reached.  If this menu
+is set to "Loop," the animation is repeated starting back
+at frame zero.  If it is set to "Back&nbsp;And&nbsp;Forth," the
+animation is played backwards, then forwards again, and so on.
+If it is set to "Once&nbsp;Through," the animation is paused
+when it reaches the final frame.</p>
+
+
+
+<hr>
+<div align=right><a href="http://math.hws.edu/eck/index.html"><i>David Eck</i></a></div>
+
+</div>
+</body>
+</html>

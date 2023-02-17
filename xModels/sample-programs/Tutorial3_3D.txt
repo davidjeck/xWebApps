@@ -1,0 +1,53 @@
+; xModels Tutorial 3: Three-dimensional Scenes.
+
+; The two previous tutorials included three-dimensional
+; objects, but the transformations that were applied 
+; only affected two dimensions.  Transformations can,
+; in fact, affect all three dimensions.  This file
+; discusses three-dimensional transformations and
+; has more information about the kinds of 
+; transformations that can be applied.
+
+animate 60  ; This will be a 61-frame animation.
+
+circle scale 8      ; The "translate" command can take three
+   translate 0 0 6  ; parameters, giving changes in x, y, and z.
+   yrotate 0:360    ; The z-axis points out of the screen.
+                    ; A translation of 6 units in the z
+                    ; direction moves the circle forward
+                    ; six units towards the viewer.  From that
+                    ; position, it is rotated 360 degrees
+                    ; around the y-axis, which points upwards.
+                    ; This rotation sends it towards the right 
+                    ; and away from the viewer, then all the way 
+                    ; around the axis and back to its original 
+                    ; position.
+
+red
+
+square xscale 5     ; "xscale 5" is short for "scale 5 1 1".
+       ytranslate 8 ; This means "translate 0 8 0".  Similarly,
+       xrotate 0:360; there are commands: yscale, zscale,
+                    ; xtranslate, ztranslate, xrotate, and
+                    ; zrotate.  zrotate is actually the same
+                    ; as the rotate command, since it just
+                    ; rotates everything around the z-axis,
+                    ; which points out of the screen towards the
+                    ; user.  This rectangle starts at the top
+                    ; of the screen and rotates around the 
+                    ; x-axis, which stretches from left to right.
+                    
+blue
+
+cube scale 2 translate -12:12 2:-2 -6:6
+   ; A small blue cube moves from (-12,2,-6) to (12,-2,6).
+
+
+green
+
+cylinder scale 5 rotate 0:360 about line 1 1 0
+   ; The cylinder rotates about the line that extends
+   ; from (0,0,0) to (1,1,0).  The "rotate about line"
+   ; command lets you rotate objects about lines other
+   ; than the coordinate axes.
+

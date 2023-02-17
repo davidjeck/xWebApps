@@ -1,0 +1,2175 @@
+<!DOCTYPE html>
+
+<!--
+    Web page written by David Eck (https://math.hws.edu/eck/index.html)
+    You can do anything you like with this web page and with the code, but
+    if you use a substantial portion of it, you should include attribution.
+    
+    This page implements a simple scene description langauge for
+    wireframe graphics.
+    
+    The original xModels program was written in about 1993 in Macintosh Object
+    Pascal and was translated into a Java applet in about 1997.  This JavaScript
+    version is a 2023 translation of the Java applet, and its heritage is
+    responsible for some of the code not following the usual JavaScript conventions.
+-->
+<html>
+<head>
+<meta charset="UTF-8">
+
+<style type="text/css">
+   body {
+       background-color: #D8D8D8;
+   }
+   canvas {
+       display: block;
+       background-color: #BBBBBB;
+   }
+   #canvas-holder {
+       display: inline-block;
+       border: 2px solid black;
+       margin: 0;
+       padding: 0;
+   }
+   #controls {
+       display: inline-block;
+       background-color:white;
+       border-left: 2px solid black;
+       border-right: 2px solid black;
+       border-top: 2px solid black;
+       padding: 0;
+       margin: 0;
+   }
+   #controls p {
+       margin: 12px 0;
+       white-space: nowrap;
+   }
+   div.group {
+       padding: 0 8px;
+       border-bottom: 2px solid black;
+   }
+   #imagediv p {
+       margin: 4px 0;
+       white-space: nowrap;
+   }
+   #graphicsdiv {
+       margin: 0 0 0 20px;
+       padding: 0;
+       position: relative;
+   }
+   .dialog, #errorreport {
+       display: none;
+       z-index: 10; 
+       position: absolute;
+       left: 150px;
+       top: 150px;
+       width: 500px;
+       border-radius: 16px;
+       box-shadow: 5px 5px 8px black;
+   }
+   .dialog {
+       border: 2px solid #000099;
+       background-color: #D8D8FF;
+   }
+   #errorreport {
+       border: 2px solid #AA0000;
+       background-color: #444444;
+       color: white;
+   }
+   .dialog p, #errorreport p {
+      padding: 0 10pt;
+   }
+   
+   #status {
+       white-space: nowrap;
+       font-weight: bold;
+       color: #AA0000;
+   }
+   textarea {
+     white-space: pre;
+     word-wrap: normal;
+     overflow-x: scroll;
+   }
+</style>
+
+<script>
+   
+/*-----------------Scene classes--------*/
+
+class Transform {
+
+     // represents an affine transform in three dimensions of the form:
+     //
+     //         newx = a1*x + a2*y +a3*z +tx;
+     //         newy = b1*x + b2*y +b3*z +ty;
+     //         newz = c1*x + c2*y +c3*z +tz;
+     //
+   
+   constructor() {
+       this.tm = new Array(3);
+       for (let i = 0; i < 3; i++)
+           this.tm[i] = new Array(4);
+       if ( arguments.length === 0 ) {
+              // default constructor creates the identity transformation
+           for (let i=0; i<3; i++) {
+              for (let j=0; j<4; j++)
+                 this.tm[i][j] = 0;
+           }
+           this.tm[0][0] = 1;
+           this.tm[1][1] = 1;
+           this.tm[2][2] = 1;
+       }
+       else if (arguments.length === 1) {
+              // copy constructor; argument must be a Transform
+           let T = arguments[0];
+           for (var i=0; i<3; i++) {
+              for (var j=0; j<4; j++)
+                 this.tm[i][j] = T.tm[i][j];
+           }
+       }
+       else {
+             // construct a transfrom a list of all matrix entries;
+             // there must be twelve numeric arguments:
+             //   a1, a2, a3, tx,  b1, b2, b3, ty,  c1, c2, c3, tz
+          this.tm = [
+              [ arguments[0], arguments[1], arguments[2], arguments[3] ],
+              [ arguments[4], arguments[5], arguments[6], arguments[7] ],
+              [ arguments[8], arguments[9], arguments[10], arguments[11] ]
+          ];
+       }
+   }
+            
+   newx(x, y, z) {
+         // the x-coord of the point that results when this transformation
+         // is applied to the point (x,y,z)
+      return this.tm[0][0]*x + this.tm[0][1]*y + this.tm[0][2]*z + this.tm[0][3];
+   }
+   
+   newy(x, y, z) {
+         // the y-coord of the point that results when this transformation
+         // is applied to the point (x,y,z)
+      return this.tm[1][0]*x + this.tm[1][1]*y + this.tm[1][2]*z + this.tm[1][3];
+   }
+   
+   newz(x, y, z) {
+         // the z-coord of the point that results when this transformation
+         // is applied to the point (x,y,z)
+      return this.tm[2][0]*x + this.tm[2][1]*y + this.tm[2][2]*z + this.tm[2][3];
+   }
+   
+   rotatex(degrees) {
+         // multiply this transform on the right by a rotation about the Z axis
+      let radians = (degrees * Math.PI) / 180;
+      let sin = Math.sin(radians);
+      let cos = Math.cos(radians);
+      for (let i=0; i<3; i++) {
+         let a = this.tm[i][1] * cos + this.tm[i][2] * sin;
+         this.tm[i][2] = this.tm[i][1] * (-sin) + this.tm[i][2] * cos;
+         this.tm[i][1] = a;
+      }
+   }
+   
+   rotatey(degrees) {
+         // multiply this transform on the right by a rotation about the Z axis
+      let radians = (degrees * Math.PI) / 180;
+      let sin = Math.sin(radians);
+      let cos = Math.cos(radians);
+      for (let i=0; i<3; i++) {
+         let a = this.tm[i][2] * cos + this.tm[i][0] * sin;
+         this.tm[i][0] = this.tm[i][2] * (-sin) + this.tm[i][0] * cos;
+         this.tm[i][2] = a;
+      }
+   }
+   
+   rotatez(degrees) {
+         // multiply this transform on the right by a rotation about the Z axis
+      let radians = (degrees * Math.PI) / 180;
+      let sin = Math.sin(radians);
+      let cos = Math.cos(radians);
+      for (let i=0; i<3; i++) {
+         let a = this.tm[i][0] * cos + this.tm[i][1] * sin;
+         this.tm[i][1] = this.tm[i][0] * (-sin) + this.tm[i][1] * cos;
+         this.tm[i][0] = a;
+      }
+   }
+   
+   translate(dx, dy, dz) {
+         // multiply this transform on the right by a translation
+      for (let i=0; i<3; i++)
+         this.tm[i][3] = this.tm[i][0] * dx + this.tm[i][1] * dy + this.tm[i][2] * dz + this.tm[i][3];
+   }
+   
+   scale(sx, sy, sz) {
+         // multiply this transform on the right by a scaling transformation
+      for (let row=0; row<3; row++) {
+         this.tm[row][0] *= sx;
+         this.tm[row][1] *= sy;
+         this.tm[row][2] *= sz;
+      }
+   }
+   
+   xyShear(xshear, yshear) {
+         // multiply on the right by the shear transformation
+         //   x = x + z*xshear, y = y + z*yshear
+       this.tm[0][2] += this.tm[0][0]*xshear + this.tm[0][1]*yshear;
+       this.tm[1][2] += this.tm[1][0]*xshear + this.tm[1][1]*yshear;
+       this.tm[2][2] += this.tm[2][0]*xshear + this.tm[2][1]*yshear;
+   }
+   
+   xSkew(skew) {
+        // multiply on the right by the shear transformation x = x + skew * y
+      this.tm[0][1] += skew*this.tm[0][0];
+      this.tm[1][1] += skew*this.tm[1][0];
+      this.tm[2][1] += skew*this.tm[2][0];
+   }
+   
+   ySkew(skew) {
+        // multiply on the right by the shear transformation y = y + skew * x
+      this.tm[0][0] += skew*this.tm[0][1];
+      this.tm[1][0] += skew*this.tm[1][1];
+      this.tm[2][0] += skew*this.tm[2][1];
+   }
+   
+   rotateAboutLine(angle, x, y, z) {
+         // multiply this transform on the right by a rotation
+         // about the line the line through (0,0,0) and (x,y,z)
+       let size = Math.sqrt(x*x + y*y + z*z);
+       if (size <1.0e-10 || Math.abs(angle) < 0.01)
+          return;
+       x /= size;  // normalize
+       y /= size;
+       z /= size;
+       
+       if (Math.abs(z) < 1e-7) {
+          if (Math.abs(y) < 1e-7) {
+             if (x > 0)
+                this.rotatex(angle);
+             else
+                this.rotatex(-angle);
+             return;
+          }
+          if (Math.abs(x) < 1e-7) {
+             if (y > 0)
+                this.rotatey(angle);
+             else
+                this.rotatey(-angle);
+             return;
+          }
+          let a = 180.0/Math.PI * Math.acos(x/Math.sqrt(x*x+y*y));
+          if (y > 0)
+             a = -a;
+          this.rotatez(-a);
+          this.rotatex(angle);
+          this.rotatez(a);
+          return;
+       }
+       
+       if (Math.abs(y) < 1e-7) {
+          if (Math.abs(x) < 1e-7) {
+             if (z > 0)
+                this.rotatez(angle);
+             else
+                this.rotatez(-angle);
+             return;
+          }
+          let a = 180.0/Math.PI * Math.acos(z/Math.sqrt(x*x+z*z));
+          if (x > 0)
+             a = -a;
+          this.rotatey(-a);
+          this.rotatez(angle);
+          this.rotatey(a);
+          return;
+       }
+       
+       
+       let a1 = Math.acos(z/Math.sqrt(y*y+z*z));
+       if (y < 0)
+          a1 = -a1;
+       let s = Math.sin(a1);
+       let c = Math.cos(a1);
+       z = s*y+c*z;
+       a1 = 180.0/Math.PI * a1;
+       let a2 = 180.0/Math.PI * Math.acos(z/Math.sqrt(x*x+z*z));
+       if (x > 0)
+          a2 = -a2;
+       this.rotatex(-a1);
+       this.rotatey(-a2);
+       this.rotatez(angle);
+       this.rotatey(a2);
+       this.rotatex(a1);
+   }
+   
+   multiply(T) {
+         // multiply this transform on the right by the transformation T
+      if (T == null)
+         return;
+      for (let row=0; row<3; row++) {
+            let a = this.tm[row][0]*T.tm[0][0] + this.tm[row][1]*T.tm[1][0] + this.tm[row][2]*T.tm[2][0];
+            let b = this.tm[row][0]*T.tm[0][1] + this.tm[row][1]*T.tm[1][1] + this.tm[row][2]*T.tm[2][1];
+            let c = this.tm[row][0]*T.tm[0][2] + this.tm[row][1]*T.tm[1][2] + this.tm[row][2]*T.tm[2][2];
+            this.tm[row][3] = this.tm[row][0]*T.tm[0][3] + this.tm[row][1]*T.tm[1][3] + 
+                                                 this.tm[row][2]*T.tm[2][3] + this.tm[row][3];
+            this.tm[row][0] = a;
+            this.tm[row][1] = b;
+            this.tm[row][2] = c;
+      }
+   }
+   
+} // end class Transform
+
+
+
+class Model {
+
+   constructor() {
+      this.scene = null;  // ComplexObject
+      this.frameCounts = null;  // Array of integers
+      this.frames = 1;   // default, to be changed if an animate command is found
+      this.bgColor= null;  // RGBParam
+      this.viewDistance = null;  // ParamVal
+      this.userdef = {};  // hash table of user-defined objects
+      
+      this.lastFrame = -1;  // integer; -1 indicates that no frames have ever been drawn
+      
+      this.preparedFrames = null;   // Array of PreparedScene
+      this.currentFrame = null;  // PreparedScene
+      
+      this.width = -1;  // integers; values used when preparing frames
+      this.height = -1;
+   }
+   
+   setSize(width, height) {  // compare to stored width, height, possibly invalidate frames
+      if (width == this.width && height == this.height)
+         return;
+      this.width = width;
+      this.height = height;
+      this.invalidate();
+   }
+   
+   invalidate() {
+      this.preparedFrames = null;
+      this.currentFrame = null;
+   }
+   
+   drawFrame(g, frameNum) {
+           // g is a Canvas graphics context
+      if (this.width == -1) // THIS INDICATES AN ERROR AND SHOULDN'T HAPPEN
+         return;
+      frameNum = Math.max(0,Math.min(this.frames-1,frameNum));
+
+      if (frameNum != this.lastFrame || this.currentFrame == null)
+        this.makeCurrentFrame(frameNum);
+
+      let bg = this.bgColor.getVal(frameNum);
+      g.fillStyle = bg;
+      g.fillRect(0,0,this.width,this.height);
+      this.currentFrame.play(g);
+
+   }
+   
+   makeCurrentFrame(frameNum) {
+      if (this.preparedFrames != null && this.preparedFrames[frameNum] != null) {
+         this.currentFrame = this.preparedFrames[frameNum];
+         this.lastFrame = frameNum;
+         return;
+      }
+      let vd = this.viewDistance.getVal(frameNum);
+      this.currentFrame = new PreparedScene(this.width,this.height,vd);
+      this.scene.prepare(this.currentFrame,frameNum,new Transform());
+      this.lastFrame = frameNum;
+      if (this.preparedFrames == null)
+         this.preparedFrames = new Array(frames);
+      this.preparedFrames[frameNum] = this.currentFrame;
+   }
+
+} // end class Model
+
+
+class Line {  // simple object to hold coordinates of line endpoints for PreparedScene
+   constructor(a, b, c, d) {
+      this.xL = a;
+      this.yL = b;
+      this.xR = c;
+      this.yR = d;
+   }
+}
+
+
+class PreparedScene {  // represents a list of lines and color changes that can
+                       // be "played" into  graphics context to draw a wireframe picture.
+                       // The original scene is given in 3D world coordinates, but
+                       // the stored scence is given in 2D, integral canvas coords.
+   
+    constructor(width, height, viewDistance) {
+          // width, height give size of canvas, in pixels;
+          // the image will include points with (x,y) in the range
+          // -10 to 10, extending outside that range in one direction
+          // if the canvas is not square
+       this.item = [];
+       this.currentColor = "black";
+       this.viewDistance = viewDistance;
+       if (width >= height) {
+          this.ymax = 10;
+          this.xmax = width/height * this.ymax;
+       }
+       else {
+          this.xmax = 10;
+          this.ymax = height/width * this.xmax;
+       }
+       this.xscale = width/(2*this.xmax);
+       this.yscale = height/(2*this.ymax);
+    }
+    
+    play(g) {  // play scene into graphics context g
+       let ct = this.item.length;
+       g.strokeStyle = "black";
+       for (let i = 0; i < ct; i++) {
+          let it = this.item[i];
+          if (it instanceof Line) {
+             g.beginPath();
+             g.moveTo(it.xL,it.yL);
+             g.lineTo(it.xR,it.yR);
+             g.stroke();
+          }
+          else
+             g.strokeStyle = it;
+       }
+    }
+    
+    addColor(c) {  // add color to list of items in scene
+       this.item.push(c);
+       this.currentColor = c;
+    }
+    
+    getCurrentColor() {
+       return this.currentColor;
+    }
+    
+    getItemCount() {
+       return item.length;
+    }
+    
+    addLine(/* Transform */ T,  x1,y1,z1,  x2,y2,z2) {
+              // Apply T to (x1,y1,z1) to (x2,y2,z2), then apply
+              // projection and window transformation, then add line to scene
+         if (T !== null) {
+            let temp1 = T.newx(x1,y1,z1);
+            let temp2 = T.newy(x1,y1,z1);
+            z1 = T.newz(x1,y1,z1);
+            x1 = temp1;
+            y1 = temp2;
+            temp1 = T.newx(x2,y2,z2);
+            temp2 = T.newy(x2,y2,z2);
+            z2 = T.newz(x2,y2,z2);
+            x2 = temp1;
+            y2 = temp2;
+         }
+         if (Number.isFinite(this.viewDistance)) {
+            let limit = this.viewDistance * 0.999;
+            if (z1 >= limit && z2 >= limit)
+               return;
+            if (z1 >= limit) {
+               x1 = x1 + (x2-x1)/(z2-z1)*(limit-z1);
+               y1 = y1 + (y2-y1)/(z2-z1)*(limit-z1);
+               z1 = limit;
+            }
+            else if (z2 >= limit) {
+               x2 = x2 + (x1-x2)/(z1-z2)*(limit-z2);
+               y2 = y2 + (y1-y2)/(z1-z2)*(limit-z2);
+               z2 = limit;
+            }
+            x1 = this.viewDistance*x1 / (this.viewDistance - z1);
+            y1 = this.viewDistance*y1 / (this.viewDistance - z1);
+            x2 = this.viewDistance*x2 / (this.viewDistance - z2);
+            y2 = this.viewDistance*y2 / (this.viewDistance - z2);
+         }
+         x1 = this.xscale*(x1+this.xmax);
+         y1 = this.yscale*(this.ymax-y1);
+         x2 = this.xscale*(x2+this.xmax);
+         y2 = this.yscale*(this.ymax-y2);
+         let size1 = Math.sqrt(x1*x1+y1*y1);
+         if (size1 > 20000) {
+            x1 = x1/size1 * 20000;
+            y1 = y1/size1 * 20000;
+         }
+         let size2 = Math.sqrt(x2*x2+y2*y2);
+         if (size2 > 20000) {
+            x2 = x2/size2 * 20000;
+            y2 = y2/size2 * 20000;
+         }
+         this.item.push(new Line( x1, y1, x2, y2 ));
+    }
+    
+}  // end class PreparedScene
+
+
+
+class SceneMaker { // sematically, an abstract class
+   prepare(/*PreparedScene scene, int frameNum, Transform T*/) {
+   }
+}
+
+class ParamVal {
+
+
+   constructor() {
+      if ( arguments.length == 1 ) {  // value must be a number
+          this.frameCounts = null;
+          this.values = [arguments[0]];
+      }
+      else { // There must be two arguments, both are arrays.
+             // Assume that values.length <= frameCounts.length!
+             // Assume that first and last entries in values[] are actual
+             // numbers; other entries can be NaN!!!
+          this.frameCounts = arguments[0];  // reference to master copy
+          this.values = arguments[1];            // values at division points in an animation
+      }
+   }
+   
+   getVal(frameNumber) {  // Asume frameNumber >= 0
+      let valCt = this.values.length;
+      if (valCt == 1)
+         return this.values[0];
+      else {
+         let right = 0;
+         while (right < valCt && this.frameCounts[right] < frameNumber)
+            right++;
+         if (right >= valCt)
+            return this.values[valCt-1];
+         if (this.frameCounts[right] == frameNumber && !Number.isNaN(this.values[right]))
+            return this.values[right];
+         let left = right - 1;
+         while (Number.isNaN(this.values[right]))
+            right++;
+         while (Number.isNaN(this.values[left]))
+            left--;
+         return this.values[left] + 
+                 ( (this.values[right] - this.values[left]) * 
+                     (frameNumber-this.frameCounts[left])/(this.frameCounts[right]-this.frameCounts[left]) );
+      }
+   }
+   
+}  // end class ParamVal
+
+
+class RGBParam extends SceneMaker {
+   
+   constructor() {
+      super();
+      if (arguments.length == 1) {
+             // argument must represent a color (something that can be assigned to g.fillStyle)
+          this.c = arguments[0];
+      }
+      else {
+            // must be three arguments, type ParamVal, representing color components for a color
+          this.r = arguments[0];
+          this.g = arguments[1];
+          this.b = arguments[2];
+      }
+   }
+      
+   getVal(frameNumber) {
+      if (this.c == null) {
+         let red = this.r.getVal(frameNumber);
+         let green = this.g.getVal(frameNumber);
+         let blue = this.b.getVal(frameNumber);
+         red = Math.round(255*red);
+         green = Math.round(255*green);
+         blue = Math.round(255*blue);
+         red = Math.max(0, Math.min(255, red));
+         green = Math.max(0, Math.min(255, green));
+         blue = Math.max(0, Math.min(255, blue));
+         return "rgb(" + red + "," + green + "," + blue + ")";
+      }
+      else
+         return this.c;
+   }
+
+   prepare(scene, frameNum, T) {
+      scene.addColor(this.getVal(frameNum));
+   }
+
+}  // End Class RGBParam
+
+
+class HSBParam extends RGBParam {
+   
+   constructor(h, s, b) { // must be three arguments of type ParamVal
+      super(h,s,b);
+   }
+   
+   getVal(frameNumber) {
+      if (this.c == null) {
+         let hue = Math.min(this.r.getVal(frameNumber),0.99);
+         let saturation = this.g.getVal(frameNumber);
+         let brightness = this.b.getVal(frameNumber);
+         let value = Math.max(0.0,Math.min(brightness,1.0));
+         saturation = Math.max(0.0,Math.min(saturation,1.0));
+         let l = value*(1-saturation/2);
+         let s = (l == 0 || l == 1)? 0 : (value-l)/Math.min(l,1-l);
+         l = Math.round(100*l);
+         s = Math.round(100*s);
+         let h = Math.round(360*Math.max(0.0,Math.min(hue,1.0)));
+         return "hsl(" + h + "," + s + "%," + l + "%)";
+      }
+      else
+         return this.c;
+   }
+
+}  // End Class HSBParam
+
+
+class LineGroup extends SceneMaker {
+
+   constructor(points, lines) {
+      super();
+      this.x = new Array(points); // values are filled in elsewhere
+      this.y = new Array(points);
+      this.z = new Array(points);
+      this.v1 = new Array(lines);
+      this.v2 = new Array(lines);
+      for (let i = 0; i < points; i++)
+         this.z[i] = 0; // (needed for 2D shapes)
+   }
+      
+   prepare(scene, frameNum, T) {
+      for (let i = 0; i < this.v1.length; i++)         
+         scene.addLine(T, this.x[this.v1[i]],this.y[this.v1[i]],this.z[this.v1[i]],
+                 this.x[this.v2[i]],this.y[this.v2[i]],this.z[this.v2[i]]);
+   }
+   
+}  // end class LineGroup
+
+
+class ParamLineGroup extends SceneMaker {
+   
+   constructor(points, lines) {
+      super();
+      this.x = new Array(points);
+      this.y = new Array(points);
+      this.z = new Array(points);
+      this.v1 = new Array(lines);
+      this.v2 = new Array(lines);
+      for (let i = 0; i < points; i++)
+         this.z[i] = new ParamVal(0); // (needed for 2D shapes)
+   }
+   
+   prepare(scene, frameNum, T) {
+      for (let i = 0; i < this.v1.length; i++)
+         scene.addLine(T,
+             this.x[this.v1[i]].getVal(frameNum), this.y[this.v1[i]].getVal(frameNum), this.z[this.v1[i]].getVal(frameNum),
+             this.x[this.v2[i]].getVal(frameNum), this.y[this.v2[i]].getVal(frameNum), this.z[this.v2[i]].getVal(frameNum));
+   }
+   
+}  // end class ParamLineGroup
+
+
+
+class ExtrudeObject extends SceneMaker {
+   
+   constructor(reps, params) {
+      super();
+      let points = params.length / 2;
+      this.repCount = reps;
+      this.x = [];
+      this.y = [];
+      for (let i = 0; i < points; i++) {
+         this.x.push(params[2*i]);
+         this.y.push(params[2*i+1]);
+      }
+   }
+
+   prepare(scene, frameNum, T) {
+      let a = new Array(this.x.length);
+      let b = new Array(this.x.length);
+      let zmin = - (this.repCount - 1.0) / 2.0;
+      let zmax = (this.repCount - 1.0) / 2.0;
+      for (let i = 0; i < this.x.length; i++) {
+         a[i] = this.x[i].getVal(frameNum);
+         b[i] = this.y[i].getVal(frameNum);
+         scene.addLine(T,a[i],b[i],zmin,a[i],b[i],zmax);
+      }
+      let z = zmin;
+      for (let rep = 0; rep < this.repCount; rep++) {
+         for (let i = 0; i < this.x.length-1; i++)
+            scene.addLine(T,a[i],b[i],z,a[i+1],b[i+1],z);
+         z += 1;
+      }
+   }
+   
+}  // end class ExtrudeObject
+
+
+class LatheObject extends SceneMaker {
+
+   constructor(reps, params) {
+      super();
+      let points = params.length / 2;
+      this.repCount = reps;
+      this.x = [];
+      this.y = [];
+      for (let i = 0; i < points; i++) {
+         this.x.push(params[2*i]);
+         this.y.push(params[2*i+1]);
+      }
+      this.sin = new Array(this.repCount);
+      this.cos = new Array(this.repCount);
+      for (let i = 0; i < this.repCount; i++) {
+         this.sin[i] = Math.sin(2*i*Math.PI/this.repCount);
+         this.cos[i] = Math.cos(2*i*Math.PI/this.repCount);
+      }
+   }
+
+   prepare(scene, frameNum, T) {
+      let a = new Array(this.x.length);
+      let b = new Array(this.x.length);
+      for (let i = 0; i < this.x.length; i++) {
+         a[i] = this.x[i].getVal(frameNum);
+         b[i] = this.y[i].getVal(frameNum);
+      }
+      for (let rep = 0; rep < this.repCount; rep++)
+         for (let i = 0; i < this.x.length-1; i++)
+            scene.addLine(T,this.cos[rep]*a[i],b[i],this.sin[rep]*a[i],this.cos[rep]*a[i+1],b[i+1],this.sin[rep]*a[i+1]);
+      for (let i = 0; i < this.x.length; i++) {
+         for (let rep = 0; rep < this.repCount-1; rep++)
+            scene.addLine(T,this.cos[rep]*a[i],b[i],this.sin[rep]*a[i],this.cos[rep+1]*a[i],b[i],this.sin[rep+1]*a[i]);
+         scene.addLine(T,this.cos[this.repCount-1]*a[i],b[i],this.sin[this.repCount-1]*a[i],a[i],b[i],0);
+      }
+   }
+   
+}  // end class LatheObject
+
+
+class ComplexObject extends SceneMaker {
+
+  constructor(items) {
+     super();
+     this.parts = new Array(items.length);
+     for (let i = 0; i < items.length; i++)
+        this.parts[i] = items[i];
+  }
+  
+  prepare(scene, frameNum, T) {
+     let saveColor = scene.getCurrentColor();
+     for (let i = 0; i < this.parts.length; i++)
+        this.parts[i].prepare(scene,frameNum,T);
+     scene.addColor(saveColor);
+  }
+
+}  // end class ComplexObject
+
+
+class TransformInfo {
+   
+   constructor(type, params) {
+      this.transformType = type;
+      this.data = new Array(params.length);
+      for (let i = 0; i < this.data.length; i++)
+         this.data[i] = params[i];
+   }
+
+   apply(T, frameNum) {
+      let a,b,c,d;
+      switch (this.transformType) {
+         case TransformInfo.scale:
+           a = this.data[0].getVal(frameNum);
+           b = (this.data.length > 1)? this.data[1].getVal(frameNum) : a;
+           c = (this.data.length > 2)? this.data[2].getVal(frameNum) : b;
+           T.scale(a,b,c);
+           break;
+         case TransformInfo.translate:
+           a = this.data[0].getVal(frameNum);
+           b = (this.data.length > 1)? this.data[1].getVal(frameNum) : 0;
+           c = (this.data.length > 2)? this.data[2].getVal(frameNum) : 0;
+           T.translate(a,b,c);
+           break;
+         case TransformInfo.xrotate:
+           a = this.data[0].getVal(frameNum);
+           T.rotatex(a);
+           break;
+         case TransformInfo.yrotate:
+           a = this.data[0].getVal(frameNum);
+           T.rotatey(a);
+           break;
+         case TransformInfo.zrotate:
+           a = this.data[0].getVal(frameNum);
+           T.rotatez(a);
+           break;
+         case TransformInfo.rotateAboutPoint:
+           a = this.data[0].getVal(frameNum);
+           b = this.data[1].getVal(frameNum);
+           c = this.data[2].getVal(frameNum);
+           T.translate(b,c,0);
+           T.rotatez(a);
+           T.translate(-b,-c,0);
+           break;
+         case TransformInfo.rotateAboutLine:
+           let e = 0, f = 0, g = 0;
+           if (this.data.length == 7) {
+             e = this.data[4].getVal(frameNum);
+             f = this.data[5].getVal(frameNum);
+             g = this.data[6].getVal(frameNum);
+             b = e - this.data[1].getVal(frameNum);
+             c = f - this.data[2].getVal(frameNum);
+             d = g - this.data[3].getVal(frameNum);
+             T.translate(e,f,g);
+           }
+           else {
+              b = this.data[1].getVal(frameNum);
+              c = this.data[2].getVal(frameNum);
+              d = this.data[3].getVal(frameNum);
+           }
+           a = this.data[0].getVal(frameNum);
+           T.rotateAboutLine(a,b,c,d);
+           if (this.data.length == 7)
+              T.translate(-e,-f,-g);
+           break;
+         case TransformInfo.xyshear:
+           a = this.data[0].getVal(frameNum);
+           b = this.data[1].getVal(frameNum);
+           T.xyShear(a,b);
+           break;
+         case TransformInfo.xskew:
+           a = this.data[0].getVal(frameNum);
+           T.xSkew(a);
+           break;
+         case TransformInfo.yskew:
+           a = this.data[0].getVal(frameNum);
+           T.ySkew(a);
+           break;
+       }
+   }
+
+}  // end of class TransformInfo
+
+TransformInfo.scale = 0;     // 1, 2, or 3 parameters
+TransformInfo.translate = 1; // 1, 2, or 3 parameters
+TransformInfo.xrotate = 2;   // 1 parameter
+TransformInfo.yrotate = 3;   // 1 parameter
+TransformInfo.zrotate = 4;   // 1 parameter
+TransformInfo.rotateAboutPoint = 5;  // 3 parameters: angle, x, and y
+TransformInfo.rotateAboutLine = 6;   // 4 or 7 parameters
+TransformInfo.xyshear = 7;  // two parameters
+TransformInfo.xskew = 8; // one parameter
+TransformInfo.yskew = 9; // one parameter
+
+
+class TransformedObject extends SceneMaker {
+  
+  constructor(obj, transformList) {
+     super();
+     this.basicObject = obj;
+     this.transforms = new Array(transformList.length);
+     for (let i = 0; i < this.transforms.length; i++)
+        this.transforms[i] = transformList[i];
+  }
+  
+  prepare(scene, frameNum, T) {
+     let compose = new Transform(T);
+     for (let i = this.transforms.length - 1; i >= 0; i--)
+        this.transforms[i].apply(compose,frameNum);
+     this.basicObject.prepare(scene,frameNum,compose);
+  }
+
+}  // end class TransformedObject
+
+class IntToken {
+   constructor(val) {
+      this.val = val;
+   }
+}
+
+let Tokens = {
+   
+     eof: new IntToken(0),
+   
+     polygon: new IntToken(1),
+     polygon_3d: new IntToken(2),
+     lathe: new IntToken(3),
+     extrude: new IntToken(4),
+            
+     rgb: new IntToken(18),
+     hsb: new IntToken(19),
+     infinity: new IntToken(20),
+            
+     define: new IntToken(21),
+     animate: new IntToken(22),
+     background: new IntToken(23),
+     viewdistance: new IntToken(24),
+ 
+     about: new IntToken(90),
+     aboutline: new IntToken(91),
+            
+     scale: new IntToken(105),   // transformation commands have intValue > 100
+     xscale: new IntToken(106),
+     yscale: new IntToken(107),
+     zscale: new IntToken(108),
+     translate: new IntToken(109),
+     xtranslate: new IntToken(110),
+     ytranslate: new IntToken(111),
+     ztranslate: new IntToken(112),
+     rotate: new IntToken(113),
+     xrotate: new IntToken(114),
+     yrotate: new IntToken(115),
+     zrotate: new IntToken(116),
+     xskew: new IntToken(117),
+     yskew: new IntToken(118),
+     xyshear: new IntToken(119)
+            
+};
+
+
+let BasicObjects = {
+      line : new LineGroup(2,1),
+      square : new LineGroup(4,4),
+      cube : new LineGroup(8,12),
+      circle : new LineGroup(36,36),
+      cone : new LineGroup(37,48),
+      cylinder : new LineGroup(72,84)
+};
+
+  BasicObjects.line.x[0] = -0.5;
+  BasicObjects.line.y[0] = 0;
+  BasicObjects.line.x[1] = 0.5;
+  BasicObjects.line.y[1] = 0;
+  BasicObjects.line.v1[0] = 0;
+  BasicObjects.line.v2[0] = 1;
+
+  BasicObjects.square.x[0] = -0.5;
+  BasicObjects.square.y[0] = -0.5;
+  BasicObjects.square.x[1] = 0.5;
+  BasicObjects.square.y[1] = -0.5;
+  BasicObjects.square.x[2] = 0.5;
+  BasicObjects.square.y[2] = 0.5;
+  BasicObjects.square.x[3] = -0.5;
+  BasicObjects.square.y[3] = 0.5;
+  BasicObjects.square.v1[0] = 0;
+  BasicObjects.square.v2[0] = 1;
+  BasicObjects.square.v1[1] = 1;
+  BasicObjects.square.v2[1] = 2;
+  BasicObjects.square.v1[2] = 2;
+  BasicObjects.square.v2[2] = 3;
+  BasicObjects.square.v1[3] = 3;
+  BasicObjects.square.v2[3] = 0;
+  
+  for (let i = 0; i < 4; i++) {
+     BasicObjects.cube.x[i] = BasicObjects.cube.x[i+4] = BasicObjects.square.x[i];
+     BasicObjects.cube.y[i] = BasicObjects.cube.y[i+4] = BasicObjects.square.y[i];
+     BasicObjects.cube.z[i] = -0.5;
+     BasicObjects.cube.z[i+4] = 0.5;
+     BasicObjects.cube.v1[i] = i;
+     BasicObjects.cube.v2[i] = (i<3)? i+1 : 0;
+     BasicObjects.cube.v1[i+4] = i+4;
+     BasicObjects.cube.v2[i+4] = (i<3)? i+5 : 4;
+     BasicObjects.cube.v1[i+8] = i;
+     BasicObjects.cube.v2[i+8] = i+4;
+  }
+
+  for (let i = 0; i < 36; i++) {
+     BasicObjects.circle.x[i] = 0.5*Math.cos(i*Math.PI/18.0);
+     BasicObjects.circle.y[i] = 0.5*Math.sin(i*Math.PI/18.0);
+     BasicObjects.circle.v1[i] = i;
+     BasicObjects.circle.v2[i] = (i<35)? i+1 : 0;
+  }
+  
+  for (let i = 0; i < 36; i++) {
+     BasicObjects.cone.x[i] = BasicObjects.circle.x[i];
+     BasicObjects.cone.y[i] = -0.5;
+     BasicObjects.cone.z[i] = BasicObjects.circle.y[i];
+     BasicObjects.cone.v1[i] = BasicObjects.circle.v1[i];
+     BasicObjects.cone.v2[i] = BasicObjects.circle.v2[i];
+  }
+  BasicObjects.cone.x[36] = 0;
+  BasicObjects.cone.y[36] = 0.5;
+  BasicObjects.cone.z[36] = 0;
+  for (let i = 36; i < 48; i++) {
+     BasicObjects.cone.v1[i] = 36;
+     BasicObjects.cone.v2[i] = (i-36) * 3;
+  }
+  
+  for (let i = 0; i < 36; i++) {
+     BasicObjects.cylinder.x[i] = BasicObjects.cylinder.x[i+36] = BasicObjects.circle.x[i];
+     BasicObjects.cylinder.y[i] = -0.5;
+     BasicObjects.cylinder.y[i+36] = 0.5;
+     BasicObjects.cylinder.z[i] = BasicObjects.cylinder.z[i+36] = BasicObjects.circle.y[i];
+     BasicObjects.cylinder.v1[i] = BasicObjects.circle.v1[i];
+     BasicObjects.cylinder.v1[i+36] = BasicObjects.circle.v1[i]+36;
+     BasicObjects.cylinder.v2[i] = BasicObjects.circle.v2[i];
+     BasicObjects.cylinder.v2[i+36] = BasicObjects.circle.v2[i]+36;
+  }
+  for (let i = 73; i < 84; i++) {
+     BasicObjects.cylinder.v1[i] = (i-72) * 3;
+     BasicObjects.cylinder.v2[i] = BasicObjects.cylinder.v1[i] + 36;
+  }
+
+
+let PredefinedSymbols = {
+    polygon : Tokens.polygon,
+    polygon_3d : Tokens.polygon_3d,
+    lathe : Tokens.lathe,
+    extrude : Tokens.extrude,
+    scale : Tokens.scale,
+    xscale : Tokens.xscale,
+    yscale : Tokens.yscale,
+    zscale : Tokens.zscale,
+    translate : Tokens.translate,
+    xtranslate : Tokens.xtranslate,
+    ytranslate : Tokens.ytranslate,
+    ztranslate : Tokens.ztranslate,
+    rotate : Tokens.rotate,
+    xrotate : Tokens.xrotate,
+    yrotate : Tokens.yrotate,
+    zrotate : Tokens.zrotate,
+    xskew : Tokens.xskew,
+    yskew : Tokens.yskew,
+    xyshear : Tokens.xyshear,
+    about : Tokens.about,
+    aboutline : Tokens.aboutline,
+    rgb : Tokens.rgb,
+    hsb : Tokens.hsb,
+    infinity : Tokens.infinity,
+    define : Tokens.define,
+    animate : Tokens.animate,
+    background : Tokens.background,
+    viewdistance : Tokens.viewdistance,
+    line : BasicObjects.line,
+    square : BasicObjects.square,
+    circle : BasicObjects.circle,
+    cube : BasicObjects.cube,
+    cone : BasicObjects.cone,
+    cylinder : BasicObjects.cylinder,
+    red : new RGBParam("red"),
+    green : new RGBParam("green"),
+    blue : new RGBParam("blue"),
+    black : new RGBParam("black"),
+    white : new RGBParam("white"),
+    gray : new RGBParam("gray"),
+    darkgray : new RGBParam("darkGray"),
+    lightgray : new RGBParam("lightGray"),
+    cyan : new RGBParam("cyan"),
+    magenta : new RGBParam("magenta"),
+    yellow : new RGBParam("yellow")
+};
+
+class ParseError extends Error{
+   constructor(message, pos) {
+       super(message);
+       this.errorPosition = pos;
+   }
+}
+   
+
+/*---------------- Parser --------------*/
+
+function parse(str, baseModel = null) {
+      let data = str;
+      let pos = 0;
+      let hasBase = baseModel !== null;
+      let model = hasBase ? baseModel : new Model();
+      let userdef = model.userdef;
+      let objects = [];
+      let nextToken = null;
+      doParse();
+      if (hasBase) {
+         model.invalidate();
+         for (let i = 0; i < objects.length; i++) {
+             model.scene.parts.push(objects[i]);
+         }
+      }
+      else {
+         model.scene = new ComplexObject(objects);
+      }
+      if (model.viewDistance === null)
+         model.viewDistance = new ParamVal(20.0);
+      if (model.bgColor === null)
+        model.bgColor = new RGBParam("white");
+      return model;
+   
+   
+   function doError(message) {
+      throw new ParseError(message,pos);
+   }
+   
+   function lookToken() {
+      if (nextToken == null)
+         getToken();
+//      console.log("In lookToken: token=" + nextToken);
+      return nextToken;
+   }
+   
+   function readToken() {
+      if (nextToken == null)
+         getToken();
+      let t = nextToken;
+      nextToken = null;
+//      console.log("In readToken: token=" + t);
+      return t;
+   }
+   
+   function rescanToken() {   // force recanning of lookahead token
+      if (nextToken != null) {
+         nextToken = null;
+         pos = tokenStart;
+      }
+   }
+   
+   function getToken()  {
+      while (true) {  // skip whitespace and comments
+         if (pos >= data.length)
+            break;
+         if (data.charAt(pos) == ';') {
+            do {
+               pos++;
+            } while (pos < data.length && data.charAt(pos) != '\n' && data.charAt(pos) != '\r');
+            if (pos >= data.length)
+               break;
+         }
+         if (data.charAt(pos) === ',' || /\s/.test(data.charAt(pos)) )
+            pos++;
+         else
+            break;
+      }
+      tokenStart = pos;  // used for rescanning (which is done by doDefineObject()
+      if (pos >= data.length) {
+         nextToken = Tokens.eof;
+         tokenString = "End-of-data";
+         return;
+      }
+      let ch = data.charAt(pos);
+      if (ch == '[') {
+         nextToken = "[";
+         tokenString = "[";
+         pos++;
+      }
+      else if (ch == ']') {
+         nextToken = "]";
+         tokenString = "]";
+         pos++;
+      }
+      else if (ch == ':') {
+         nextToken = ":";
+         tokenString = ":";
+         pos++;
+      }
+      else if (/[a-zA-Z_]/.test(ch))
+         doWord();
+      else if (/\d/.test(ch) || ch === '-' || ch === '+' || ch === '.')
+         doNumber();
+      else
+         doError("Illegal character, " + ch + ", found in scene description."); 
+   }
+   
+   function doNumber()  {
+      let buffer = "";
+      let ch = data.charAt(pos);
+      if (ch == '+' || ch == '-') {
+         buffer += ch;
+         pos++;
+      }
+      while (true) {
+         if (pos >= data.length)
+            break;
+         ch = data.charAt(pos);
+         if (/\d/.test(ch)) {
+            buffer += ch;
+            pos++;
+         }
+         else
+            break;
+      }
+      if (pos < data.length && data.charAt(pos) == '.') {
+         buffer += data.charAt(pos);
+         pos++;
+         while (true) {
+            if (pos >= data.length)
+               break;
+            ch = data.charAt(pos);
+            if (/\d/.test(ch)) {
+               buffer += ch;
+               pos++;
+            }
+            else
+               break;
+         }
+      }
+      if (pos < data.length && (data.charAt(pos) == 'e' || data.charAt(pos) == 'E')) {
+         buffer += data.charAt(pos);
+         pos++;
+         if (pos < data.length && (data.charAt(pos) == '-' || data.charAt(pos) == '+')) {
+            buffer += data.charAt(pos);
+            pos++;
+         }
+         while (true) {
+            if (pos >= data.length)
+               break;
+            ch = data.charAt(pos);
+            if (/\d/.test(ch)) {
+               buffer += ch;
+               pos++;
+            }
+            else
+               break;
+         }
+      }
+      let d = Number(buffer);
+      if (Number.isNaN(d) || !Number.isFinite(d))
+         doError("Illegal number, \"" + tokenString + "\", found in scene description.");
+      nextToken = d;
+   }
+   
+   function doWord() {
+      buffer = "";
+      while (true) {
+         if (pos >= data.length)
+            break;
+         let ch = data.charAt(pos);
+         if (/[a-zA-Z0-9_]/.test(ch)) {
+            buffer += ch.toLowerCase();
+            pos++;
+         }
+         else
+            break;
+      }
+      tokenString = buffer;
+      let val = userdef[tokenString];
+      if (val === undefined)
+         val = PredefinedSymbols[tokenString];
+      if (val === undefined)
+         nextToken = tokenString;
+      else
+         nextToken = val;
+   }
+   
+   function doParse() {
+      let token = lookToken();
+      if (token === Tokens.eof)
+         doError("There is no data in the program.");
+      if (token === Tokens.animate && !hasBase) {
+         doAnimationData();
+         token = lookToken();
+      }
+      while (token !== Tokens.eof) {
+         if (token === Tokens.define)
+            doDefineObject();
+         else if (token === Tokens.background)
+            doBackgroundData();
+         else if (token === Tokens.viewdistance)
+            doViewdistance();
+         else if (token instanceof SceneMaker || token === "[")
+            objects.push(doObject());
+         else if (token === Tokens.rgb || token === Tokens.hsb || token instanceof RGBParam)
+            objects.push(doColor());
+         else if (token instanceof IntToken) {
+            if (token === Tokens.polygon || token === Tokens.polygon_3d || token === Tokens.lathe || token === Tokens.extrude)
+               objects.push( doPolyThing(token.val) );
+            else if (token === Tokens.animate)
+               doError("The command \"animate\" can only be used as the first item in a scene description.");
+            else if (token === Tokens.infinity)
+               doError("The word \"infinity\" is reserved for use with the ViewDistance command.");
+            else if (token === Tokens.aboutline)
+               doError("The word \"aboutLine\" is meant for used with a rotation transformation.");
+            else if (token === Tokens.about)
+               doError("The word \"about\" is meant for used with a rotation transformation.");
+            else
+               doError("Found a transformation when an object or command was expected.");
+         }
+         else if (typeof token == "string")
+            doError("Unrecognized word, " + token + ", found in scene description.");
+         else if (token === "]" || token === ":")
+            doError("Misplaced character, " + token + ", found while expecting an object, a color, etc.");
+         else if (typeof(token) == "number")
+            doError("Number (" + token + ") found in illegal position while expecting a transformation, object, color, etc.");
+         else
+            doError("Unexpected token '" + tokenString + "' found in input.");
+         token = lookToken();
+      }
+   }
+   
+   function doAnimationData()  {
+      readToken();  // skip "animate"
+      let token = lookToken();
+      if (typeof(token) !== "number")
+         doError("Expecting an integer here; the \"animate\" command must be followd by one or more frame counts.");
+      let frameCounts = [];
+      while (typeof(token) == "number") {
+         readToken();
+         if (token < 0)
+            doError("The frame counts for the animate command must be positive integers.");
+         frameCounts.push(Math.round(token));
+         token = lookToken();
+      }
+      model.frameCounts = new Array(frameCounts.length+1);  // model.frameCounts are cumulative
+      model.frameCounts[0] = 0;
+      for (let i = 1; i <= frameCounts.length; i++)
+         model.frameCounts[i] = frameCounts[i-1] + model.frameCounts[i-1];
+      model.frames = model.frameCounts[frameCounts.length] + 1;
+      if (model.frames > 100000)
+         doError("Too many frames specified in animation. An absolute limit of 100000 is imposed.");
+   }
+   
+   function doDefineObject()  {
+      readToken();  // skip "define"
+      let token = readToken();
+      if (token ==="[" || token === "]" || token === ":")
+         doError("Found an unexpected character, " + token + ", in a \"define\" command where the word being defined should have been.");
+      if (typeof token == "string") {
+         let name = token;
+         token = lookToken();
+         if (token === Tokens.rgb || token == Tokens.hsb || token instanceof RGBParam)
+            userdef[name] = doColor();
+         else
+            userdef[name] = doObject();
+         rescanToken();  // necessary because putting a new string into userdef might have invalidated the lookahead token
+      }
+      else if (token instanceof SceneMaker || token instanceof IntToken)
+         doError("You can't redefine the word \"" + tokenString + "\".  It already has a definition.");
+      else if (token == Tokens.eof)
+         doError("Unexpected end-of-data in  the middle of a \"define\" command.");
+      else if (typeof token == "number")
+         doError("Found a number in a \"define\" command where the word being defined should have been.");
+      else
+         doError("Error in \"define\" command.");
+   }
+   
+   function doBackgroundData()  {
+      if (model.bgColor != null && !hasBase)
+         doError("The \"background\" command can only be used once in a scene description.");
+      readToken();  //skip "background"
+      model.bgColor = doColor();
+   }
+   
+   function doViewdistance()  {
+      if (model.viewDistance != null && !hasBase)
+         doError("The \"viewdistance\" command can only be used once in a scene description.");
+      readToken();  //skip "viewdistance"
+      let token = lookToken();
+      if (token === Tokens.infinity) {
+         model.viewDistance = new ParamVal(Number.POSITIVE_INFINITY);
+         readToken();
+      }
+      else if (typeof token == "number") {
+         let v = doParam();
+         for (let i = 0; i < v.values.length; i++)
+            if (!Number.isNaN(v.values[i]) && v.values[i] < 1.0e-10)
+               doError("Negative number or zero found in viewDistance specification.  View distance must be positive.");
+         model.viewDistance = v;
+      }
+      else
+         doError("The \"viewdistance\" command must be followed by a number, a number range, or the word \"infinity\".");
+   }
+   
+   function doObject()  {
+      let token = lookToken();
+      let obj = null;  // SceneMaker
+      if (token === "[") {
+         readToken();
+         let objlist = [];
+         while (true) {
+            token = lookToken();
+            if (token === Tokens.eof)
+               doError("Missing right bracket; end-of-data encountered in the middle of a complex object.");
+            if (token === ']')
+               break;
+            if (token instanceof SceneMaker || token === '[')
+               objlist.push(doObject());
+            else if (token === Tokens.rgb || token === Tokens.hsb || token instanceof RGBParam)
+               objlist.push(doColor());
+            else if (token instanceof IntToken) {
+               if (token === Tokens.polygon || token === Tokens.polygon_3d || token == Tokens.lathe || token == Tokens.extrude)
+                  objlist.push( doPolyThing(token.val) );
+               else if (token === Tokens.infinity)
+                  doError("The word \"infinity\" is reserved for use with the ViewDistance command.");
+               else if (tokens === Tokens.about)
+                  doError("The word \"about\" is meant for used with a rotation transformation.");
+               else if (token === Tokens.aboutline)
+                  doError("The word \"aboutLine\" is meant for used with a rotation transformation.");
+               else if (token === Tokens.define || token === Tokens.background || token === Tokens.viewdistance || token === Tpkens.animate)
+                  doError("The command \"" + tokenString + "\" cannot be used in a complex object or as an object definition.");
+               else
+                  doError("Found a transformation when an object or command was expected.");
+            }
+            else if (token === ':')
+               doError("Misplaced ':' found while expecting an object, a color, etc.");
+            else if (typeof token == "string")
+               doError("Unrecognized word, " + token + ", found in complex object or as an object definition.");
+            else
+               doError("Error in object.");
+         }
+         readToken();
+         obj = new ComplexObject(objlist);
+      }
+      else if (token instanceof SceneMaker)
+         obj = readToken();
+      else if (token === Tokens.polygon || token === Tokens.polygon_3d || token === Tokens.lathe || token === Tokens.extrude)
+         obj = doPolyThing( token.val );
+      else
+         doError("Expected an object, but found \"" + tokenString + "\".");
+      token = lookToken();
+      if ( (token instanceof IntToken) && token.val > 100)
+         obj = new TransformedObject(obj,doTransformList());
+      return obj;
+   }
+   
+   function doColor()  {
+      let token = readToken();
+      let p = null; // RGBParam
+      if (token instanceof RGBParam)
+         p = token;
+      else if (token === Tokens.rgb || token === Tokens.hsb) {
+         let params = doParamList(0);
+         if (params.length != 3)
+            if (token === Tokens.rgb)
+               doError("Exactly three parameters are required for an rgb specification.");
+            else
+               doError("Exactly three parameters are required for an hsb specification.");
+         for (let i = 0; i < 3; i++) {
+            let v = params[i];
+            for (let j = 0; j < v.values.length; j++)
+               if (!Number.isNaN(v.values[j]) && (v.values[j] < 0 ||v.values[j] > 1))
+                  if (token == Tokens.rgb)
+                     doError("All parameter values for \"rgb\" must be between 0.0 and 1.0, inclusize.");
+                  else
+                     doError("All parameter values for \"hsb\" must be between 0.0 and 1.0, inclusize.");
+         }
+         if (token == Tokens.rgb)
+            p = new RGBParam( params[0], params[1], params[2] );
+         else
+            p = new HSBParam( params[0], params[1], params[2] );
+      }
+      else
+         doError("Expected a color specification, but found \"" + tokenString + "\".");
+      return p;
+   }
+   
+   function doParamList(max) {
+      let list = [];
+      list.push(doParam());
+      while (typeof lookToken() == "number") {
+         if (max > 0 && list.length == max)
+            doError("Found too many parameters, when expecting a maximum of " + max + ".");
+         list.push(doParam());
+      }
+      return list;
+   }
+   
+   function doParam() {
+      let token = readToken();
+      if (typeof token !== "number")
+         if (model.frames > 1)
+            doError("Expected a number or range of numbers, but found \"" + tokenString + "\" instead");
+         else
+            doError("Expected a number, but found \"" + tokenString + "\" instead");
+      let next = lookToken();
+      if (next !== ':')
+         return new ParamVal(token);
+      if (model.frames == 1)
+         doError("Found an illegal ':'.  This scene was not specified to be an animation; ranges of numbers not allowed.");
+      let values = new Array(model.frameCounts.length);
+      values[0] = token;
+      let ct = 1;
+      while (next === ':') {
+         if (ct >= values.length) {
+            if (values.length == 2)
+               doError("Too many values.  This is not a segmented animation; a number range must give exactly two values.");
+            else
+               doError("Too many values.  A number range must contain exactly as many colons as there are segments in the animation.");
+         }
+         readToken();
+         token = lookToken();
+         if (token == ':') {
+            values[ct] = Number.NaN;
+            ct++;
+            next = token;
+         }
+         else if (typeof token == "number") {
+            values[ct] = token;
+            ct++;
+            readToken();
+            next = lookToken();
+         }
+         else
+            doError("Error in number range; a \":\" must be followed by a number or by another \":\".");
+      }
+      if (ct < values.length)
+          doError("Too few values.  A number range must contain exactly as many colons as there are segments in the animation.");
+      return new ParamVal(model.frameCounts, values);
+   }
+   
+   function doTransformList() {
+      let list = [];
+      let token = lookToken();
+      while ((token instanceof IntToken) && token.val > 100) {
+         list.push(doTransform());
+         token = lookToken();
+      }
+      return list;
+   }
+   
+   function doTransform() {
+      let token=readToken(); // known to be an IntToken with greater than 100
+      let trans = null;
+      let params, params2;
+      let temp;
+      switch (token.val) {
+         case 105: // scale
+           params = doParamList(3);
+           if (params.length == 0)
+              doError("Missing parameter for \"scale\" transformation.  One, two, or three numbers or number ranges must be provided.");
+           trans = new TransformInfo(TransformInfo.scale, params);
+           break;
+         case 106: // xscale
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"xscale\" transformation.  A number or number range must be provided.");
+           params.push(new ParamVal(1));
+           params.push(new ParamVal(1));
+           trans = new TransformInfo(TransformInfo.scale, params);
+           break;
+         case 107: // yscale
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"yscale\" transformation.  A number or number range must be provided.");
+           temp = params[0];
+           params = [];
+           params.push(new ParamVal(1));
+           params.push(temp);
+           params.push(new ParamVal(1));
+           trans = new TransformInfo(TransformInfo.scale, params);
+           break;
+         case 108: // zscale
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"zscale\" transformation.  A number or number range must be provided.");
+           temp = params[0];
+           params = [];
+           params.push(new ParamVal(1));
+           params.push(new ParamVal(1));
+           params.push(temp);
+           trans = new TransformInfo(TransformInfo.scale, params);
+           break;
+         case 109: // translate
+           params = doParamList(3);
+           if (params.length == 0)
+              doError("Missing parameter for \"translate\" transformation.  One, two, or three numbers or number ranges must be provided.");
+           trans = new TransformInfo(TransformInfo.translate, params);
+           break;
+         case 110: // xtranslate
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"xtranslate\" transformation.  A number or number range must be provided.");
+           params.push(new ParamVal(0));
+           params.push(new ParamVal(0));
+           trans = new TransformInfo(TransformInfo.translate, params);
+           break;
+         case 111: // ytranslate
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"ytranslate\" transformation.  A number or number range must be provided.");
+           temp = params[0];
+           params = [];
+           params.push(new ParamVal(0));
+           params.push(temp);
+           params.push(new ParamVal(0));
+           trans = new TransformInfo(TransformInfo.translate, params);
+           break;
+         case 112: // ztranslate
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"ztranslate\" transformation.  A number or number range must be provided.");
+           temp = params[0];
+           params = [];
+           params.push(new ParamVal(0));
+           params.push(new ParamVal(0));
+           params.push(temp);
+           trans = new TransformInfo(TransformInfo.translate, params);
+           break;
+         case 113: // rotate
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"rotate\" transformation.  A number or number range must be provided.");
+           token = lookToken();
+           if (token === Tokens.about || token === Tokens.aboutline) {
+              readToken();
+              lookToken();
+              if (tokenString === "line") {
+                 readToken();
+                 token = Tokens.aboutline;
+              }
+              if (token === Tokens.about) {
+                 params2 = doParamList(0);
+                if (params2.length == 0) 
+                     doError("Missing parameters.  \"About\" requires two parameters to specifiy the pivot point for the rotation.");
+                 if (params2.length != 2)
+                     doError("\"about\" requires exactly two parameters to specifiy the pivot point for the rotation.");
+                 params.push(params2[0]);
+                 params.push(params2[1]);
+                 trans = new TransformInfo(TransformInfo.rotateAboutPoint, params);
+              }
+              else {
+                 params2 = doParamList(0);
+                 if (params2.length == 0) 
+                     doError("Missing parameters.  \"AboutLine\" requires either 3 or 6 parameters to specify the line.");
+                 if (params2.length != 3 && params2.length != 6)
+                     doError("\"AboutLine\" requires either 3 or 6 parameters to specify the line.");
+                 for (let i = 0; i < params2.length; i++)
+                    params.push(params2[i]);
+                 trans = new TransformInfo(TransformInfo.rotateAboutLine, params);
+              }
+           }
+           else
+              trans = new TransformInfo(TransformInfo.zrotate, params);
+           break;
+         case 114: // xrotate
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"xrotate\" transformation.  A number or number range must be provided.");
+           trans = new TransformInfo(TransformInfo.xrotate, params);
+           break;
+         case 115: // yrotate
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"yrotate\" transformation.  A number or number range must be provided.");
+           trans = new TransformInfo(TransformInfo.yrotate, params);
+           break;
+         case 116: // zrotate
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"zrotate\" transformation.  A number or number range must be provided.");
+           trans = new TransformInfo(TransformInfo.zrotate, params);
+           break;
+         case 117:  // xskew
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"xskew\" transformation.  A number or number range must be provided.");
+           params.push(new ParamVal(0));
+           trans = new TransformInfo(TransformInfo.xskew, params);
+           break;
+         case 118:  // yskew
+           params = doParamList(1);
+           if (params.length == 0)
+              doError("Missing parameter for \"yskew\" transformation.  A number or number range must be provided.");
+           trans = new TransformInfo(TransformInfo.yskew, params);
+           break;
+         case 119:  // xyshear
+           params = doParamList(0);
+           if (params.length == 0)
+              doError("Missing parameters for \"xyshear\" transformation.  Two numbers or number ranges must be provided.");
+           if (params.length != 2)
+              doError("Wrong number of parameters for \"xyshear\" transformation.  Exactly two numbers or number ranges must be provided.");
+           trans = new TransformInfo(TransformInfo.xyshear, params);
+           break;
+         default:  // shouldn't happen!
+           doError("Internal Error: Unimplemented transformation type.");
+      }
+      return trans;      
+   }
+   
+   function doPolyThing(code)  {
+         // codes: polygon=1, polygon_3d=2, lathe=3, extrude=4
+      let command = tokenString;
+      readToken();
+      let params;
+      let reps = 0;
+      let points,lines;
+      let g; // ParamLineGroup
+      let obj = null; // SceneMaker
+      if (code === 3 || code === 4) { // read rep count for lathe/extrude
+         let n = readToken();
+         if (typeof n !== "number")
+            doError("Expected an integer to specify the repetition count for \"" + command + "\" command.");
+         let next = lookToken();
+         if (next === ':')
+            doError("The \"" + command + "\" command must be followed by a single integer to specify the repetition count, not a number range.");
+         reps = Math.round(n);
+         if (reps < 2)
+            doError("The repetition count for the \"" + command + "\" command must be at least 2");
+         if (reps > 100)
+            doError("The repetition count for the \"" + command + "\" command is limited to 100.");
+      }
+      params = doParamList(0);
+      if (params.length == 0)
+         doError("Missing parameters. A list of points for the \"" + command + "\" command is required.");
+      if (code == 2) {
+         if (params.length % 3 != 0)
+            doError("Polygon_3d requires a list of (x,y,z) points; the number of parameters must be a multiple of 3.");
+         if (params.length < 6)
+            doError("Polygon_3d requires at least 6 parameters, specifying at least two (x,y,z) points.");
+      }
+      else if (code == 1) {
+         if (params.length % 2 != 0)
+            doError("Polygon requires a list of (x,y) points; the number of parameters must be an even number.");
+         if (params.length < 4)
+            doError("Polygon requires at least 4 parameters, specifying at least two (x,y) points.");
+      }
+      else {
+         if (params.length % 2 != 0) {
+            doError(command + " requires a repetition count, followed by an even number of paramaters to specify a list of points.");
+         }
+      }
+      switch (code) {
+         case 1:  // polygon
+            points = params.length / 2;
+            lines = points;
+            g = new ParamLineGroup(points,lines);
+            for (let i = 0; i < lines; i++) {
+               g.x[i] = params[2*i];
+               g.y[i] = params[2*i+1];
+               g.z[i] = new ParamVal(0);
+               g.v1[i] = i;
+               g.v2[i] = (i < lines-1)? i+1 : 0;
+            }
+            obj = g;
+            break;
+         case 2:  // polygon_3d
+            points = params.length / 3;
+            lines = points;
+            g = new ParamLineGroup(points,lines);
+            for (let i = 0; i < lines; i++) {
+               g.x[i] = params[3*i];
+               g.y[i] = params[3*i+1];
+               g.z[i] = params[3*i+2];
+               g.v1[i] = i;
+               g.v2[i] = (i < lines-1)? i+1 : 0;
+            }
+            obj = g;
+            break;
+         case 3:  // lathe
+            points = params.length / 2;
+            obj = new LatheObject(reps,params);
+            break;
+         case 4:  // extrude
+            points = params.length / 2;
+            obj = new ExtrudeObject(reps,params);
+            break;
+      }
+      let token = lookToken();
+      if ((token instanceof IntToken) && token.val > 100)
+         obj = new TransformedObject(obj,doTransformList());
+      return obj;
+   }
+
+} // end function Parse()
+
+
+
+/*---------------Interface--------------*/
+
+let canvas;
+let graphics;
+let programInEditor;
+let animating = false;
+let framesPerSecond = 10;
+let animationStyle = "loop";  // "loop", "back-and-forth", or "once-through"
+let animatingForward;
+let currentModel = null;
+let currentFrame = 0;
+let userCommands = 0;
+let lastFrameTime;
+
+function startProgramLoad(program) {
+   if (program.status != "not started")
+      return;
+   program.status = "loading";
+   program.text = "Waiting for program '" + program.name + "' to load from url " + program.url;
+   if (program.position == programInEditor) {
+       document.getElementById("program").value = program.text;
+       document.getElementById("program").disabled = true;
+   }
+   let ajaxTimeout;
+   let ajax = new XMLHttpRequest();
+   ajax.open("GET",program.url);
+   ajax.overrideMimeType("text/plain");
+   ajax.addEventListener("error",function() {
+       clearTimeout(ajaxTimeout);
+       program.text = "Error: Program could not be loaded from " + program.url;
+       program.status = "error";
+       doneLoad();
+   });
+   ajax.addEventListener("load",function() {
+       clearTimeout(ajaxTimeout);
+       program.text = ajax.responseText;
+       program.status = "loaded";
+       doneLoad();
+   });
+   ajaxTimeout = setTimeout(function() {
+       ajax.abort();
+       program.text = "Error: Request timed out while trying to load from " + program.url;
+       program.status = "error";
+       doneLoad();
+   }, 30000);
+   try {
+      ajax.send();
+   } catch(e) {
+       clearTimeout(ajaxTimeout);
+       program.status = "error";
+       program.text = "Error while trying to send request for example: " + program.url;
+       doneLoad();
+   }
+   function doneLoad() {
+      if (program.position == programInEditor) {
+          document.getElementById("program").value = program.text;
+          document.getElementById("program").disabled = false;
+      }
+   }
+}
+
+function doProgramChange() {
+   let currentProg = programs[programInEditor];
+   currentProg.text = document.getElementById("program").value;
+   let p = document.getElementById("selectprogram").value;
+   if (p == "new") {
+       untitledCount++;
+       let pos = programs.length;
+       let prog = { name: "User Program " + untitledCount, text: "",
+                    position: pos, status: "user" };
+        programs.push(prog);
+        document.getElementById("program").value = "";
+        let option = document.createElement("option");
+        option.value = "" + (pos+1);
+        option.innerHTML = prog.name;
+        document.getElementById("selectprogram").appendChild(option);
+        document.getElementById("selectprogram").value = "" + (pos+1);
+        document.getElementById("program").disabled = false;
+        programInEditor = pos;
+   }
+   else {
+       p = Number(p) - 1;
+       let prog = programs[p];
+       programInEditor = prog.position;
+       if (prog.status == "not started") {
+          startProgramLoad(prog);
+       }
+       else {
+           document.getElementById("program").value = prog.text;
+           document.getElementById("program").disabled = (prog.status == "loading");
+       }
+   }
+}
+
+function doCompile() {
+   doPause();
+   let text = document.getElementById("program").value;
+   document.getElementById("programerror").innerHTML = "&nbsp;";
+   document.getElementById("errorreport").style.display = "none";
+   try {
+      currentModel = parse(text);
+      currentFrame = 0;
+      userCommands = 0;
+      animatingForward = true;
+      applyCurrentModel();
+      if (currentModel.frames === 1)
+          document.getElementById("status").innerHTML =  "xModels status: Loaded Static Scene Description";
+      else
+         document.getElementById("status").innerHTML =  "xModels status: Loaded Animated Model, showing frame 0";
+      document.getElementById("run").disabled = currentModel.frames === 1;
+      document.getElementById("pause").disabled = true;
+      document.getElementById("next").disabled = currentModel.frames === 1;
+      window.scrollTo(0,window.pageYOffset+document.getElementById("status").getBoundingClientRect().top);
+   }
+   catch (e) {
+      if ( e instanceof ParseError ) {
+         document.getElementById("programerror").innerHTML = "Syntax error: " + e.message;
+         document.getElementById("program").setSelectionRange(e.pos,e.pos);
+         document.getElementById("program").focus();
+      }
+      else {
+         document.getElementById("programerror").innerHTML = "Internal error (this is a bug): " + e;
+      }
+      if (currentModel === null)
+         document.getElementById("status").innerHTML =  "xModels status: Failed Compilation";
+      else
+         document.getElementById("status").innerHTML =  "xModels status: Failed Compilation; retaining previous scene";
+      console.trace(e);
+   }
+}
+
+function applyCurrentModel() {
+   if (currentModel == null) {
+      doClear();
+      return;
+   }
+   else {
+      currentModel.setSize(canvas.width,canvas.height);
+      currentModel.drawFrame(graphics,currentFrame);
+   }
+}
+
+function doClear() {
+   doPause();
+   document.getElementById("status").innerHTML =  "xModels status: Idle";
+   document.getElementById("programerror").innerHTML = "&nbsp;";
+   document.getElementById("errorreport").style.display = "none";
+   currentModel = null;
+   currentFrame = 0;
+   userCommands = 0;
+   animatingForward = true;
+   graphics.fillStyle = "white";
+   graphics.fillRect(0,0,canvas.width,canvas.height);
+   document.getElementById("run").disabled = true;
+   document.getElementById("next").disabled = true;
+   document.getElementById("pause").disabled = true;
+}
+
+function doUserCommands() {
+   let newModel = currentModel === null;
+   document.getElementById("programerror").innerHTML = "&nbsp;";
+   document.getElementById("errorreport").style.display = "none";
+   let text = document.getElementById("command").value;
+   try {
+      currentModel = parse(text, currentModel);
+      userCommands++;
+      applyCurrentModel();
+      document.getElementById("status").innerHTML =  "xModels status: Applied user command #" + userCommands;
+      document.getElementById("command").select();
+      document.getElementById("command").focus();
+      if (newModel && currentModel.frames > 1) {
+         document.getElementById("run").disabled = false;
+         document.getElementById("next").disabled = false;
+         document.getElementById("pause").disabled = true;
+      }
+   }
+   catch (e) {
+      if ( e instanceof ParseError ) {
+         showErrorDialog("Syntax error: " + e.message);
+         document.getElementById("command").setSelectionRange(e.pos,e.pos);
+         document.getElementById("command").focus();
+      }
+      else {
+          showErrorDialog("Internal error (this is a bug): " + e.message);
+      }
+      document.getElementById("status").innerHTML =  "xModels status: Error in user command";
+      console.trace(e);
+   }
+   function showErrorDialog(message) {
+       document.getElementById("errorreport").style.display = "block";
+       document.getElementById("errormessage").innerHTML = message;
+   }
+}
+
+function doRun() {
+   if (animating || currentFrame === null || currentFrame.frames === 1)
+      return;
+   document.getElementById("pause").disabled = false;
+   document.getElementById("run").disabled = true;
+   document.getElementById("next").disabled = true;
+   animating = true;
+   lastFrameTime = 0;
+   if (animationStyle === "once-through" && currentFrame == currentModel.frames - 1) {
+       currentFrame = 0;
+       lastFrameTime = Date.now();
+       applyCurrentModel();
+   }
+   requestAnimationFrame(doAnimationFrame);
+}
+
+function doNextFrame() {
+   if (currentModel === null || currentModel.frames === 1)
+      return;
+   let nextframe = currentFrame;
+   if (animationStyle !== "back-and-forth")
+      animatingForward = true;
+   if (animatingForward)
+      nextframe++;
+   else
+      nextframe--;
+   if (nextframe < 0) {  // can only happen if loop == doBackAndForth
+      animatingForward = true;
+      nextframe = 1;
+   }
+   else if (nextframe > currentModel.frames-1) {
+      if (animationStyle === "once-through") {
+         if (animating) {
+            doPause();
+            return;
+         }
+         else {
+            nextframe = 0;
+         }
+      }
+      else if (animationStyle == "back-and-forth") {
+         animatingForward = false;
+         nextframe = currentModel.frames - 2;
+      }
+      else {
+         animatingForward = true;
+         nextframe = (currentModel.frames > 2)? 1 : 0;
+      }
+   }
+   currentFrame = nextframe;
+   applyCurrentModel();
+   document.getElementById("status").innerHTML =  "xModels status: Displaying frame #" + currentFrame;
+}
+
+function doAnimationFrame() {
+   if (!animating)
+       return;
+   let now = Date.now();
+   if (now >= lastFrameTime + 1000/framesPerSecond) {
+      lastFrameTime = now;
+      doNextFrame();
+   }
+   if (animating)
+      requestAnimationFrame(doAnimationFrame);
+}
+
+function doPause() {
+   if (!animating)
+      return;
+   animating = false;
+   document.getElementById("pause").disabled = true;
+   document.getElementById("run").disabled = currentModel == null || currentModel.frames === 1;
+   document.getElementById("next").disabled = currentModel == null || currentModel.frames === 1;
+}
+
+function doSpeedSelect() {
+   framesPerSecond = Number(document.getElementById("speedselect").value);
+}
+
+function doAnimStyleSelect() {
+   animationStyle = document.getElementById("animationstyle").value;
+}
+
+function init() {
+    try {
+        canvas = document.getElementById("canvas");
+        graphics = canvas.getContext("2d");
+        graphics.lineWidth = 2;
+    }
+    catch (e) {
+         document.getElementById("message").innerHTML =
+             "Sorry, this page requires canvas graphics support, which is not available in your browser.";
+         return;
+    }
+    document.getElementById("selectprogram").onchange = doProgramChange;
+    if (programsToLoad && programsToLoad.length > 0) {
+       untitledCount = 0;
+       programs = programsToLoad;
+       let options = "<option value='new'>[New Scene Description]</option>";
+       for (let i = 0; i < programs.length; i++) {
+          options += "<option value='" + (i+1) +"'>" + programs[i].name + "</option>";
+          programs[i].position = i;
+          programs[i].status = "not started";
+       }
+       document.getElementById("selectprogram").innerHTML = options;
+       programInEditor = 0;
+       startProgramLoad(programs[0]);
+    }
+    else {
+       document.getElementById("selectprogram").innerHTML =
+                 "<option value='new'>[New Scene Description]</option>" +
+                 "<option value='1'>User Program 1</option>";
+       untitledCount = 1;
+       programs = [
+          { name: "User Program 1", text: "", position: 0, status: "user" }
+       ];
+       programInEditor = 0;
+    }
+    document.getElementById("selectprogram").value = "1";
+    document.getElementById("applyprog").onclick = doCompile;
+    document.getElementById("reset").onclick = doClear;
+    document.getElementById("pause").onclick = doPause;
+    document.getElementById("pause").disabled = true;
+    document.getElementById("run").onclick = doRun;
+    document.getElementById("run").disabled = true;
+    document.getElementById("next").onclick = doNextFrame;
+    document.getElementById("next").disabled = true;
+    document.getElementById("doit").onclick = doUserCommands;
+    document.getElementById("command").onkeydown = function(evt) { if (evt.keyCode == 13) doUserCommands(); };
+    document.getElementById("command").value = "";
+    document.getElementById("speedselect").onchange = doSpeedSelect;
+    document.getElementById("speedselect").value = "" + framesPerSecond;
+    document.getElementById("animationstyle").onchange = doAnimStyleSelect;
+    document.getElementById("animationstyle").value = animationStyle;
+    document.getElementById("errorreport").onmousedown = function() { document.getElementById("errorreport").style.display = "none"; };
+    doClear();
+}
+
+programsToLoad = [  // Programs available for loading from web site; delete to disable all loading.
+    { name: "Tutorial 1: Basics", url:"sample-programs/Tutorial1_Basics.txt" },
+    { name: "Tutorial 2: Animation", url:"sample-programs/Tutorial2_Animation.txt" },
+    { name: "Tutorial 3: 3D", url:"sample-programs/Tutorial3_3D.txt" },
+    { name: "Tutorial 4: Complex Objects", url:"sample-programs/Tutorial4_ComplexObjects.txt" },
+    { name: "Tutorial 5: Polygons, etc.", url:"sample-programs/Tutorial5_PolygonsEtc.txt" },
+    { name: "Tutorial 6: Segmented Animations", url:"sample-programs/Tutorial6_Segments.txt" },
+    { name: "Wheel-in-square Example", url:"sample-programs/WheelInSquare.txt" },
+    { name: "Lathing Example: Goblet", url:"sample-programs/Goblet.txt" },
+    { name: "Nested Object Example", url:"sample-programs/NestedSquares.txt" },
+];
+
+</script>
+
+</head>
+<body onload="init()">
+
+<noscript>
+   <p style="font-weight: bold; color:red">This page requires Javascript.<br>
+   Without Javascript, nothing on this page will be functional.</p>
+</noscript>
+
+
+<p style="border-bottom: 1.5pt solid black;"><span style="font-size:200%; font-weight:bold;margin: 5pt 0 5pt 0;">xModels Graphics</span>
+<span style="margin-left: 50pt"><b>Click for: <a href="info.html">information and instructions</a>.</b></span></p>
+
+<p style="margin:0 0 0 20pt; padding:0">
+    Select Program: <select id="selectprogram" title="Sets the contents of the scene description editor.  To start a new, empty scene description, select '[New Scene Description]'. To change to an existing scene description, select its name.">
+       <option value="1">User scene description 1</option>
+    </select>
+</p>
+<p style="padding: 0; margin: 5pt 2pt 5pt 20pt">
+   <textarea spellcheck="false" placeholder="Input or paste your xModels scene description here." id="program" wrap="off" rows=20 cols=80></textarea></p>
+<p style="margin:0; padding:0"><button style="margin-left:20pt;" id="applyprog"
+    title="Compile the scene description and, if no error is found, display the scene.  If an error is found, it will be reported below.">Compile and Apply!</button>
+<p style="color: #AA0000; font-weight: bold" id="programerror">&nbsp;</p>
+<hr>
+
+  <p id="status">xModels status: Idle.</p>
+
+
+<table border=0 cellpadding=0 cellspacing=0>
+<tr valign="top"><td>
+<div id="controls">
+   <div class="group">
+       <p><button id="reset" title="Clear the drawing, and forget any user defined objects and other settings.">Clear and Reset</button>
+   </div>
+   <div class="group">
+      <p><button id="run" title="Animate the scene.  Available only when the scene is animated.">Run Animation</button></p>
+      <p><button id="pause" title="Pause animation.  Avaliable only when an animation is running.">Pause Animation</button></p>
+      <p><button id="next" title="Show the next frame.  Available only when the scene is animated, and the animation is not running.">Next Frame</button></p>
+      <p style="margin-top:30px">Frames per Second:</p>
+      <p style="margin-left: 20pt"><select id="speedselect" title="Set the speed at which an animation runs.">
+          <option value="60">60 per second</option>
+          <option value="30">30 per second</option>
+          <option value="20">20 per second</option>
+          <option value="10">10 per second</option>
+          <option value="5">5 per second</option>
+          <option value="2">2 per second</option>
+          <option value="1">1 per second</option>
+      </select></p>
+      <p style="margin-top:30px">Animation Style:</p>
+      <p style="margin-left: 20pt"><select id="animationstyle" title="Sets how an animation repeats.">
+          <option value="loop">Loop</option>
+          <option value="back-and-forth">Back and Forth</option>
+          <option value="once-through">Once Through</option>
+      </select></p>
+   </div>
+   <div class="group">
+   </div>
+</div>
+</td><td>
+<div id="graphicsdiv">
+  <p style="margin:0; padding:0">
+      <input type="text" size="70" id="command" spellcheck="false" placeholder="Enter xModels commands here."  
+                  title="The objects specified by the commands are added to the current image when you press return or click the 'Do It!' button.">
+      <button id="doit" title="Apply the command or commands in the input box to the current image.  You can also just press return while typing in the input box.">Do It!</button></p>
+  <p><div id="canvas-holder">
+     <canvas id="canvas" width="800" height="600"></canvas> 
+  </div></p>
+  <div id="errorreport">
+     <p style="text-align: center">ERROR</p>
+     <hr>
+     <p id="errormessage"></p>
+  </div>
+</div>
+</td></tr></table>
+</body>
+</html>
