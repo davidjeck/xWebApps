@@ -490,6 +490,46 @@ a 10-bit binary number in any of the five forms listed above.</p>
 </UL>
 
 <hr>
+
+<h3 id="logisim">A Logisim Simulation of xComputer</h3>
+
+<p>Logisim is a free program that can simulate logic circuits.  Logisim is a fairly old program, but
+is very good at what it does.  It is written in Java, so to use it, you need to have a Java 
+runtime environment installed on your computer.  You need to download <a href="logisim.jar">logisim.jar</a>,
+which is the executable jar file that contains the program.  And you need to know how to run an
+executable jar file (basically, enter <i style="white-space:pre">java -jar logisim.jar</i> on the
+command line in the directory that contains the file logisim.jar).  Once you have Logisim running, you
+can find extensive information about it in its "Help" menu.</p>
+
+<p>I decided to make a simulation of the xComputer model computer in Logisim, to make sure that it could
+actually be done.  The simulation is in a file, <a href="xComputer.circ">xComputer.circ</a>, that you can download and
+open in Logisim, using the "Open" command in the Logisim "File" menu.  If you want to see what the
+xComputer simulation looks like in Logisim, see <a href="xComputer-in-Logisim.png"
+style="white-space:pre">xComputer-in-Logisim.png</a>.  Even if you don't want to try the
+simulation, the picture is a nice illustration of how all the components of xComputer are
+wired together.</p>
+
+<p>This simulation does not really serve any purpose, except to illustrate that it can be done.
+But if you would like to try it, you will want load an xComputer program into the simulation's
+RAM (that is, its main Memory).  As an example, the file 
+<a href="TheBasics-for-Logisim-RAM.txt" style="white-space:pre">TheBasics-for-Logisim-RAM.txt</a> 
+contains the first sample program from the <a href="xComputer.html">xComputer&nbsp;app</a>,
+in the syntax required for a Logisim memory file.  To use it, download the file, open the xComputer
+simulation in Logisim, right-click the RAM component at the lower right in the simulation, and
+select "Load Image" from the popup menu.  Click the Clock component at the upper right of the
+simulation (using Logisim's "Poke" tool) to perform one step in the execution of the program.
+(Make sure "Simulation&nbsp;Enabled" is checked in the "Simulate" menu.  Use "Ticks&nbsp;Enabled"
+in that menu to run the simulation automatically.)
+Note that the xComputer control wires that are on for that step will be shown in a brighter green.</p>
+
+<p>The "Grab Memory for Logisim" button at the very bottom of the <a href="xComputer.html">xComputer&nbsp;app</a>
+can be used to extract the current contents of the xComputer memory from the app, in the format
+that is needed for loading into Logisim.  A&nbsp;popup dialog will appear with a text area
+containing the contents of memory.  You can copy-and-paste from the text area into a text
+editor and save the data in a plain text file.  The popup dialog can be closed by clicking
+the "Dismiss!" button or by pressing the Escape key.</p>
+
+<hr>
 <div align=right><a href="http://math.hws.edu/eck/index.html"><i>David Eck</i></a></div>
 
 </div>

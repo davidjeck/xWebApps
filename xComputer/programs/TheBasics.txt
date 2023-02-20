@@ -70,7 +70,7 @@ hlt       ; This is a halt instruction, which tells the
      ; items are to be stored in memory starting "AT" location
      ; number 30.
      
-26   ; These numbers will be in memory starting at
+5    ; These numbers will be in memory starting at
 17   ;    location 30.  The computer will add them
 -34  ;    and leave the answer in location 26.
 15

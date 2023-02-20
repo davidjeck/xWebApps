@@ -85,7 +85,29 @@
     input[readonly] {
        border: none;
     }
-</style>
+   #memexportbg {
+       position: fixed;
+       z-index: 10;
+       opacity: 0.7;
+       background-color: black;
+       left: 0;
+       top: 0;
+       width: 100%;
+       height: 100%;
+       display: none;
+   }
+   #memexport {
+       position: fixed;
+       left: 100px;
+       top: 50px;
+       z-index:20;
+       padding: 10px;
+       background-color: #D8D8FF;
+       border: 2px solid #000099;
+       border-radius: 16px;
+       box-shadow: 5px 5px 8px black;
+       display: none;
+   }</style>
 
 <script>
 
@@ -1748,6 +1770,54 @@ programsToLoad = [  // Programs available for loading from web site; delete to d
    { name: "Powers of Three", url: "programs/PowersOfThree.txt"}
 ];
 
+
+function showMemExport() { console.log("show");
+    document.getElementById("memexportbg").style.display = "block";
+    document.getElementById("memexport").style.display = "block";
+    document.addEventListener("keydown", memhexEscape, false);
+    stopRunning();
+    let str = "v2.0 raw\n";
+    let i = 0;
+    let zeroCt = 0;
+    for (let i = 0; i < 1024; i++) {
+       let val = memory.get(i);
+       if (val == 0)
+          zeroCt++;
+       else {
+          if (zeroCt > 3) {
+             str += zeroCt + "*0\n";
+             zeroCt = 0;
+          }
+          else if (zeroCt > 0) {
+             for (let j = 0; j < zeroCt; j++) {
+                str += "0\n";
+             }
+             zeroCt = 0;
+          }
+          let num = val.toString(16);
+          str +=  num + "\n";
+       }
+    }
+    if (zeroCt == 1024)
+       document.getElementById("memhex").value = "v2.0 raw\n1024*0\n";
+    else
+       document.getElementById("memhex").value = str;
+}
+
+function hideMemExport() {
+    document.getElementById("memexportbg").style.display = "none";
+    document.getElementById("memexport").style.display = "none";
+    document.removeEventListener("keydown", memhexEscape, false);
+}
+
+function memhexEscape(evt) {
+    if (evt.keyCode == 27) {
+        hideMemExport();
+    }
+}
+
+
+
 function init() {
     speed = 3;
     registerDisplay = 1;
@@ -1783,6 +1853,8 @@ function init() {
     document.getElementById("memdisplay").onchange = doMemDisplayChange;
     document.getElementById("selectprogram").onchange = doProgramChange;
     document.getElementById("autoscroll").onchange = doAutoscroll;
+    document.getElementById("hidememhex").onclick = hideMemExport;
+    document.getElementById("showmemhex").onclick = showMemExport;
     globalConverter = new Converter();
     registers = Register.makeRegisters();
     wires = new Array(26);
@@ -2007,6 +2079,23 @@ function init() {
 </tr>
 
 </table>
+<p style="margin-left:500px"><button id="showmemhex"
+   title="Get contents of memory as a list of hexadecimal numbers, which can be loaded in to the Logisim simulation of xComputer.  (This has only a very limited audience.)">Grab Memory for Logisim</button></p>
+</div>
+
+<div id="memexportbg">
+</div>
+<div id="memexport">
+<p><button id="hidememhex">Dismiss!</button></p>
+<p>
+The textarea below shows the contents of the<br>
+xComputer memory, in a format that can be <br>
+loaded into the RAM component of the Logisim<br>
+simulation of xComputer.  This feature has<br>
+a very limited audience.  For information, see <br>
+the <a href="info.html#logisim">last section</a> of the xComputer info page.
+</p>
+<p style="text-align:center"><textarea rows="20" cols="20" id="memhex" readonly></textarea>
 </div>
 
 </body>
