@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<head>
+<title>Data Representation</title>
+<style>
+   body, html {
+      background-color: gray;
+      margin-top: 0;
+      margin-bottom: 0;
+   }
+   #content {
+      max-width: 750px;
+      margin: 0 auto;
+      padding: 5px 15px;
+      border-left: thin solid black;
+      border-right: thin solid black;
+      background-color: #F8F8F8;
+      color: black;
+   }
+   h1, h2, h3 {
+       color: #003388;
+   }
+   tr > td {
+       font-weight:bold;
+       color: #003388;
+   }
+   p {
+       text-indent: 25pt;
+   }
+   p.np {
+       text-indent: 0;
+   }
+   .narrow {
+      margin-left: 40px;
+      margin-right: 30px;
+   }
+   li {
+      margin-top: 10px;
+   }
+   li > b {
+       color: #003388;
+   }
+</style>
+<script>
+   
+let buffer = new ArrayBuffer(4);
+let dataView = new DataView(buffer);
+let inputs;
+let canvas, graphics;
+let currentNum = 0;
+
+function numToGraphics(num) {
+    graphics.fillStyle = "white";
+    graphics.fillRect(0,0,canvas.width,canvas.height);
+    graphics.beginPath();
+    for (let i = 0; i <= 8; i++) {
+       graphics.moveTo(14*i+1,0);
+       graphics.lineTo(14*i+1,57);
+    }
+    for (let j = 0; j <= 4; j++) {
+       graphics.moveTo(0,14*j+1);
+       graphics.lineTo(113,14*j+1);
+    }
+    graphics.stroke();
+    graphics.fillStyle = "black";
+    for (let r = 3; r >= 0; r--) {
+      for (let c = 7; c >=0; c--) {
+         if ( (num & 1) === 1)
+             graphics.fillRect(2+14*c,2+14*r,12,12);
+         num = num >> 1;
+      }
+    }
+}
+
+function doClickOnCanvas(evt) {
+  let rect = canvas.getBoundingClientRect();
+  let x = Math.round(evt.clientX - rect.left);
+  let y = Math.round(evt.clientY - rect.top);
+  let c = Math.floor((x-2)/14);
+  let r = Math.floor((y-2)/14);
+  if (c >=0 && c < 8 && r >= 0 && r < 4) {
+      let bit = 31 - (r*8 + c);
+      let num = currentNum ^ (1 << bit);
+      dataView.setInt32(0,num);
+      num = dataView.getUint32(0);
+      setAllValues(num);
+  }
+}
+
+function parseRealString(str) { // str has been trimmed
+    if (str === "")
+        return "Input cannot be empty.";
+    str = str.toLowerCase();
+    if (str.charAt(0) === 'e')
+        return "A number is requried before the exponent.";
+    if (str.charAt(0) == "n") {
+       if (str === "n" || str === "na")
+           return "warning";
+       if (str === "nan")
+           return "ok";
+       return "error";
+    }
+    let pos = 0;
+    if (str.charAt(pos) === "+" || str.charAt(pos) === '-')
+        pos++;
+    if (str.charAt(pos) === "i") {
+        str = str.substring(pos);
+        if (str === "infinity")
+           return "ok";
+        for (let i = 1; i < 8; i++) {
+           if (str === "infinity".substring(0,i))
+              return "warning";
+        }
+        return "'i' is only legal as part of the word 'infinity'";
+    }
+    if (pos >= str.length)
+       return "warning";
+    for (let i = 0; i < str.length; i++) {
+        if ( "0123456789.e+-".indexOf(str.charAt(i)) === -1)
+            return "Illegal character, '" + str.charAt(i) + "', cannot occur in a real number.";
+    }
+    let hasInt = false;
+    if (str.charAt(pos) >= "0" && str.charAt(pos) <= "9") {
+        hasInt = true;
+        while (pos < str.length && (str.charAt(pos) >= "0" && str.charAt(pos) <= "9")) {
+            pos++;
+        }
+    }
+    if (pos < str.length && str.charAt(pos) == ".") {
+        pos++;
+        if (pos >= str.length)
+           return hasInt? "ok" : "warning";
+        if (str.charAt(pos) === 'e' && !hasInt)
+           return "A number is expected after the decimal point.";
+        if (str.charAt(pos) !== 'e') {
+           if (str.charAt(pos) < "0" || str.charAt(pos) > "9")
+              return "Illegal character after '.'; a number is expected.";
+           while (str.charAt(pos) >= "0" && str.charAt(pos) <= "9")
+              pos++;
+        }
+    }
+    if (pos >= str.length)
+       return "ok";
+    if (str.charAt(pos) !== "e")
+       return "Illegal character, '" + str.charAt(pos) + "' found.";
+    pos++;
+    if (pos >= str.length)
+       return "warning";
+    if (str.charAt(pos) === "+" || str.charAt(pos) === '-')
+        pos++;
+    if (pos >= str.length)
+       return "warning";
+    if (str.charAt(pos) < "0" || str.charAt(pos) > "9")
+       return "Illegal character found where the exponent is expected.";   
+    while (str.charAt(pos) >= "0" && str.charAt(pos) <= "9")
+       pos++;
+    if (pos >= str.length)
+       return "ok";
+    return "Illegal character, '" + str.charAt(pos) + "' found.";
+}
+
+function parseASCII(str) {  // str is trimmed
+    if (str === "")
+       return false;
+    let pos = 0;
+    let ct = 0;
+    while (pos < str.length) {
+       if (ct === 4)
+          return "At most four characters are allowed.";
+       let code = str.charCodeAt(pos);
+       let rest = str.substring(pos);
+       if (code > 255)
+          return "'" + str.charAt(pos) + "' is illegal; only 8-bit characters are allowed.";
+       if (code == 60 && ct + rest.length <= 4)
+          return "ok";
+       if ( /^<#[0-9]+>/.test(rest) ) { 
+          ct++;
+          pos += 2;
+          let c = 0;
+          do {
+             c = 10*c + str.charCodeAt(pos) - 48;
+             pos++;
+             if (c > 255)
+                return "Character code must be 255 or less.";
+          } while (str.charAt(pos) != ">");
+          pos++;
+       }
+       else if ( /^<(#[0-9]*)?$/.test(rest) ) {
+           pos++;
+           if (pos < str.length) // must be "#"
+              pos++;
+           let c = 0;
+           while (pos < str.length) {
+             c = 10*c + str.charCodeAt(pos) - 48;
+             pos++;
+             if (c > 255)
+                return "Character code must be 255 or less.";
+           }
+           return "warning";
+       }
+       else {
+          pos++;
+          ct++;
+       }
+    }
+    return "ok";
+}
+
+function parseUnicode(str) {  // str is trimmed
+    if (str === "")
+       return false;
+    let pos = 0;
+    let ct = 0;
+    while (pos < str.length) {
+       if (ct === 2)
+          return "At most two characters are allowed.";
+       let code = str.charCodeAt(pos);
+       let rest = str.substring(pos);
+       if (code == 60 && ct + rest.length <= 2)
+          return "ok";
+       if ( /^<#[0-9]+>/.test(rest) ) { 
+          ct++;
+          pos += 2;
+          let c = 0;
+          do {
+             c = 10*c + str.charCodeAt(pos) - 48;
+             pos++;
+             if (c > 0xFFFF)
+                return "Character code must be 65535 or less.";
+          } while (str.charAt(pos) != ">");
+          pos++;
+       }
+       else if ( /^<(#[0-9]*)?$/.test(rest) ) { 
+           pos++;
+           if (pos < str.length) // must be "#"
+              pos++;
+           let c = 0;
+           while (pos < str.length) {
+             c = 10*c + str.charCodeAt(pos) - 48;
+             pos++;
+             if (c > 0xFFFF)
+                return "Character code must be 65535 or less.";
+           }
+           return "warning";
+       }
+       else {
+          pos++;
+          ct++;
+       }
+    }
+    return "ok";
+}
+
+class DataInput {
+   
+   constructor(inputElement, errorMessageElement, options) {
+       this.input = inputElement;
+       this.input.style.backgroundColor = "white";
+       this.input.style.color = "black";
+       this.message = errorMessageElement;
+       this.message.innerHTML = "&nbsp;";
+       this.message.style.color = "#CC0000";
+       this.message.style.fontStyle = "italic";
+       this.message.style.fontSize = "90%";
+       this.numToStr = options.numToStr;
+       this.strToNum = options.strToNum;
+       this.previousValue = null;
+       let me = this;
+       if (options.acceptTest instanceof RegExp)
+           this.acceptTest = function(text) { return options.acceptTest.test(text); };
+       else // must be a function!
+           this.acceptTest = options.acceptTest;
+       if (options.warningTest instanceof RegExp)
+           this.warningTest = function(text) { return options.warningTest.test(text); };
+       else if (typeof options.warningTest === "function")
+           this.warningTest = options.warningTest;
+       if (typeof options.warningMessage === "string")
+           this.warningMessage = options.warningMessage;
+       else
+           this.warningMessage = "Input is incomplete.";
+       if (typeof options.errorMessage === "string")
+           this.errorMessage = options.errorMessage;
+       else
+           this.errorMessage = "Input is illegal.";
+       inputElement.addEventListener("focus",function() { me.doFocus(); }, false);
+       inputElement.addEventListener("blur",function() { me.doBlur(); }, false);
+       inputElement.addEventListener("input",function() { me.checkInput(); }, false);
+   }
+   
+   doBlur() {
+       this.message.innerHTML = "&nbsp;";
+       this.input.style.backgroundColor = "white";
+       let accept = this.acceptTest(this.input.value.trim());
+       if (accept === true || accept === "ok") {
+           this.input.value = this.numToStr(this.strToNum(this.input.value.trim()));
+           this.previousValue = null;
+           return;
+       }
+       if (this.previousValue !== null) {
+           this.input.value = this.previousValue;
+           this.previousValue = null;
+       }
+   }
+   
+   doFocus() {
+       this.previousValue = this.input.value;
+   }
+      
+   checkInput() {
+      let text = this.input.value.trim();
+      let accept = this.acceptTest(text);
+      if (accept === true || accept === "ok") {
+          this.message.innerHTML = "&nbsp;";
+          this.input.style.backgroundColor = "#CCFFCC";
+          this.previousValue = this.input.value;
+          let num = this.strToNum(text);
+          setAllValues(num,this);
+          return;
+      }
+      if (this.warningTest !== undefined) {
+          let warn = this.warningTest(text);
+          if (warn === true || warn === "warning") {
+              this.message.innerHTML = this.warningMessage;
+              this.input.style.backgroundColor = "#FFFFBB";
+              return;
+          }
+      }
+      this.message.innerHTML = (accept === false)? this.errorMessage : accept;
+      this.input.style.backgroundColor = "#FFAAAA";
+   }
+   
+   test(regexp) {
+      return regexp.test(this.input.value.trim());
+   }
+   
+}
+
+function setAllValues(num, omit = null) {  // num is an integer, 0 to 4294967295
+    currentNum = num;
+    inputs.forEach( function(inp) {
+        if (inp !== omit)
+           inp.input.value = inp.numToStr(num);
+    } );
+    if (omit != canvas)
+        numToGraphics(num);
+}
+
+function init() {
+   inputs = [
+    new DataInput(
+          document.getElementById("binary"),
+          document.getElementById("binerror"),
+          {
+             acceptTest: /^(0|1){1,32}$/,
+             errorMessage: "Must be 1 to 32 zeros and ones.",
+             strToNum: function(str) { return Number.parseInt(str,2); },
+             numToStr: function(num) {
+                let str = num.toString(2);
+                let zeros = 32-str.length;
+                if (zeros > 0)
+                   str = "00000000000000000000000000000000".substring(0,zeros) + str;
+                return str;
+             }
+          }
+       ),
+    new DataInput(
+          document.getElementById("hex"),
+          document.getElementById("hexerror"),
+          {
+             acceptTest: /^[a-fA-F0-9]{1,8}$/,
+             errorMessage: "Must be 1 to 8 hexadecimal digits.",
+             strToNum: function(str) { return Number.parseInt(str,16); },
+             numToStr: function(num) {
+                let str = num.toString(16).toUpperCase();
+                let zeros = 8-str.length;
+                if (zeros > 0)
+                   str = "00000000".substring(0,zeros) + str;
+                return str;
+             }
+          }
+       ),
+    new DataInput(
+          document.getElementById("decimal"),
+          document.getElementById("decerror"),
+          {
+             warningTest: /^(\+|\-)$/,
+             warningMessage: "Add some digits for a complete number.",
+             acceptTest: function(text) {
+               if ( ! /^(\+|\-)?[0-9]+$/.test(text))
+                  return false;
+               let num = Number(text);
+               return !isNaN(num) && num >= -2147483648 && num <= 2147483647;
+             },
+             errorMessage: "Must be an integer, -2147483648 to 2147483647",
+             strToNum: function(str) {
+                 let num = Number.parseInt(str,10);
+                 dataView.setInt32(0,num);
+                 num = dataView.getUint32(0);
+                 return num;
+             },
+             numToStr: function(num) {
+                dataView.setUint32(0,num);
+                num = dataView.getInt32(0);
+                return num.toString(10);
+             }
+          }
+       ),
+    new DataInput(
+          document.getElementById("unsigned"),
+          document.getElementById("unserror"),
+          {
+             acceptTest: function(text) {
+               if ( ! /^[0-9]+$/.test(text))
+                  return false;
+               let num = Number(text);
+               return !isNaN(num) && num <= 4294967295;
+             },
+             errorMessage: "Must be an integer, 0 to 4294967295",
+             strToNum: function(str) { return Number.parseInt(str,10); },
+             numToStr: function(num) { return num.toString(10); }
+          }
+       ),
+    new DataInput(
+          document.getElementById("real"),
+          document.getElementById("realerror"),
+          {
+             warningTest: parseRealString,
+             warningMessage: "Input is an incomplete real number.",
+             acceptTest: parseRealString,
+             errorMessage: "Must be a real number, or infinity or nan.",
+             strToNum: function(str) {
+                let num;
+                if (str === "-infinity")
+                    num = Number.NEGATIVE_INFINITY;
+                else if (str === "infinity" || str === "+infinity")
+                    num = Number.POSITIVE_INFINITY;
+                else
+                    num = Number(str);
+                dataView.setFloat32(0,num);
+                return dataView.getUint32(0);
+             },
+             numToStr: function(num) {
+                dataView.setUint32(0,num);
+                let n = dataView.getFloat32(0);
+                if (num === 2147483648) // negative zero~
+                    return "-0.0000000";
+                else if (Number.isFinite(n))
+                    return n.toPrecision(8);
+                else
+                    return n.toString();
+             }
+          }
+       ),
+    new DataInput(
+          document.getElementById("ascii"),
+          document.getElementById("asciierror"),
+          {
+             warningTest: parseASCII,
+             warningMessage: "Complete the special character notation, <#...>",
+             acceptTest: parseASCII,
+             errorMessage: "Must represent 1 to 4 8-bit characters.",
+             strToNum: function(str) {
+                 let num = 0;
+                 let pos = 0;
+                 while (pos < str.length) {
+                    if ( /^<#[0-9]+>/.test(str.substring(pos)) ) {
+                        pos += 2;
+                        let c = 0;
+                        do {
+                           c = 10*c + str.charCodeAt(pos) - 48;
+                           pos++;
+                        } while (str.charAt(pos) != ">");
+                        pos++;
+                        num = (num << 8) + c;
+                    }
+                    else {
+                        num = (num << 8) + str.charCodeAt(pos);
+                        pos++;
+                    }
+                 }
+                 dataView.setInt32(0,num);
+                 num = dataView.getUint32(0);
+                 return num;
+             },
+             numToStr: function(num) {
+                let str = "";
+                for (let i = 24; i >= 0; i = i - 8) {
+                    let code = (num >> i) & 255;
+                    if (code <= 32 || (code >= 127 && code <= 160)) {
+                        str += "<#" + code + ">";
+                    }
+                    else {
+                        str += String.fromCharCode(code);
+                    }
+                }
+                return str;
+             }
+          }
+       ),
+    new DataInput(
+          document.getElementById("unicode"),
+          document.getElementById("unierror"),
+          {
+             warningTest: parseUnicode,
+             warningMessage: "Complete the special character notation, <#...>",
+             acceptTest: parseUnicode,
+             errorMessage: "Must represent 1 or 2 16-bit characters.",
+             strToNum: function(str) {
+                 let num = 0;
+                 let pos = 0;
+                 while (pos < str.length) {
+                    if ( /^<#[0-9]+>/.test(str.substring(pos)) ) {
+                        pos += 2;
+                        let c = 0;
+                        do {
+                           c = 10*c + str.charCodeAt(pos) - 48;
+                           pos++;
+                        } while (str.charAt(pos) != ">");
+                        pos++;
+                        num = (num << 16) + c;
+                    }
+                    else {
+                        num = (num << 16) + str.charCodeAt(pos);
+                        pos++;
+                    }
+                 }
+                 dataView.setInt32(0,num);
+                 num = dataView.getUint32(0);
+                 return num;
+             },
+             numToStr: function(num) {
+                let str = "";
+                for (let i = 16; i >= 0; i = i - 16) {
+                    let code = (num >> i) & 0xFFFF;
+                    if ( code <= 32 || (code >= 127 && code <= 160) ||
+                            code >= 0xFFF0 || (code >= 0xD800 && code <= 0xDFFF) ||
+                            (code >= 0x300 && code <= 0x36F) ) {
+                        str += "<#" + code + ">";
+                    }
+                    else {
+                        str += String.fromCharCode(code);
+                    }
+                }
+                return str;
+             }
+          }
+       )
+  ];
+  try {
+     canvas = document.getElementById("graphical");
+     canvas.onmousedown = doClickOnCanvas;
+     graphics = canvas.getContext("2d");
+     graphics.fillRect(0,0,114,58);
+     graphics.lineWidth = 2;
+     graphics.strokeStyle = "#999999";
+  }
+  catch (e) {
+     graphics = null;
+     document.getElementById("canvascontainer").innerHTML = "(Graphical view not available)";
+  }
+  document.getElementById("rand").onclick = function() {
+      let num = 0;
+      for (let i = 0; i < 32; i++) {
+          num = 2*num;
+          if ( Math.random() < 0.5 )
+             num++;
+      }
+      setAllValues(num);
+  };
+  document.getElementById("zero").onclick = function() { setAllValues(0); };
+  setAllValues(0);
+}
+
+</script>
+</head>
+<body onload="init()">
+  
+<div id="content">
+  
+<h2>Data Representation</h2>
+
+<hr>
+
+<div class="narrow">
+
+<p class=np>Data in a computer is stored in the form of "bits." A bit is something that 
+can be either zero or one.  This web page shows eight interpretations of the
+same 32 bits.  You can edit any of the interpretations, and the others will change to match it.
+For a more detailed explanation, see the rest of this page.</p>
+
+</div>
+
+<hr>
+  
+<table border=0 cellpadding=5 align=center>
+
+<tr valign=top>
+<td align=right>Binary (32 bits):</td>
+<td align=left><input type=text id="binary" size=35 title="The value is 32 zeros and ones.">
+       <button id=zero style="margin-left:50px" title="Set all bits to zero.">Zero</button>
+       <button id=rand title="Set each bit to a random value.">Random</button><br><span id="binerror">&nbsp;</span></td>
+</tr>
+
+<tr valign=top>
+<td align=right>Graphical:</td>
+<td align=left><span id="canvascontainer"><canvas id="graphical" width=114 height=58
+     title="32 squares, each representing one bit.  Click squares to toggle between 0 (white) and 1 (black)."></canvas></span></td>
+</tr>
+
+<tr valign=top>
+<td align=right>Hexadecimal:</td>
+<td align=left><input type=text id="hex" size=10 title="An 8-digit hexadecimal number"><br><span id="hexerror">&nbsp;</span></td>
+</tr>
+
+<tr valign=top>
+<td align=right>Unsigned Decimal:</td>
+<td align=left><input type=text id="unsigned" size=15 title="A non-negative integer that can be represented with 32 bits."><br><span id="unserror">&nbsp;</span></td>
+</tr>
+
+<tr valign=top>
+<td align=right>Signed Decimal:</td>
+<td align=left><input type=text id="decimal" size=15 title="An integer with an optional + or - sign that can be represented with 32 bits."><br><span id="decerror">&nbsp;</span></td>
+</tr>
+
+<tr valign=top>
+<td align=right>Real Number:</td>
+<td align=left><input type=text id="real" size=15 title="A real number, with optional sign, optional decimal point, and optional exponent."><br><span id="realerror">&nbsp;</span></td>
+</tr>
+
+<tr valign=top>
+<td align=right>8-bit Characters:</td>
+<td align=left><input type=text id="ascii" size=20 title="Four characters with codes in the range 0 to 255.  In addition to regular characters, the notation <#32>, for example, represents the character with code 32."><br><span id="asciierror">&nbsp;</span></td>
+</tr>
+
+<tr valign=top>
+<td align=right>16-bit Characters:</td>
+<td align=left><input type=text id="unicode" size=15 title="Two characters with codes in the range 0 to 65535.  In addition to regular characters, the notation <#32000>, for example, represents the character with code 32000."><br><span id="unierror">&nbsp;</span></td>
+</tr>
+
+</table>
+
+<hr>
+
+<h3>About the Representations</h3>
+
+
+
+<p>In a computer, items of data are represented in the form of <b>bits</b>, that is, as zeros and ones.  More accurately, they are stored using 
+physical components that can be in two states, such as a wire that can be at high voltage or low voltage, or a capacitor that 
+can either be charged or not.  These components represent bits, with one state used to mean "zero" and the other to mean "one."
+To be stored in a computer, a data item must be coded as a sequence of such zeros and ones.  But a given sequence of zeros and 
+ones has no built-in meaning; it only gets meaning from how it is used to represent data.</p>
+
+<img style="background-color: white; border: 2px solid black; float:right; margin: 10px 0 0 10px" src="3-bits.png" width="150" height="523">
+   
+<p>The table at the right shows some possible interpretations of four bits.  This web page shows some possible interpretations of
+32 bits.  Here is more information about the eight interpretations:</p>
+
+<ul>
+<li><b>32 Bits</b> &mdash; The "32 Bits" input box shows each of the 32 bits as a zero or one.  You can type anywhere from 1 to 32 zeros and ones in the 
+   input box; the bits you enter will be padded on the left with zeros to bring the total up to&nbsp;32. 
+   You can think of this as a 32-bit "base-2 number" or "binary number,"
+   but really, saying that it is a "number" adds a level of interpretation that is not built into the bits themselves.
+   (As an example, the base-2 number 1011 represents the integer 
+   <span style="white-space:pre"> 1 &times; 2<sup>3</sup> + 0 &times; 2<sup>2</sup> + 1 &times; 2<sup>1</sup> + 1 &times; 2<sup>0</sup></span>.
+   This is similar to the way the base-10 number 3475 represents
+   <span style="white-space:pre"> 3 &times; 10<sup>3</sup> + 4 &times; 10<sup>2</sup> + 7 &times; 10<sup>1</sup> + 5 &times; 10<sup>0</sup></span>.)
+   In a modern computer's memory, the bits would be stored in four groups of eight bits each.  Eight bits make up a "byte,"
+   so we are looking at four bytes of memory.</li>
+<li><b>Graphical</b> &mdash; Instead of representing a bit as a zero or one, we can represent a bit as a square that is
+   colored white (for zero) or black (for one).  The 32 bits are shown here as a grid of such squares.  You can click on a
+   square to change its color.  The squares are arranged in four rows of eight, so each row represents one byte.
+   Note that there are two ways that the four bytes could be arranged in memory:  with the high-order (leftmost) byte first
+   or with the low order byte first.  These two <a href="https://en.wikipedia.org/wiki/Endianness">byte orders</a>
+   are referred to as "big endian" and "little endian." The big-endian byte order is used here.</li>
+<li><b>Hexadecimal</b> &mdash; <a href="https://en.wikipedia.org/wiki/Hexadecimal">Hexadecimal</a> 
+   notation uses the characters 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, A, B, C, D, E, and&nbsp;F.  (Lower
+   case letters are also OK when entering the value into the "Hexadecimal" input box.)  Each of these characters corresponds to a group of four bits, so a 32-bit
+   value corresponds to 8 hexadecimal characters.  A&nbsp;string of hexadecimal characters can also be interpreted as a 
+   base-16 number, and the individual characters 0 through F correspond to the ordinary base-10 numbers 0  through&nbsp;15.</li>
+<li><b>Unsigned Decimal</b> &mdash; We usually represent integers as "decimal," or "base-10," numbers, rather than
+   binary (base-2) or hexadecimal (base-16).  Using just 4 bits, we could represent integers in the range 0&nbsp;to&nbsp;15.
+   Using 32 bits, we can represent positive integers from 0
+   up to 2<sup>32</sup> minus&nbsp;1.  In terms of base-10 numbers, that means from 0 to 4,294,967,295.  The "Unsigned&nbsp;Decimal" 
+   input box shows the base-10 equivalent of the 32-bit binary number.  You can enter the digits 0 through 9 in this box (but
+   no commas).</li>
+<li><b>Signed Decimal</b> &mdash; Often, we want to use negative as well as positive integers.  When we only have a certain number of
+   bits to work with, we can use half of the available values to represent negative integer sand half to represent positive
+   integers and zero.  In the signed decimal interpretation of 32-bit values, a bit-pattern which has a 1 in the the first (leftmost) position
+   represents a negative number.  The representation used for negative numbers (called the 
+   <a href="https://en.wikipedia.org/wiki/Two%27s_complement">twos&nbsp;complement</a> representation) is not the most obvious.
+   If we had only four bits to work with, we could represent signed decimal values from -8 to 7, as shown in the table.
+   With 32-bits, the legal signed decimal values are -2,147,483,648 to 2,147,483,647.  When entering values, you can type
+   the digits 0 through 9, with an optional plus or minus sign.  Note that for the integers 0 through 2,147,483,647,
+   the signed decimal and unsigned decimal interpretations are identical.</li>
+<li><b>Real Number</b> &mdash; A real number can have a decimal point, with an integer part before the decimal point and 
+   a fractional part after the decimal point.  Examples are:  3.141592654, -1.25, 17.0, and -0.000012334.  Real numbers
+   can be written using <a href="https://en.wikipedia.org/wiki/Scientific_notation">scientific&nbsp;notation</a>,
+   such as 1.23&nbsp;&times;&nbsp;10<sup>-7</sup>.  In the "Real Number" input box, this would be written 1.23e-7.
+   These examples use base 10; the base 2 versions would use only zeros and ones.  A real number can have infinitely 
+   many digits after the decimal point.  When we are limited to 32 bits, most real numbers can only be represented
+   approximately, with just 7 or 8 significant digits.  The encoding that is used for real numbers is
+   <a href="https://en.wikipedia.org/wiki/IEEE_754">IEEE&nbsp;754</a>.  The first (leftmost) bit is a sign bit, which
+   tells whether the number is positive or negative.  The next eight bits encode the exponent, for scientific notation.
+   The remaining 23 bits encode the significant bits of the number, referred to as the "mantissa."
+   There are special bit patterns that represent positive and negative infinity.  And there are many bit patterns that
+   represent so-called NaN, or "not-a-number" values.  The encoding is quite complicated!  For the "Real&nbsp;Number"
+   input box, you can type integers, decimal numbers, and scientific notation.  You can also enter the special values
+   <i>infinity</i>, <i>-infinity</i>, and <i>nan</i>.  (There are many different not-a-number values, but in this
+   web app they are all shown as "NaN".)  When you leave the input box, your input will be converted into
+   a standard form.  For example, if you enter 3.141592654, it will be changed to 3.1415927, since your input has more 
+   significant digits than can be represented in a 32-bit number.  And 17.42e100 will change to <i>infinity</i>, 
+   since the number you entered is too big for a 32-bit number.   (Note, by the way, that
+   real numbers on a computer are more properly referred as 
+   "<a href="https://en.wikipedia.org/wiki/Floating-point_arithmetic">floating&nbsp;point</a>" numbers.) </li>
+<li><b>8-bit Characters</b> &mdash; Text is another kind of data that has to be represented in binary form to be
+   stored on a computer.  <a href="https://en.wikipedia.org/wiki/ASCII">ASCII&nbsp;code</a> uses seven bits per
+   character, to represent the English alphabet, digits, punctuation, and certain "unprintable" characters that
+   don't have a visual representation.  ASCII can be extended to eight bits in various ways, allowing for 256 possible
+   characters, numbered from 0 to 255.  The <span style="white-space:pre">"8-bit Characters"</span> input box
+   uses the first 256 characters of the 16-bit character set that is actually used in web apps.  If you type
+   characters outside that range into the input box, you'll get an error.  The unprintable characters are
+   represented using a notation such as <#26> for the character with code number 26.  In fact, you can enter any
+   character in this format, but when you leave the input box, it will be converted to a single character.
+   For example, <#169> will show up as&nbsp;&copy; and <#65> as&nbsp;A. The binary number consisting of 32 zeros
+   shows up in this box as <span style="white-space:pre"><#0><#0><#0><#0>.</span>
+   </li>
+<li><b>16-bit Characters</b> &mdash; <a href="https://en.wikipedia.org/wiki/Unicode">Unicode</a> text encoding
+   allows the use of 16 bits for each character, with 65536 possible characters, allowing it to represent text 
+   from all of the world's languages as well as mathematical and other symbols.  (Even 65536 characters is not
+   enough &mdash; some characters are actually represented using two or three 16-bit numbers, but that's
+   not supported in this web app.)  As with 8-bit characters, notations such as <#65534> can be used
+   in the  <span style="white-space:pre">"16-bit Characters"</span> input box.</li>
+</ul>
+
+<p>As a final remark, note that you can't really ask for something like "the binary representation of 17", any
+more than you can ask for the meaning of the binary number "11000100110111".  You
+can type "17" into six of the seven input boxes in this web app, and you will get five different binary 
+representations!  The meaning of "17" depends on the interpretation.</p>
+
+
+<hr  style="clear:both">
+<div align=right><a href="http://math.hws.edu/eck/index.html"><i>David Eck</i></a></div>
+
+</div>
+</body>
+</html>
+
