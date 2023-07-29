@@ -1,0 +1,3361 @@
+<!DOCTYPE html>
+<!--
+    Web page written by David Eck (https://math.hws.edu/eck/index.html)
+    You can do anything you like with this web page and with the code, but
+    if you use a substantial portion of it, you should include attribution.
+    
+    This page implements a simulator for simple logic circuits made of
+    AND, OR, and NOT gates.
+    
+    The original xLogicCircuits program was written in about 1993 in Macintosh Object
+    Pascal and was translated into a Java applet in about 1997.  This JavaScript
+    version is a 2023 translation of the Java applet, and its heritage is
+    responsible for some of the code not following the usual JavaScript conventions.
+    (Some of the code is a little strange from the JavaScript perspective.)
+-->
+<head>
+<title>xLogicCircuits</title>
+<style>
+    html, body {
+        padding: 0;
+        margin: 0;
+        background-color: #CCCCCC;
+    }
+    #content {
+        padding: 10px;
+        margin: 10px;
+        width: 806px;
+        border: 2px solid black;
+        border-left: 2px solid black;
+        background-color: #EEEEFF;
+    }
+    #circuit {
+        background-color: white;
+        display: block;
+    }
+    #overlay {
+        position: absolute;
+        z-index: 10;
+        left: 0;
+        top: 0;
+        background-color: transparent;
+        display: none;
+    }
+    #canvasholder {
+        border: 2px solid black;
+        margin: 0;
+        padding: 0;
+    }
+    #scroller {
+        width: 100px;
+        height: 500px;
+        border-top: 2px solid black;
+        border-bottom: 2px solid black;
+        border-left: 2px solid black;
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        background-color: white;
+        direction: rtl;
+    }
+</style>
+
+<script>
+   
+"use strict";
+    
+let canvas, graphics;
+let OSC, OSG; // overlay canvas and graphics
+let currentCircuit, circuitStack, currentCircuitIndex;
+let untitledCt = 0;
+let scroller, scrollItems;
+let message;
+let resizeBox = null;
+let selectedItem = null;
+let selectedItemInScroller;
+let addTackWhileDrawing = null;
+let addTackWileDrawingTimer = null;
+let running = false;
+let runSpeed = 0;
+let runCountdown;
+let loading = false;
+let undoItems = [];
+let redoStartIndex = 0;
+let newBtn, clearBtn, saveBtn, loadBtn, deleteBtn;
+let undoBtn, redoBtn, iconifyBtn, deiconifyBtn, shrinkBtn, enlargeBtn;
+let titleInput;
+let mousing;
+let processingMouse = false;
+
+const UNDO_MAX = 50;
+
+
+//------------------- Circuit item classes ---------------------
+
+class CircuitItem {
+    constructor() {
+        this.on = false;
+        this.selected = false;
+        this.boundingBox = new FloatRect();
+    }
+    hit(x, y) {
+       return this.boundingBox.inside(x,y);
+    }
+    reshape(x, y, width, height) {
+        this.boundingBox.reshape(x,y,width,height);
+    }
+    move(x, y) {
+         this.reshape(x,y,this.boundingBox.width,this.boundingBox.height);
+    }
+    drawWithLines(g) {
+        this.draw(g);
+    }
+    selectConnectedLines(select) {
+    }
+    powerOff() {
+        this.on = false;
+    }
+    getLineSource(x, y) {
+        return null;
+    }
+    getLineDestination(x, y) {
+        return null;
+    }
+    compute() {
+        return false;
+    }  // returns true if anything visible element changed
+    dragTo(x, y, circuitBounds) { // called ONLY when dragging item that is on circuit (not in scroller)
+      if (x + this.boundingBox.width > circuitBounds.x + circuitBounds.width - 15)
+         x = circuitBounds.x + circuitBounds.width - 15 - this.boundingBox.width;
+      if (y + this.boundingBox.height > circuitBounds.y + circuitBounds.height - 15)
+         y = circuitBounds.y + circuitBounds.height - 15 - this.boundingBox.height;
+      x = Math.max(x, circuitBounds.x + 15);
+      y = Math.max(y, circuitBounds.y + 15);
+      this.reshape(x,y,this.boundingBox.width,this.boundingBox.height);
+   }
+   getCopyOfBoundingBox(addInLines) {
+   }
+   draw(g) {
+   }
+   copy() {
+   }
+   delete(owner) {
+   }
+   unDelete(owner) {
+   }
+}
+
+class FloatRect {
+   constructor( x = 0, y = 0, width = 0, height = 0) {
+      this.x = x;
+      this.y = y;
+      this.width = width;
+      this.height = height;
+   }
+   FloatRect(x, y, width, height) {
+      this.reshape(x,y,width,height);
+   }
+   reshape(x,y,width,height) {
+      this.x = x;
+      this.y = y;
+      this.width = Math.max(0,width);
+      this.height = Math.max(0,height);
+   }
+   getIntRect() {
+      return new FloatRect(Math.round(this.x),Math.round(this.y),
+                           Math.round(this.width),Math.round(this.height));
+   }
+   inside(a, b) {
+      return (a >= this.x && b >= this.y && a < this.x+this.width && b < this.y+this.height);
+   }
+   add(a, b) {
+      if (a instanceof FloatRect) {
+         this.add(r.x,r.y);
+         this.add(r.x+r.width, r.y+r.height);
+      }
+      else {
+         if (a < this.x) {
+            this.width += this.x - a;
+            this.x = a;
+         }
+         else if (a > this.x+this.width)
+            this.width = a - this.x;
+         if (b < this.y) {
+            this.height += this.y - b;
+            this.y = b;
+         }
+         else if (b > this.y+this.height)
+            this.height = b - this.y;
+      }
+   }
+   grow(dx, dy) {
+      this.x -= dx;
+      this.y -= dy;
+      this.width += 2*dx;
+      this.height += 2*dy;
+   }
+}
+
+class Vector {
+    constructor() {
+        this.elements = [];
+    }
+    elementAt(i) {
+        if (i < 0 || i >= this.elements.length)
+            throw new Error("Index out of range");
+        return this.elements[i];
+    }
+    addElement(x) {
+        this.elements.push(x);
+    }
+    setElementAt(x,i) {
+        this.elements[i] = x;
+    }
+    removeElement(x) {
+        let i = this.elements.indexOf(x);
+        if (i >= 0)
+            this.elements.splice(i,1);
+    }
+    indexOf(x) {
+        return this.elements.indexOf(x);
+    }
+    size() {
+        return this.elements.length;
+    }
+}
+
+class Line extends CircuitItem {
+   constructor (source, destination) {
+      super();
+      this.source = source;
+      this.destination = destination;
+      this.changed = false; // for use in deciding whether to draw this
+      this.pos = -1;  // position in vector; just for use in Circuit.copy() and saving files
+      if (source != null) {
+         source.destination.addElement(this);
+         this.on = source.on;
+      }
+      if (destination != null) {
+         destination.source = this;
+         destination.on = this.on;
+      }
+      this.setBoundingBox();
+   }
+   setBoundingBox() {
+      if (this.source != null && this.destination != null) {
+         this.boundingBox.reshape(this.source.connect_x,this.source.connect_y,1,1);
+         this.boundingBox.add(this.destination.connect_x,this.destination.connect_y);
+      }
+   }
+   draw(g) {
+      g.beginPath();
+      g.moveTo(this.source.connect_x,this.source.connect_y);
+      g.lineTo(this.destination.connect_x,this.destination.connect_y);
+      if (this.selected) {
+          g.stroke();
+          g.strokeStyle = "white";
+          g.lineWidth = 6;
+          g.stroke();
+          g.lineWidth = 2;
+      }
+      if (this.on)
+         if (this.selected)
+            g.strokeStyle = "magenta";
+         else
+             g.strokeStyle = "red";
+      else
+         if (this.selected)
+            g.strokeStyle = "blue";
+         else
+            g.strokeStyle = "black";
+      g.stroke();
+   }
+   compute() {  // called only by source IONub; passes on value to destination
+      this.changed = (this.on != this.source.on);
+      this.on = this.source.on;
+      return this.changed;
+   }
+   copy() {  // copied without source and destination
+      let it = new Line(null,null);
+      it.selected = this.selected;
+      it.on = this.on;
+      it.reshape(this.boundingBox.x,this.boundingBox.y,this.boundingBox.width,this.boundingBox.height);
+      return it;
+   }
+   getCopyOfBoundingBox(addInLines) { 
+       let r = new FloatRect( Math.round(this.boundingBox.x),Math.round(this.boundingBox.y),
+                            Math.round(this.boundingBox.width),Math.round(thils.boundingBox.height) ); 
+       r.grow(2,2);
+       return r;
+   }
+   hit(x, y) { 
+      this.boundingBox.grow(3,3);
+      let firstPass = this.boundingBox.inside(x,y);
+      this.boundingBox.grow(-3,-3);
+      if (!firstPass)
+         return false;
+      let ny = this.source.connect_x - this.destination.connect_x;
+      let nx = -(this.source.connect_y - this.destination.connect_y);
+      if (nx == 0 || ny == 0)
+         return true;
+      let len = nx*(x-this.source.connect_x) + ny*(y-this.source.connect_y);
+      let dist = Math.abs(len / Math.sqrt(nx*nx + ny*ny));
+      return (dist <= 3);
+   }
+   delete(owner) {
+      this.on = false;
+      owner.lines.removeElement(this);
+      if (this.source != null)
+         this.source.destination.removeElement(this);
+      if (this.destination != null) {
+         this.destination.source = null;
+         this.destination.on = false;
+      }
+   }
+   unDelete(owner) {
+      owner.lines.addElement(this);
+      if (this.source != null)
+         this.source.destination.addElement(this);
+      if (this.destination != null) {
+         this.destination.source = this;
+         this.destination.on = this.on;
+      }
+   }
+}
+
+class IONub extends CircuitItem {
+   constructor() {
+       super();
+       this.kind = 0;
+       this.connect_x = 0;
+       this.connect_y = 0;
+       this.source = null;
+       this.changed = false;
+       this.destination = new Vector();
+   }
+   drawWithLines(g) { 
+      this.draw(g);
+      if (this.source != null && this.kind != IONub.INPUT)  // don't draw source line for inputs, because the line is in the containing circuit
+         source.draw(g);
+      if (this.kind != IONub.OUTPUT)  // for outputs, destination lines are in containing circuit
+         for (let i = 0; i < this.destination.size(); i++)
+            this.destination.elementAt(i).draw(g);
+   }
+   selectConnectedLines(select) { 
+      if (this.source != null)
+         this.source.selected = select;
+      for (let i = 0; i < this.destination.size(); i++)
+         this.destination.elementAt(i).selected = select;
+   }
+   getCopyOfBoundingBox(addInLines) { 
+      let r = new FloatRect(this.boundingBox.x,this.boundingBox.y,this.boundingBox.width,this.boundingBox.height);
+      if (addInLines) {
+         if (this.source != null)
+            r.add(this.source.boundingBox);
+         for (let i = 0; i < this.destination.size(); i++)
+            r.add(this.destination.elementAt(i).boundingBox);
+      }
+      r.grow(3,3);
+      return r.getIntRect();
+   }
+   getLineSource(x, y) {
+      if (this.kind === IONub.OUTPUT)
+         return null;
+      if (x < this.boundingBox.x - 2 || x > this.boundingBox.x + this.boundingBox.width + 2 ||
+             y < this.boundingBox.y - 2|| y > this.boundingBox.y + this.boundingBox.height + 2)
+         return null;
+      return this;
+   }
+   getLineDestination(x, y) {
+      if (this.kind === IONub.INPUT || this.source != null)
+         return null;
+      if (x < this.boundingBox.x - 2 || x > this.boundingBox.x + this.boundingBox.width + 2 ||
+             y < this.boundingBox.y - 2|| y > this.boundingBox.y + this.boundingBox.height + 2)
+         return null;
+      return this;
+   }
+}
+IONub.INPUT = 0;
+IONub.OUTPUT = 1;
+IONub.TACK = 2;
+IONub.lineDestinationColor = "#008800";
+IONub.lineSourceColor = "#880088";
+
+
+class Tack extends IONub {
+   constructor() {
+      super();
+      this.kind = IONub.TACK;
+   }
+   draw(g) {
+      if (this.selected) {
+         g.fillStyle = "blue";
+         g.beginPath();
+         g.arc(Math.round(this.boundingBox.x+this.boundingBox.width/2), 
+                Math.round(this.boundingBox.y+this.boundingBox.height/2), 
+                Math.round(this.boundingBox.width/2+3), 0, 2 * Math.PI);
+         g.fill(); 
+      }
+      if (this.source === null)
+         g.fillStyle = IONub.lineDestinationColor;
+      else
+         g.fillStyle = IONub.lineSourceColor;
+      g.beginPath();
+      g.arc(Math.round(this.boundingBox.x+this.boundingBox.width/2), 
+             Math.round(this.boundingBox.y+this.boundingBox.height/2), 
+             Math.round(this.boundingBox.width/2), 0, 2 * Math.PI);
+      g.fill(); 
+   }
+   hit(x, y) {
+      let r = this.boundingBox;
+      return x > r.x - 3 && x < r.x + r.width + 3 && y > r.y - 3 && y < r.y + r.height -3;
+   }
+   copy() {  // copied without source and destination
+      let it = new Tack();
+      it.selected = this.selected;
+      it.on = this.on;
+      it.reshape(this.boundingBox.x,this.boundingBox.y,this.boundingBox.width,this.boundingBox.height);
+      it.kind = this.kind;
+      it.connect_x = this.connect_x;
+      it.connect_y = this.connect_y;
+      return it;
+   }
+   reshape(x, y, width, height) { 
+      this.boundingBox.reshape(x,y,width,height); 
+      this.connect_x = Math.round(x)+3.5;
+      this.connect_y = Math.round(y)+3.5;
+      if (this.source != null)
+         this.source.setBoundingBox();
+      for (let i = 0; i < this.destination.size(); i++)
+         this.destination.elementAt(i).setBoundingBox();
+   }
+   delete(owner) {
+     owner.items.removeElement(this);
+     for (let i = 0; i < this.destination.size(); i++) {
+        let line = this.destination.elementAt(i);
+        owner.lines.removeElement(line);
+        line.destination.source = null;           
+     }
+     if (this.source !== null) {
+        owner.lines.removeElement(this.source);
+        this.source.source.destination.removeElement(this.source);
+     }
+   }
+   unDelete(owner) {
+     owner.items.addElement(this);
+     for (let i = 0; i < this.destination.size(); i++) {
+        let line = this.destination.elementAt(i);
+        owner.lines.addElement(line);
+        line.destination.source = line;           
+     }
+     if (this.source !== null) {
+        owner.lines.addElement(this.source);
+        this.source.source.destination.addElement(this.source);
+     }
+   }
+}
+
+
+class CircuitIONub extends IONub {
+
+   constructor(side, position, isInput) {
+      super();
+      this.side = side;
+      this.absolutePosition = position;
+      this.kind = (isInput? IONub.INPUT : IONub.OUTPUT);
+   }
+   
+   drawLine(g,x1,y1,x2,y2) {
+       g.beginPath();
+       g.moveTo(x1,y1);
+       g.lineTo(x2,y2);
+       g.stroke();
+   }
+   
+   fillOval(g,x,y,w,h) {
+       g.beginPath();
+       g.arc(x+w/2,y+h/2,w/2,0,2*Math.PI);
+       g.fill();
+   }
+   
+   putNub(g, pos, source) {
+      switch (pos) {
+         case CircuitIONub.ONTOP: this.drawLine(g,this.connect_x,this.connect_y+1,this.connect_x,this.connect_y+4); break;
+         case CircuitIONub.ONLEFT: this.drawLine(g,this.connect_x+1,this.connect_y,this.connect_x+4,this.connect_y); break;
+         case CircuitIONub.ONRIGHT: this.drawLine(g,this.connect_x-4,this.connect_y,this.connect_x-1,this.connect_y); break;
+         case CircuitIONub.ONBOTTOM: this.drawLine(g,this.connect_x,this.connect_y-4,this.connect_x,this.connect_y-1); break;
+      }
+      if (source) {
+         switch (pos) {
+            case CircuitIONub.ONTOP:this.drawLine(g,this.connect_x-1,this.connect_y+1,this.connect_x,this.connect_y); 
+                         this.drawLine(g,this.connect_x,this.connect_y,this.connect_x+1,this.connect_y+1); break;
+            case CircuitIONub.ONLEFT:this.drawLine(g,this.connect_x+1,this.connect_y-1,this.connect_x,this.connect_y); 
+                         this.drawLine(g,this.connect_x,this.connect_y,this.connect_x+1,this.connect_y+1); break;
+            case CircuitIONub.ONRIGHT: this.drawLine(g,this.connect_x-1,this.connect_y-1,this.connect_x,this.connect_y); 
+                         this.drawLine(g,this.connect_x,this.connect_y,this.connect_x-1,this.connect_y+1); break;
+            case CircuitIONub.ONBOTTOM: this.drawLine(g,this.connect_x-1,this.connect_y-1,this.connect_x,this.connect_y); 
+                        this.drawLine(g,this.connect_x,this.connect_y,this.connect_x+1,this.connect_y-1); break;
+         }
+      }
+      else {
+         switch (pos) {
+            case CircuitIONub.ONTOP:this.drawLine(g,this.connect_x-1,this.connect_y,this.connect_x,this.connect_y+1); 
+                         this.drawLine(g,this.connect_x,this.connect_y+1,this.connect_x+1,this.connect_y); break;
+            case CircuitIONub.ONLEFT:this.drawLine(g,this.connect_x,this.connect_y-1,this.connect_x+1,this.connect_y); 
+                         this.drawLine(g,this.connect_x+1,this.connect_y,this.connect_x,this.connect_y+1); break;
+            case CircuitIONub.ONRIGHT: this.drawLine(g,this.connect_x-1,this.connect_y,this.connect_x,this.connect_y-1); 
+                         this.drawLine(g,this.connect_x-1,this.connect_y,this.connect_x,this.connect_y+1); break;
+            case CircuitIONub.ONBOTTOM: this.drawLine(g,this.connect_x-1,this.connect_y,this.connect_x,this.connect_y-1); 
+                        this.drawLine(g,this.connect_x,this.connect_y-1,this.connect_x+1,this.connect_y); break;
+         }
+      }
+   }
+   
+   drawIconified(g) {
+      if (this.kind === IONub.INPUT)
+         g.strokeStyle = IONub.lineDestinationColor;
+      else
+         g.strokeStyle = IONub.lineSourceColor;
+      this.putNub(g,this.side,this.kind === IONub.OUTPUT);
+   }
+   
+   drawCenter(g) {
+      if (this.on)
+         g.fillStyle = "red";
+      else
+         g.fillStyle = "black";
+      switch (this.side) {
+         case CircuitIONub.ONTOP: this.fillOval(g,Math.round(this.boundingBox.x)+2,Math.round(this.boundingBox.y)+2,Math.round(this.boundingBox.width)-4,Math.round(this.boundingBox.height)-7); break;
+         case CircuitIONub.ONLEFT: this.fillOval(g,Math.round(this.boundingBox.x)+2,Math.round(this.boundingBox.y)+2,Math.round(this.boundingBox.width)-7,Math.round(this.boundingBox.height)-4); break;
+         case CircuitIONub.ONRIGHT: this.fillOval(g,Math.round(this.boundingBox.x)+5,Math.round(this.boundingBox.y)+2,Math.round(this.boundingBox.width)-7,Math.round(this.boundingBox.height)-4); break;
+         case CircuitIONub.ONBOTTOM: this.fillOval(g,Math.round(this.boundingBox.x)+2,Math.round(this.boundingBox.y)+5,Math.round(this.boundingBox.width)-4,Math.round(this.boundingBox.height)-7); break;
+      }
+   }
+   
+   draw(g) {
+      if (this.kind === IONub.OUTPUT) {
+         g.fillStyle = IONub.lineDestinationColor;
+         g.strokeStyle = IONub.lineDestinationColor;
+      }
+      else {
+         g.fillStyle = IONub.lineSourceColor;
+         g.strokeStyle = IONub.lineSourceColor;
+      }
+      switch (this.side) {
+         case CircuitIONub.ONTOP: this.fillOval(g,Math.round(this.boundingBox.x),Math.round(this.boundingBox.y),Math.round(this.boundingBox.width),Math.round(this.boundingBox.height)-3); break;
+         case CircuitIONub.ONLEFT: this.fillOval(g,Math.round(this.boundingBox.x),Math.round(this.boundingBox.y),Math.round(this.boundingBox.width)-3,Math.round(this.boundingBox.height)); break;
+         case CircuitIONub.ONRIGHT: this.fillOval(g,Math.round(this.boundingBox.x)+3,Math.round(this.boundingBox.y),Math.round(this.boundingBox.width)-3,Math.round(this.boundingBox.height)); break;
+         case CircuitIONub.ONBOTTOM: this.fillOval(g,Math.round(this.boundingBox.x),Math.round(this.boundingBox.y)+3,Math.round(this.boundingBox.width),Math.round(this.boundingBox.height)-3); break;
+      }
+      this.putNub(g,(this.side+2)%4,this.kind === IONub.INPUT);
+      this.drawCenter(g);
+      if (this.selected) {
+         g.strokeStyle = "blue";
+         g.strokeRect(Math.round(this.boundingBox.x),Math.round(this.boundingBox.y),Math.round(this.boundingBox.width),Math.round(this.boundingBox.height));
+      }
+   }
+
+   getCoordsIconified(x, y, width, height) {
+      switch (this.side) {
+         case CircuitIONub.ONTOP:
+            this.connect_x = Math.round(x + 5 + (this.absolutePosition*(width-10)));
+            this.connect_y = Math.round(y);
+            break;
+         case CircuitIONub.ONLEFT:
+            this.connect_x = Math.round(x);
+            this.connect_y = Math.round(y + 5 + (this.absolutePosition*(height-10)));
+            break;
+         case CircuitIONub.ONRIGHT:
+            this.connect_x = Math.round(x + width);
+            this.connect_y = Math.round(y + 5 + (this.absolutePosition*(height-10)));
+            break;
+         case CircuitIONub.ONBOTTOM:
+            this.connect_x = Math.round(x + 5 + (this.absolutePosition*(width-10)));
+            this.connect_y = Math.round(y + height);
+            break;
+      }
+      if (this.kind === IONub.INPUT) {
+        if (this.source != null)
+           this.source.setBoundingBox();
+      }
+      else {
+         for (let i = 0; i < this.destination.size(); i++)
+            this.destination.elementAt(i).setBoundingBox();
+      }
+   }
+   
+   getCoords(x, y, width, height) {
+      switch (this.side) {
+         case CircuitIONub.ONTOP:
+            this.connect_x = Math.round(x + 7.5 + (this.absolutePosition*(width-10)));
+            this.connect_y = Math.round(y + 18);
+            this.boundingBox.reshape(this.connect_x-7.5,this.connect_y-18,15,18);
+            break;
+         case CircuitIONub.ONLEFT:
+            this.connect_x = Math.round(x + 18);
+            this.connect_y = Math.round(y + 7.5 + (this.absolutePosition*(height-10)));
+            this.boundingBox.reshape(this.connect_x-18,this.connect_y-7.5,18,15);
+            break;
+         case CircuitIONub.ONRIGHT:
+            this.connect_x = Math.round(x + width - 18);
+            this.connect_y = Math.round(y + 7.5 + (this.absolutePosition*(height-10)));
+            this.boundingBox.reshape(this.connect_x,this.connect_y-7.5,18,15);
+            break;
+         case CircuitIONub.ONBOTTOM:
+            this.connect_x = Math.round(x + 7.5 + (this.absolutePosition*(width-10)));
+            this.connect_y = Math.round(y + height - 18);
+            this.boundingBox.reshape(this.connect_x-7.5,this.connect_y,15,18);
+            break;
+      }
+      if (this.kind === IONub.OUTPUT) {
+         if (this.source != null) 
+            this.source.setBoundingBox();
+      }
+      else {
+         for (let i = 0; i < this.destination.size(); i++)
+            this.destination.elementAt(i).setBoundingBox();
+      }
+   }
+   
+   reshape(x, y, width, height) {  // called only during creation/dragging in scroller (so always ONLEFT)
+      this.boundingBox.reshape(x,y,width,height);
+      switch (this.side) {
+         case CircuitIONub.ONTOP:  this.connect_x = Math.round(x+7.5); this.connect_y = Math.round(y+18); break;
+         case CircuitIONub.ONLEFT:  this.connect_x = Math.round(x+18); this.connect_y = Math.round(y+7.5); break;
+         case CircuitIONub.ONRIGHT:  this.connect_x = Math.round(x); this.connect_y = Math.round(y+7.5); break;
+         case CircuitIONub.ONBOTTOM:  this.connect_x = Math.round(x+7.5); this.connect_y = Math.round(y); break;
+      }
+   }
+
+   dragTo(x, y, circuitBounds) {
+      let dist = y + 5 - circuitBounds.y;
+      this.side = CircuitIONub.ONTOP;
+      if (x + 5 - circuitBounds.x < dist) {
+         dist = x + 5 - circuitBounds.x;
+         this.side = CircuitIONub.ONLEFT;
+      }
+      if (circuitBounds.x + circuitBounds.width - (x+10) < dist) {
+         dist = circuitBounds.x + circuitBounds.width - (x+10);
+         this.side = CircuitIONub.ONRIGHT;
+      }
+      if (circuitBounds.y + circuitBounds.height - (y+10) < dist) {
+         dist = circuitBounds.y + circuitBounds.height - (y+10);
+         this.side = CircuitIONub.ONBOTTOM;
+      }
+      if (this.side == CircuitIONub.ONTOP || this.side == CircuitIONub.ONBOTTOM) {
+         x = x - circuitBounds.x;
+         x = Math.min(x,Math.round(circuitBounds.width-15));
+         x = Math.max(x,10);
+         this.absolutePosition = x / circuitBounds.width;
+      }
+      else {
+         y = y - circuitBounds.y;
+         y = Math.min(y,Math.round(circuitBounds.height-15));
+         y = Math.max(y,10);
+         this.absolutePosition = y / circuitBounds.height;
+      }
+      this.getCoords(Math.round(circuitBounds.x), Math.round(circuitBounds.y), 
+                       Math.round(circuitBounds.width), Math.round(circuitBounds.height));
+   }
+      
+   copyDataInto(it) {
+      it.selected = this.selected;
+      it.on = this.on;
+      it.reshape(this.boundingBox.x,this.boundingBox.y,this.boundingBox.width,this.boundingBox.height);
+      it.connect_x = this.connect_x;
+      it.connect_y = this.connect_y;
+   }
+
+   copy() {  // copied without source and destination
+      let it = new CircuitIONub(this.side,this.absolutePosition,this.kind===IONub.INPUT);
+      this.copyDataInto(it);
+      return it;
+   }
+   
+   delete(owner) {
+      this.on = false;
+      if (this.kind === IONub.INPUT) {
+         owner.inputs.removeElement(this);
+         for (let i = 0; i < this.destination.size(); i++) {
+            let line = this.destination.elementAt(i);
+            owner.lines.removeElement(line);
+            line.destination.source = null;           
+         }
+         if (owner.saveContainerWhileEnlarged !== null && this.source !== null) {  // source line, if any, is in the containing circuit!
+            owner.saveContainerWhileEnlarged.lines.removeElement(this.source);
+            this.source.source.destination.removeElement(this.source);
+         }
+      }
+      else {
+         owner.outputs.removeElement(this);
+         if (this.source != null) {
+            owner.lines.removeElement(this.source);
+            this.source.source.destination.removeElement(this.source);
+         }
+         if (owner.saveContainerWhileEnlarged !== null) {  // source line, if any, is in the containing circuit!
+            for (let i = 0; i < this.destination.size(); i++) {
+               let line = this.destination.elementAt(i);
+               owner.saveContainerWhileEnlarged.lines.removeElement(line);
+               line.destination.source = null;
+            }
+         }
+      }
+   }
+   
+   unDelete(owner) {
+      if (this.kind === IONub.INPUT) {
+         owner.inputs.addElement(this);
+         for (let i = 0; i < this.destination.size(); i++) {
+            let line = this.destination.elementAt(i);
+            owner.lines.addElement(line);
+            line.destination.source = line;           
+         }
+         if (owner.saveContainerWhileEnlarged !== null && this.source !== null) {  // source line, if any, is in the containing circuit!
+            owner.saveContainerWhileEnlarged.lines.addElement(this.source);
+            this.source.source.destination.addElement(this.source);
+         }
+      }
+      else {
+         owner.outputs.addElement(this);
+         if (this.source !== null) {
+            owner.lines.addElement(this.source);
+            this.source.source.destination.addElement(this.source);
+         }
+         if (owner.saveContainerWhileEnlarged !== null) {  // source line, if any, is in the containing circuit!
+            for (let i = 0; i < this.destination.size(); i++) {
+               let line = this.destination.elementAt(i);
+               owner.saveContainerWhileEnlarged.lines.addElement(line);
+               line.destination.source = line;
+            }
+         }
+      }
+   }
+   
+} // end class CircuitIONub
+
+CircuitIONub.ONRIGHT = 0;
+CircuitIONub.ONTOP = 1;
+CircuitIONub.ONLEFT = 2;
+CircuitIONub.ONBOTTOM = 3;  // order is coordinated with order of constants in class Gate
+
+
+class Gate extends CircuitItem {
+   
+   constructor(typeCode,  faceCode) {
+      super();
+      this.kind = typeCode;
+      this.facing = faceCode;
+      this.out = new CircuitIONub(faceCode,0.5,false);
+      if (typeCode === Gate.NOTGATE) {
+         this.in1 = new CircuitIONub((faceCode+2)%4,0.5,true);
+         this.in2 = null;
+      }
+      else {
+         this.in1 = new CircuitIONub((faceCode+2)%4,0.25,true);
+         this.in2 = new CircuitIONub((faceCode+2)%4,0.75,true);
+      }
+   }
+   
+   draw(g) {
+      if (this.selected)
+         g.strokeStyle = "blue";
+      else
+         g.strokeStyle = "black";
+      let absoluteVertices = Gate.vertexData[this.facing][this.kind];
+      let x0, y0, x1, y1;
+      x0 = Math.round(5 + this.boundingBox.x + absoluteVertices[0][0]*(this.boundingBox.width-10));
+      y0 = Math.round(5 + this.boundingBox.y + absoluteVertices[0][1]*(this.boundingBox.height-10));
+      g.beginPath();
+      g.moveTo(x0,y0);
+      for (let i = 1; i < absoluteVertices.length; i++) {
+         x1 = Math.round(5 + this.boundingBox.x + absoluteVertices[i][0]*(this.boundingBox.width-10));
+         y1 = Math.round(5 + this.boundingBox.y + absoluteVertices[i][1]*(this.boundingBox.height-10));     
+         g.lineTo(x1,y1);
+      }
+      g.closePath();
+      g.stroke();
+      g.beginPath();
+      g.moveTo(x0,y0);
+      g.lineTo(Math.round(5 + this.boundingBox.x + absoluteVertices[0][0]*(this.boundingBox.width-10)),
+                              Math.round(5 + this.boundingBox.y + absoluteVertices[0][1]*(this.boundingBox.height-10)));
+      this.in1.drawIconified(g);
+      if (this.in2 != null)
+         this.in2.drawIconified(g);
+      this.out.drawIconified(g);
+   }
+
+   reshape(x, y, width, height) {
+      this.boundingBox.reshape(x,y,width,height);
+      this.in1.getCoordsIconified(x,y,width,height);
+      if (this.in2 != null)
+         this.in2.getCoordsIconified(x,y,width,height);
+      this.out.getCoordsIconified(x,y,width,height);
+   }
+   
+   compute() {
+      if (this.kind === Gate.NOTGATE)
+         this.out.on = !this.in1.on;
+      else {
+         if (this.kind === Gate.ANDGATE)
+            this.out.on = this.in1.on && this.in2.on;
+         else
+            this.out.on = this.in1.on || this.in2.on;
+      }
+      return false;  // gates don't change visible appearance
+   }
+   
+   powerOff() {
+      this.on = false;
+      this.in1.on = false;
+      if (this.in2 != null)
+         this.in2.on = false;
+      this.out.on = false;
+   }
+
+   drawWithLines(g) { 
+      this.draw(g);
+      if (this.in1.source != null)
+         this.in1.source.draw(g);
+      if (this.in2 != null && this.in2.source != null)
+         this.in2.source.draw(g);
+      for (let i = 0; i < this.out.destination.size(); i++)
+         this.out.destination.elementAt(i).draw(g);
+   }
+   
+   selectConnectedLines(select) { 
+      if (this.in1.source != null)
+         this.in1.source.selected = select;
+      if (this.in2 != null && this.in2.source != null)
+         this.in2.source.selected = select;
+      for (let i = 0; i < this.out.destination.size(); i++)
+         this.out.destination.elementAt(i).selected = select;
+   }
+   
+   getCopyOfBoundingBox(addInLines = false) { 
+      let r = new FloatRect(this.boundingBox.x,this.boundingBox.y,this.boundingBox.width,this.boundingBox.height);
+      if (addInLines) {
+         if (this.in1.source !== null)
+            r.add(this.in1.source.boundingBox);
+         if (this.in2 != null && this.in2.source != null)
+            r.add(this.in2.source.boundingBox);
+         for (let i = 0; i < this.out.destination.size(); i++)
+            r.add(this.out.destination.elementAt(i).boundingBox);
+      }
+      r.grow(1,1);
+      return r.getIntRect();
+   }
+
+   getLineSource(x, y) { 
+      if (x < this.boundingBox.x - 2 || x > this.boundingBox.x + this.boundingBox.width + 2 ||
+             y < this.boundingBox.y - 2|| y > this.boundingBox.y + this.boundingBox.height + 2)
+         return null;
+      return this.out;
+   }
+   
+   getLineDestination(x, y) { 
+      if (this.in1.source != null && (this.in2 == null || this.in2.source != null))
+         return null;
+      if (x < this.boundingBox.x - 2 || x > this.boundingBox.x + this.boundingBox.width + 2 ||
+             y < this.boundingBox.y - 2|| y > this.boundingBox.y + this.boundingBox.height + 2)
+         return null;
+      if (this.in2 == null)
+         return this.in1;
+      else if (this.in1.source != null)
+         return this.in2;
+      else if (this.in2.source != null)
+         return this.in1;
+      else {
+         let d1 = (x-this.in1.connect_x)*(x-this.in1.connect_x) + (y-this.in1.connect_y)*(y-this.in1.connect_y); 
+         let d2 = (x-this.in2.connect_x)*(x-this.in2.connect_x) + (y-this.in2.connect_y)*(y-this.in2.connect_y);
+         if (d1 <= d2)
+            return this.in1;
+         else
+            return this.in2;
+      }
+   }
+
+   copy() {  // copied without source and destination
+      let it = new Gate(this.kind,this.facing);
+      it.selected = this.selected;
+      it.on = this.on;
+      it.reshape(this.boundingBox.x,this.boundingBox.y,this.boundingBox.width,this.boundingBox.height);
+      this.in1.copyDataInto(it.in1);
+      if (this.kind !== Gate.NOTGATE)
+         this.in2.copyDataInto(it.in2);
+      this.out.copyDataInto(it.out);
+      return it;
+   }
+   
+   delete(owner) {
+      owner.items.removeElement(this);
+      if (this.in1.source != null) {
+         owner.lines.removeElement(this.in1.source);
+         this.in1.source.source.destination.removeElement(this.in1.source);
+      }
+      if (this.in2 != null && this.in2.source != null) {
+         owner.lines.removeElement(this.in2.source);
+         this.in2.source.source.destination.removeElement(this.in2.source);
+      }      
+      for (let i = 0; i < this.out.destination.size(); i++) {
+         for (let j = 0; j < this.out.destination.size(); j++) {
+            let line = this.out.destination.elementAt(i);
+            owner.lines.removeElement(line);
+            line.destination.source = null;           
+         }
+      }
+   }
+
+   unDelete(owner) {
+      owner.items.addElement(this);
+      if (this.in1.source != null) {
+         owner.lines.addElement(this.in1.source);
+         this.in1.source.source.destination.addElement(this.in1.source);
+      }
+      if (this.in2 != null && this.in2.source != null) {
+         owner.lines.addElement(this.in2.source);
+         this.in2.source.source.destination.addElement(this.in2.source);
+      }      
+      for (let i = 0; i < this.out.destination.size(); i++) {
+         for (let j = 0; j < this.out.destination.size(); j++) {
+            let line = this.out.destination.elementAt(i);
+            owner.lines.addElement(line);
+            line.destination.source = line;           
+         }
+      }
+   }
+
+}
+
+Gate.NOTGATE = 0; Gate.ORGATE = 1; Gate.ANDGATE = 2;  // types of gates
+Gate.FACERIGHT = 0; Gate.FACEDOWN = 1; Gate.FACELEFT = 2; Gate.FACEUP = 3;  // directions they can face
+Gate.standardVertexData = [   // vertices for right-facing gates
+       [ [0,0], [0.85,0.5], [0.9,0.37], [0.95,0.37], [1,0.5], [0.95,0.63], [0.9,0.63],  [0.85,0.5], [0,1] ],
+       [ [0,0], [0.31,0.035], [0.55,0.12], [0.88,0.34], [1,0.5], 
+                [0.88,0.66], [0.55,0.88], [0.31,0.965], [0,1], 
+                [0.1,0.75], [0,0.75], [0.1,0.75], [0.12,0.5], [0.1,0.25], [0,0.25], [0.1,0.25] ],
+       [ [0,0], [0.5,0], [0.75,0.07], [0.93,0.25], [1,0.45], [1,0.55], [0.93,0.75], [0.75,0.93], [0.5,1], [0,1] ] ];
+Gate.vertexData = [];
+Gate.vertexData[0] = Gate.standardVertexData;
+for (let v = 1; v < 4; v++) {
+  Gate.vertexData[v] = new Array(3);
+  for (let i = 0; i < 3; i++) {
+    Gate.vertexData[v][i] = new Array(Gate.standardVertexData[i].length);
+    for (let j = 0; j < Gate.vertexData[v][i].length; j++) {
+       Gate.vertexData[v][i][j] = [ Gate.vertexData[v-1][i][j][1], 1 - Gate.vertexData[v-1][i][j][0] ];
+    }
+  }
+}
+
+
+
+class Circuit extends CircuitItem {
+   
+   constructor() {
+       super();
+       this.inputs = new Vector();
+       this.outputs = new Vector();
+       this.lines = new Vector();
+       this.items = new Vector();
+       this.iconified = false;
+       this.saveContainerWhileEnlarged = null;  // this is non-null ONLY when this is a contained circuit that has been enlarged
+       this.source = null;
+       this.boundingBoxInContainer = null;
+       this.savedBoundingBox = null;
+       this.name = null;
+   }
+   
+   iconify(x, y, width, height) {  // value of boundingBoxInContainer is used it CircuitCanvas
+      this.iconified = true;
+      this.saveContainerWhileEnlarged = null;
+      this.boundingBoxInContainer = null;
+      this.reshape(x,y,width,height);
+      this.powerOff();
+   }
+   
+   deiconify(x, y, width, height, source = null) {
+      this.iconified = false;
+      this.saveContainerWhileEnlarged = source;
+      if (source !== null)
+         this.boundingBoxInContainer = new FloatRect(this.boundingBox.x, this.boundingBox.y, this.boundingBox.width, this.boundingBox.height);
+      this.reshape(x,y,width,height);
+      this.powerOff();
+   }
+      
+   reshape(x, y, width, height) {
+      if (!this.iconified && width < 10 || height < 10)
+         return;
+      this.boundingBox.reshape(x,y,width,height);
+      if (!this.iconified) {  // adjust sizes/positions of contained items
+         if (this.savedBoundingBox != null) {
+            let xFactor = this.boundingBox.width / this.savedBoundingBox.width;
+            let yFactor = this.boundingBox.height / this.savedBoundingBox.height;
+            for (let i = 0; i < this.items.size(); i++) {
+               let it = this.items.elementAt(i);
+               if (it instanceof Tack)
+                  it.reshape(5 + ((it.boundingBox.x - 5)*xFactor), 5 + ((it.boundingBox.y - 5)*yFactor), 
+                              it.boundingBox.width, it.boundingBox.height);
+               else
+                 it.reshape( 5 + ((it.boundingBox.x - 5)*xFactor), 5 + ((it.boundingBox.y - 5)*yFactor),
+                              Math.max(10,(it.boundingBox.width)*xFactor), Math.max(10,(it.boundingBox.height)*yFactor) );
+            }
+         }
+         this.savedBoundingBox = new FloatRect(this.boundingBox.x, this.boundingBox.y, this.boundingBox.width, this.boundingBox.height);
+      }
+      for (let i = 0; i < this.inputs.size(); i++) {
+         if (this.iconified)
+            this.inputs.elementAt(i).getCoordsIconified(x,y,width,height);
+         else 
+            this.inputs.elementAt(i).getCoords(x,y,width,height);
+      }
+      for (let i = 0; i < this.outputs.size(); i++) {
+         if (this.iconified)
+            this.outputs.elementAt(i).getCoordsIconified(x,y,width,height);
+         else
+            this.outputs.elementAt(i).getCoords(x,y,width,height);
+      }
+   }
+   
+   addItem(item) {
+      if (item instanceof CircuitIONub) {
+         if (item.kind === IONub.INPUT)
+            this.inputs.addElement(item);
+         else
+            this.outputs.addElement(item);
+      }
+      else if (item instanceof Line)
+         this.lines.addElement(item);
+      else
+         this.items.addElement(item);
+   }
+   
+   computeTopLevel() { // returns true if some visible element it the circuit changes
+      let changed = false;
+      for (let i = 0; i < this.items.size(); i++) {
+          let item = this.items.elementAt(i);
+          if (item.compute())
+              changed = true;
+      }
+      for (let i = 0; i < this.lines.size(); i++) {
+          if (this.lines.elementAt(i).compute())
+             changed = true;
+      }
+      for (let i = 0; i < this.lines.size(); i++) {
+          let line = this.lines.elementAt(i);
+          line.destination.on = line.on;
+      }
+      return changed;
+   }
+   
+   compute() {  // called for nested circuits, which don't change visible appearance
+      for (let i = 0; i < this.items.size(); i++) {
+          let item = this.items.elementAt(i);
+          item.compute();
+      }
+      for (let i = 0; i < this.lines.size(); i++) {
+          this.lines.elementAt(i).compute();
+      }
+      for (let i = 0; i < this.lines.size(); i++) {
+          let line = this.lines.elementAt(i);
+          line.destination.on = line.on;
+      }
+      return false;
+   }
+   
+   powerOff() {
+      this.on = false;
+      for (let i = 0; i < this.lines.size(); i++) {
+          this.lines.elementAt(i).on = false;
+      }
+      for (let i = 0; i < this.items.size(); i++) {
+          this.items.elementAt(i).powerOff();
+      }
+      for (let i = 0; i < this.inputs.size(); i++) {
+          this.inputs.elementAt(i).on = false;
+      }
+      for (let i = 0; i < this.outputs.size(); i++) {
+          this.outputs.elementAt(i).on = false;
+      }
+   }
+
+   draw(g) {
+       let saveFont = g.font;
+       if ( ! Circuit.nameFont) {
+           Circuit.nameFontBig = "13px monospace";
+           g.font = Circuit.nameFontBig;
+           Circuit.nameCharWidthBig = g.measureText('W').width;
+           Circuit.nameFont = "11px monospace";
+           g.font = Circuit.nameFont;
+           Circuit.nameCharWidth = g.measureText('W').width;
+           Circuit.containerNameFont = "15px bold serif";
+       }
+       if (this.iconified) {
+          if (this.selected) {
+             g.fillStyle = "blue";
+             g.strokeStyle = "blue";
+          }
+          else {
+             g.fillStyle = "black";
+             g.strokeStyle = "black";
+          }
+          let x1 = Math.round(this.boundingBox.x+5);
+          let y1 = Math.round(this.boundingBox.y+5);
+          let x2 = Math.round(this.boundingBox.x+this.boundingBox.width-5);
+          let y2 = Math.round(this.boundingBox.y+this.boundingBox.height-5);
+          g.beginPath();
+          g.moveTo(x1,y1);
+          g.lineTo(x1,y2);
+          g.lineTo(x2,y2);
+          g.lineTo(x2,y1);
+          g.lineTo(x1,y1);
+          g.stroke();
+          for (let i = 0; i < this.inputs.size(); i++)
+             this.inputs.elementAt(i).drawIconified(g);
+          for (let i = 0; i < this.outputs.size(); i++)
+             this.outputs.elementAt(i).drawIconified(g);
+           this.putName(g);
+           g.font = saveFont;
+         }
+       else {
+          for (let i = 0; i < this.lines.size(); i++) {
+              this.lines.elementAt(i).draw(g);
+          }
+          for (let i = 0; i < this.items.size(); i++) {
+              this.items.elementAt(i).draw(g);
+          }
+          for (let i = 0; i < this.inputs.size(); i++) {
+              this.inputs.elementAt(i).draw(g);
+          }
+          for (let i = 0; i < this.outputs.size(); i++) {
+              this.outputs.elementAt(i).draw(g);
+          }
+          if (this.saveContainerWhileEnlarged !== null) {
+             g.font = Circuit.containerNameFont;
+             g.fillStyle = "red";
+             g.fillText("Enlarged from \"" + this.saveContainerWhileEnlarged.name + '\"',
+                                    this.boundingBox.x+10, (this.boundingBox.y+this.boundingBox.height)-12);
+             g.font = saveFont;
+          }
+       }
+   }
+   
+   putName(g) {
+   
+      let charWidth,charHeight,charLeading;
+      let maxChars = (this.boundingBox.width - 16) / Circuit.nameCharWidthBig;
+      if (maxChars < 6) {
+         g.font = Circuit.nameFont;
+         charWidth = Circuit.nameCharWidth;
+         charHeight = 10;
+         charLeading = 2;
+         maxChars = (this.boundingBox.width - 16) / Circuit.nameCharWidth;
+      }
+      else {
+         g.font = Circuit.nameFontBig;
+         charWidth = Circuit.nameCharWidthBig;
+         charHeight = 12;
+         charLeading = 3;
+      }   
+      if (this.selected)
+         g.fillStyle = "blue";
+      else
+         g.fillStyle = "black";
+      if (maxChars == 0)
+         maxChars = 1;
+      let maxLines = Math.round((this.boundingBox.height - 14 + charLeading) / charHeight);
+      if (maxLines <= 0)
+         maxLines = 1;
+      this.name = this.name.trim();
+      let lineBreak = new Array(maxLines+1);
+      lineBreak[0] = -1;
+      let line = 0;
+      let pos = 0;
+      while (true) {
+         if (pos >= this.name.length) {
+            lineBreak[line+1] = pos;
+            line++;
+            break;
+         }
+         let charCt = 0;
+         let lastSpace = -1;
+         while (pos < this.name.length && charCt <= maxChars) {
+            if (this.name.charAt(pos) === ' ')
+               lastSpace = pos;
+            pos++;
+            charCt++;
+         }
+         if (charCt > maxChars) {
+            if (lastSpace >= 0) {
+               lineBreak[line+1] = lastSpace;
+               pos = lastSpace + 1;
+            }
+            else {
+               while (pos < this.name.length && this.name.charAt(pos) !== ' ')
+                  pos++;
+               lineBreak[line+1] = pos;
+               pos++;
+            }
+            line++;
+            if (line >= maxLines || pos >= this.name.length)
+               break;
+         }
+      }
+      let center_x = (this.boundingBox.x + (this.boundingBox.width+1)/2);
+      let top_y =(this.boundingBox.y + this.boundingBox.height/2) - (line*charHeight - charLeading)/2 + charHeight - charLeading;
+      for (let i = 0; i < line; i++) {
+         let ct = lineBreak[i+1] - lineBreak[i];
+         if (ct <= maxChars) {
+            let w = (lineBreak[i+1] - lineBreak[i] - 1)*charWidth;
+            g.fillText(this.name.substring(lineBreak[i]+1,lineBreak[i+1]),
+                            center_x - w/2, top_y + i*charHeight);
+         }
+         else {
+            let w = maxChars * charWidth;
+            g.fillText(this.name.substring(lineBreak[i]+1,lineBreak[i]+maxChars+1),
+                            center_x - w/2, top_y + i*charHeight);
+         }
+      }
+   }
+   
+   drawWithLines(g) { 
+      this.draw(g);
+      if (this.iconified) {
+         for (let i = 0; i < this.inputs.size(); i++) {
+             let it = this.inputs.elementAt(i);
+             if (it.source != null)
+                it.source.draw(g);
+         }
+         for (let i = 0; i < this.outputs.size(); i++) {
+             let out = this.outputs.elementAt(i);
+             for (let j = 0; j < out.destination.size(); j++)
+                out.destination.elementAt(j).draw(g);
+         }
+      }
+   }
+
+   getCopyOfBoundingBox(addInLines) { 
+      let r = new FloatRect(this.boundingBox.x,this.boundingBox.y,this.boundingBox.width,this.boundingBox.height);
+      if (addInLines) {
+         for (let i = 0; i < this.inputs.size(); i++) {
+            let it = this.inputs.elementAt(i);
+            if (it.source != null)
+               r.add(it.source.boundingBox);
+         }
+         for (let i = 0; i < tis.outputs.size(); i++) {
+            let out = this.outputs.elementAt(i);
+            for (let j = 0; j < out.destination.size(); j++)
+               r.add(out.destination.elementAt(j).boundingBox);
+         }
+      }
+      r.grow(1,1);
+      return r.getIntRect();
+   }
+   
+   selectConnectedLines(select) { 
+      if (this.iconified) {
+         for (let i = 0; i < this.inputs.size(); i++) {
+             let it = this.inputs.elementAt(i);
+             if (it.source != null)
+                it.source.selected = select;
+         }
+         for (let i = 0; i < this.outputs.size(); i++) {
+             let out = this.outputs.elementAt(i);
+             for (let j = 0; j < out.destination.size(); j++)
+                out.destination.elementAt(j).selected = select;
+         }
+      }
+   }
+   
+   itemHitForLineSource(x, y) {
+      for (let i = this.inputs.size()-1; i >= 0; i--) {
+          let it = this.inputs.elementAt(i);  
+          if (it.getLineSource(x,y) != null)
+             return it;
+      }
+      for (let i = this.items.size()-1; i >= 0; i--) {
+          let it = this.items.elementAt(i);  
+          if (it.getLineSource(x,y) != null)
+             return it;
+      }
+      return null;
+   }
+
+   itemHitForLineDestination(x, y) {
+      for (let i = this.outputs.size()-1; i >= 0; i--) {
+          let it = this.outputs.elementAt(i);  
+          if (it.getLineDestination(x,y) != null)
+             return it;
+      }
+      for (let i = this.items.size()-1; i >= 0; i--) {
+          let it = this.items.elementAt(i);  
+          if (it.getLineDestination(x,y) != null)
+             return it;
+      }
+      return null;
+   }
+
+   getLineDestination(x, y) { 
+      if (x < this.boundingBox.x - 2 || x > this.boundingBox.x + this.boundingBox.width + 2 ||
+             y < this.boundingBox.y - 2|| y > this.boundingBox.y + this.boundingBox.height + 2)
+         return null;
+      let i = 0;
+      while (i < this.inputs.size() && this.inputs.elementAt(i).source != null)
+         i++;
+      if (i >= this.inputs.size())
+         return null;
+      let it_best = this.inputs.elementAt(i);
+      let d_min = (x-it_best.connect_x)*(x-it_best.connect_x) + (y-it_best.connect_y)*(y-it_best.connect_y);
+      for (let j = i+1; j < this.inputs.size(); j++) {
+         let it = this.inputs.elementAt(j);
+         if (it.source === null) {
+            let d = (x-it.connect_x)*(x-it.connect_x) + (y-it.connect_y)*(y-it.connect_y);
+            if (d < d_min) {
+               d_min = d;
+               it_best = it;
+            }
+         }
+      }
+      return it_best;
+   }
+
+   getLineSource(x, y) { 
+      if (x < this.boundingBox.x - 2 || x > this.boundingBox.x + this.boundingBox.width + 2 ||
+             y < this.boundingBox.y - 2|| y > this.boundingBox.y + this.boundingBox.height + 2)
+         return null;
+      if (this.outputs.size() == 0)
+         return null;
+      let it_best = this.outputs.elementAt(0);
+      let d_min = (x-it_best.connect_x)*(x-it_best.connect_x) + (y-it_best.connect_y)*(y-it_best.connect_y);
+      for (let j = 1; j < this.outputs.size(); j++) {
+         let it = this.outputs.elementAt(j);
+         let d = (x-it.connect_x)*(x-it.connect_x) + (y-it.connect_y)*(y-it.connect_y);
+         if (d < d_min) {
+            d_min = d;
+            it_best = it;
+         }
+      }
+      return it_best;
+   }
+
+   copy() {  // copies lines on inside only
+      let it = new Circuit();
+      it.selected = this.selected;
+      it.on = this.on;
+      it.iconified = this.iconified;
+      it.name = this.name;
+      it.savedBoundingBox = new FloatRect(this.savedBoundingBox.x,this.savedBoundingBox.y,
+                                             this.savedBoundingBox.width,this.savedBoundingBox.height);
+ 
+      for (let i = 0; i < this.inputs.size(); i++) {
+         let x = this.inputs.elementAt(i);
+         it.inputs.setElementAt(x.copy(),i);
+      }
+      for (let i = 0; i < this.outputs.size(); i++) {
+         let x = this.outputs.elementAt(i);
+         it.outputs.setElementAt(x.copy(),i);
+      }
+      for (let i = 0; i < this.items.size(); i++) {
+         let x = this.items.elementAt(i);
+         it.items.setElementAt(x.copy(),i);
+      }
+      for (let i = 0; i < this.lines.size(); i++) {
+         let x = this.lines.elementAt(i);
+         x.pos = i;
+         it.lines.setElementAt(x.copy(),i);
+      }
+
+      for (let i = 0; i < this.inputs.size(); i++) {
+         let x = this.inputs.elementAt(i);
+         let newx = it.inputs.elementAt(i);
+         for (let j = 0; j < x.destination.size(); j++) {
+            let lin = it.lines.elementAt(x.destination.elementAt(j).pos);
+            newx.destination.setElementAt(lin,j);
+            lin.source = newx;
+         }
+      }
+
+      for (let i = 0; i < this.outputs.size(); i++) {
+         let x = this.outputs.elementAt(i);
+         let newx = it.outputs.elementAt(i);
+         if (x.source != null) {
+            let lin = it.lines.elementAt(x.source.pos);
+            newx.source = lin;
+            lin.destination = newx;
+         }
+      }
+
+      for (let i = 0; i < this.items.size(); i++) {
+         let x = this.items.elementAt(i);
+         if (x instanceof Tack) {
+            let newx = it.items.elementAt(i);
+            if (x.source != null) {
+               let lin = it.lines.elementAt(x.source.pos);
+               newx.source = lin;
+               lin.destination = newx;
+            }
+            for (let j = 0; j < x.destination.size(); j++) {
+               let lin = it.lines.elementAt(x.destination.elementAt(j).pos);
+               newx.destination.setElementAt(lin,j);
+               lin.source = newx;
+            }
+         }
+         else if (x instanceof Gate) {
+            let newx = it.items.elementAt(i);
+            if (x.in1.source != null) {
+               let lin = it.lines.elementAt(x.in1.source.pos);
+               newx.in1.source = lin;
+               lin.destination = newx.in1;
+            }
+            if (x.in2 != null && x.in2.source != null) {
+               let lin = it.lines.elementAt(x.in2.source.pos);
+               newx.in2.source = lin;
+               lin.destination = newx.in2;
+            }
+            for (let j = 0; j < x.out.destination.size(); j++) {
+               let lin = it.lines.elementAt(x.out.destination.elementAt(j).pos);
+               newx.out.destination.setElementAt(lin,j);
+               lin.source = newx.out;
+            }
+         }
+         else if (x instanceof Circuit) {
+            let newx = it.items.elementAt(i);
+            for (let k = 0; k < x.inputs.size(); k++) {
+               let io = x.inputs.elementAt(k);
+               let newio = newx.inputs.elementAt(k);
+               if (io.source != null) {
+                  let lin = it.lines.elementAt(io.source.pos);
+                  newio.source = lin;
+                  lin.destination = newio;
+               }
+            }
+            for (let k = 0; k < x.outputs.size(); k++) {
+               let io = x.outputs.elementAt(k);
+               let newio = newx.outputs.elementAt(k);
+               for (let j = 0; j < io.destination.size(); j++) {
+                  let lin = it.lines.elementAt(io.destination.elementAt(j).pos);
+                  newio.destination.setElementAt(lin,j);
+                  lin.source = newio;
+               }
+            }
+         }
+      }
+      
+      it.reshape(this.boundingBox.x,this.boundingBox.y,this.boundingBox.width,this.boundingBox.height);
+      return it;
+   }
+   
+   delete(owner) {
+      this.powerOff();
+      owner.items.removeElement(this);
+      for (let i = 0; i < this.inputs.size(); i++) {
+         let it = this.inputs.elementAt(i);
+         if (it.source != null) {
+            owner.lines.removeElement(it.source);
+            it.source.source.destination.removeElement(it.source);
+         }
+      }
+      for (let i = 0; i < this.outputs.size(); i++) {
+         let out = this.outputs.elementAt(i);
+         for (let j = 0; j < out.destination.size(); j++) {
+            let line = out.destination.elementAt(j);
+            owner.lines.removeElement(line);
+            line.destination.source = null;           
+         }
+      }
+   }
+   
+   unDelete(owner) {
+      owner.items.addElement(this);
+      for (let i = 0; i < this.inputs.size(); i++) {
+         let it = this.inputs.elementAt(i);
+         if (it.source != null) {
+            owner.lines.addElement(it.source);
+            it.source.source.destination.addElement(it.source);
+         }
+      }
+      for (let i = 0; i < this.outputs.size(); i++) {
+         let out = this.outputs.elementAt(i);
+         for (let j = 0; j < out.destination.size(); j++) {
+            let line = out.destination.elementAt(j);
+            owner.lines.addElement(line);
+            line.destination.source = line;           
+         }
+      }
+   }
+   
+}
+//--------------------------------------------------------------
+
+function setMessage(msg = null) {
+   message.innerHTML = msg === null? "&nbsp;" : msg;
+}
+
+class ScrollItem {
+
+   constructor(circuitItem, name=null, standardItemNum=-1) {
+       this.item = circuitItem;
+       this.canvas = document.createElement("canvas");
+       this.canvas.width = 100;
+       this.canvas.height = 100;
+       this.canvas.style.display = "block";
+       this.canvas.style.direction = "ltr";
+       this.canvas.owner = this;
+       this.item.owner = this;
+       this.graphics = this.canvas.getContext("2d");
+       this.graphics.lineWidth = 2;
+       this.name = name;
+       this.standardItemNum = standardItemNum;
+       if (standardItemNum >= 0 && standardItemNum < 3) {
+          this.currentGate = 0;
+          this.facing = [circuitItem];
+          for (let i = 1; i < 4; i++)
+             this.facing.push(new Gate(standardItemNum,i));
+          if (standardItemNum === Gate.NOTGATE) {
+              this.facing[0].reshape(30,35,40,30);
+              this.facing[1].reshape(35,30,30,40);
+              this.facing[2].reshape(30,35,40,30);
+              this.facing[3].reshape(35,30,30,40);
+          }
+          else {
+              this.facing[0].reshape(30,32,40,35);
+              this.facing[1].reshape(32,30,35,40);
+              this.facing[2].reshape(30,32,40,35);
+              this.facing[3].reshape(32,30,35,40);
+          }
+       }
+       else if (standardItemNum === 3 || standardItemNum === 4)
+            circuitItem.reshape(50-7.5,50-7.5,18,15);
+       else if (standardItemNum === 5)
+            circuitItem.reshape(50-3.5,50-3.5,7,7);
+       this.draw();
+       this.canvas.onmousedown = function(evt) { mousing = true; evt.target.owner.doMouseDown(evt); };
+       this.canvas.ontouchstart = function(evt) { mousing = false; evt.target.owner.doMouseDown(evt); };
+       if (this.item instanceof Circuit)
+          this.canvas.ondblclick = function(evt) { selectItem(evt.target.owner.item, true); doDeiconify(); };
+       scroller.appendChild(this.canvas);
+   }
+       
+   draw() {
+      if (this.item.selected)
+          this.graphics.fillStyle = "#F0F0F0";
+      else
+          this.graphics.fillStyle = "white";
+      this.graphics.fillRect(0,0,100,100);
+      this.item.draw(this.graphics);
+      this.graphics.fillStyle = "black";
+      this.graphics.fillRect(0,98,100,2);
+      if (this.name !== null) {
+          this.graphics.fillStyle = "blue";
+          this.graphics.font = "12px serif";
+          this.graphics.fillText(this.name,25,93);
+      }
+      if (this.standardItemNum >= 0 && this.standardItemNum < 3) {
+          this.graphics.strokeStyle = "red";
+          this.graphics.beginPath();
+          this.graphics.arc(80,15,10,0,5*Math.PI/3);
+          this.graphics.moveTo(84,19);
+          this.graphics.lineTo(90,15);
+          this.graphics.lineTo(94,21);
+          this.graphics.stroke();
+      }
+   }
+   
+   doMouseDown(evt) {
+       if (loading || processingMouse)
+          return;
+       if (!this.item.selected)  
+          selectItem(null);
+       setMessage();
+       let [x,y] = getClientXY(this.canvas,evt);
+       if (this.standardItemNum >= 0 && this.standardItemNum < 3 && x > 68 && y < 27) { // rotate the gate
+           this.currentGate++;
+           if (this.currentGate > 3)
+               this.currentGate = 0;
+           this.item = this.facing[this.currentGate];
+           this.draw();
+           return;
+       }
+       let box = this.item.boundingBox;
+       if (x > box.x - 5 && y > box.y - 5 && x < box.x + box.width + 5 && x < box.y + box.height + 5) {
+           dragOntoCircuit(this, evt);
+           return;
+       }
+       if (this.item instanceof Circuit)
+          selectItem(this.item,true);
+   }
+
+} // end class ScrollItem
+
+function getClientXY(element,evt) {
+   let r = element.getBoundingClientRect();
+   if (mousing)
+      return [evt.clientX - r.left, evt.clientY - r.top];
+   else
+      return [evt.touches[0].clientX - r.left, evt.touches[0].clientY - r.top];
+}
+function addListeners(move,up) {
+   if (mousing) {
+      document.addEventListener("mousemove",move,false);
+      document.addEventListener("mouseup",up,false);
+   }
+   else {
+      document.addEventListener("touchmove",move,false);
+      document.addEventListener("touchend",up,false);
+      document.addEventListener("touchcancel",up,false);
+   }
+   processingMouse = true;
+}
+function removeListeners(move,up) {
+   if (mousing) {
+      document.removeEventListener("mousemove",move,false);
+      document.removeEventListener("mouseup",up,false);
+   }
+   else {
+      document.removeEventListener("touchmove",move,false);
+      document.removeEventListener("touchend",up,false);
+      document.removeEventListener("touchcancel",up,false);
+   }
+   processingMouse = false;
+}
+
+function dragOntoCircuit(scrollItem,evt) { 
+    if (!mousing)
+        evt.preventDefault();
+    let itemInScroller = scrollItem.item;
+    let item = itemInScroller.copy();
+    let [start_x,start_y] = getClientXY(canvas,evt);
+    addListeners(doMouseMove,doMouseUp);
+    let startedDrag = false;
+    let inCircuit = false;
+    item.selected = false;
+    let bounds = new FloatRect(102,0,canvas.width,canvas.height);
+    function doMouseMove(evt) { 
+        if (!startedDrag) {
+           let [x,y] = getClientXY(canvas,evt);
+           if (Math.abs(start_x - x) < 3 && Math.abs(start_y -y) < 3)
+              return;
+           startedDrag = true;
+           selectItem(null);
+           OSG.clearRect(0,0,OSC.width,OSC.height);
+           OSC.style.display = "block";
+        }
+        let [x,y] = getClientXY(OSC,evt);
+        if ( x > 122 || (x > 102 && item instanceof CircuitIONub))
+            inCircuit = true;
+        snap(x,y);
+    }
+    function doMouseUp(evt) {
+        OSC.style.display = "none";
+        removeListeners(doMouseMove,doMouseUp);
+        if (inCircuit) {
+            item.move(item.boundingBox.x - 102, item.boundingBox.y);
+            currentCircuit.addItem(item);
+            selectItem(item);
+            addUndoItem({name: "Add Item", item: item, container: currentCircuit});
+        }
+        else if ((itemInScroller instanceof Circuit))
+           selectItem(itemInScroller,true);
+    }
+    function snap(x,y) {
+        if (inCircuit)
+           item.dragTo(x-item.boundingBox.width/2,y-item.boundingBox.height/2,bounds);
+        else {
+            if (x < 0)
+               x = 0;
+            if (y < 0)
+               y = 0;
+            else if (y > OSC.height)
+               y = OSC.height;
+            item.move(x-item.boundingBox.width/2,y-item.boundingBox.height/2);
+        }
+        OSG.clearRect(0,0,OSC.width,OSC.height);
+        item.draw(OSG);
+    }
+}
+
+function doMouseOnCircuit(evt) { 
+   if (loading || processingMouse)
+      return;
+   if (!mousing)
+      evt.preventDefault();
+   setMessage();
+   let [x,y] = getClientXY(canvas,evt);
+   if (resizeBox !== null && doResize(evt))
+      return;
+   if (running && (!mousing || evt.button === 0)) {
+      for (let i = currentCircuit.inputs.size() - 1; i >= 0; i--) {
+         let input = currentCircuit.inputs.elementAt(i);
+         if (input.hit(x,y)) {
+             input.on = !input.on;
+             input.drawCenter(graphics);
+             break;
+         }
+      }
+   }
+   if (!(evt.shiftKey || evt.button === 1)) {
+      let lineSource = currentCircuit.itemHitForLineSource(x,y);
+      if (lineSource !== null) {
+          doDrawLine(lineSource,evt,x,y);
+          return;
+      }
+   }
+   for (let i = currentCircuit.items.size() - 1; i >= 0; i--) { 
+       if (currentCircuit.items.elementAt(i).hit(x,y)) {
+           doHitItem(currentCircuit.items.elementAt(i),evt,x,y);
+           return;
+       }
+   }
+   for (let i = currentCircuit.inputs.size() - 1; i >= 0; i--) {
+       if (currentCircuit.inputs.elementAt(i).hit(x,y)) {
+           doHitItem(currentCircuit.inputs.elementAt(i),evt,x,y);
+           return;
+       }
+   }
+   for (let i = currentCircuit.outputs.size() - 1; i >= 0; i--) { 
+       if (currentCircuit.outputs.elementAt(i).hit(x,y)) {
+           doHitItem(currentCircuit.outputs.elementAt(i),evt,x,y);
+           return;
+       }
+   }
+   for (let i = currentCircuit.lines.size() - 1; i >= 0; i--) { 
+       if (currentCircuit.lines.elementAt(i).hit(x,y)) { 
+           selectItem(currentCircuit.lines.elementAt(i));
+           return;
+       }
+   }
+   selectItem(null);
+}
+function doHitItem(item,evt,x,y) {
+   if (!(evt.shiftKey || evt.button === 1)) {
+       selectItem(item);
+       return;
+   }
+   selectItem(null);
+   let offset_x = x - item.boundingBox.x;
+   let offset_y = y - item.boundingBox.y;
+   let canvasBounds = new FloatRect(0,0,canvas.width,canvas.height);
+   let startPosition = [item.boundingBox.x, item.boundingBox.y];
+   addListeners(doMouseMove,doMouseUp);
+   function doMouseMove(evt) {
+      let [a,b] = getClientXY(canvas,evt);
+      a -= offset_x;
+      b -= offset_y;
+      item.dragTo(a,b,canvasBounds);
+      drawCurrentCircuit();
+   }
+   function doMouseUp(evt) {
+      removeListeners(doMouseMove,doMouseUp);
+      let endPosition = [item.boundingBox.x, item.boundingBox.y];
+      selectItem(item);
+      if (startPosition[0] !== endPosition[0] || startPosition[1] !== endPosition[1])
+         addUndoItem({name: "Move Item", item: item, startPosition: startPosition, endPosition: endPosition, bounds: canvasBounds});
+   }
+}
+function doResize(evt) {
+   const UL = 0, UR = 1, LL = 2, LR = 3;  // vertices
+   const minWidth = 20, minHeight = 20;
+   const legalRect = new FloatRect(20,20,canvas.width-40,canvas.height-40);
+   let startbox = [resizeBox.x, resizeBox.y, resizeBox.width, resizeBox.height];
+   let x4, y4, vertexHit, offset_x, offset_y;
+   let [a,b] = getClientXY(canvas,evt);
+   x4 = resizeBox.x + resizeBox.width - 5;
+   y4 = resizeBox.y + resizeBox.height - 5;
+   if (a >= resizeBox.x-1 && a < resizeBox.x + 6) {
+      if (b >= resizeBox.y-1 && b < resizeBox.y + 6) {
+         vertexHit = UL;
+         offset_x = resizeBox.x-a;
+         offset_y = resizeBox.y-b;
+      }
+      else if (b >= y4-1 && b < y4 + 6) {
+         vertexHit = LL;
+         offset_x = resizeBox.x-a;
+         offset_y = resizeBox.y+resizeBox.height-b;
+      }
+      else
+         return false;
+   }
+   else if (a >= x4-1 && a < x4 + 6) {
+      if (b >= resizeBox.y-1 && b < resizeBox.y + 6) {
+         vertexHit = UR;
+         offset_x = resizeBox.x+resizeBox.width-a;
+         offset_y = resizeBox.y-b;
+      }
+      else if (b >= y4-1 && b < y4 + 6) {
+         vertexHit = LR;
+         offset_x = resizeBox.x+resizeBox.width-a;
+         offset_y = resizeBox.y+resizeBox.height-b;
+      }
+      else
+         return false;
+   }
+   else
+      return false;
+   addListeners(doMouseMove,doMouseUp);
+   return true;
+   function doMouseMove(evt) {
+      let [a,b] = getClientXY(canvas,evt);
+      a += offset_x;
+      b += offset_y;
+      if (legalRect != null) {
+         if (a < legalRect.x)
+            a = legalRect.x;
+         else if (a > legalRect.x+legalRect.width)
+            a = legalRect.x+legalRect.width;
+         if (b < legalRect.y)
+            b = legalRect.y;
+         else if (b > legalRect.y+legalRect.height)
+            b = legalRect.y+legalRect.height;
+      }
+      switch (vertexHit) {
+         case UL:
+           if (a >= resizeBox.x+resizeBox.width-minWidth)
+              a = resizeBox.x+resizeBox.width-minWidth;
+           if (b >= resizeBox.y+resizeBox.height-minHeight)
+              b = resizeBox.y+resizeBox.height-minHeight;
+           reshape(a,b,resizeBox.width+resizeBox.x-a,resizeBox.height+resizeBox.y-b);
+           break;
+         case LL:
+           if (a >= resizeBox.x+resizeBox.width-minWidth)
+              a = resizeBox.x+resizeBox.width-minWidth;
+           if (b < resizeBox.y+minHeight)
+              b = resizeBox.y+minHeight;
+           reshape(a,resizeBox.y,resizeBox.width+resizeBox.x-a,b-resizeBox.y);
+           break;
+         case UR:
+           if (a < resizeBox.x+minWidth)
+              a = resizeBox.x+minWidth;
+           if (b >= resizeBox.y+resizeBox.height-minHeight)
+              b = resizeBox.y+resizeBox.height-minHeight;
+           reshape(resizeBox.x,b,a-resizeBox.x,resizeBox.height+resizeBox.y-b);
+           break;
+         case LR:
+           if (a < resizeBox.x+minWidth)
+              a = resizeBox.x+minWidth;
+           if (b < resizeBox.y+minHeight)
+              b = resizeBox.y+minHeight;
+           reshape(resizeBox.x,resizeBox.y,a-resizeBox.x,b-resizeBox.y);
+           break;
+      }
+      last_x = resizeBox.x;
+      last_y = resizeBox.y;      
+   }
+   function reshape(x,y,width,height) {
+       resizeBox.x = x;
+       resizeBox.y = y;
+       resizeBox.width = width;
+       resizeBox.height = height;
+       selectedItem.reshape(resizeBox.x, resizeBox.y, resizeBox.width, resizeBox.height);
+       drawCurrentCircuit();
+   }
+   function doMouseUp(evt) {
+      removeListeners(doMouseMove,doMouseUp);
+      let endbox = [resizeBox.x, resizeBox.y, resizeBox.width, resizeBox.height];
+      if (startbox[0] !== endbox[0] ||startbox[2] !== endbox[2] ||startbox[3] !== endbox[3] ||startbox[4] !== endbox[4])
+         addUndoItem({name: "Resize", startbox: startbox, endbox: endbox, item: selectedItem});
+   }
+}
+function doDrawLine(sourceItem,evt,start_x,start_y) {
+   let destinationItem = null;
+   let source = sourceItem.getLineSource(start_x,start_y);
+   if (source === null)
+       return;
+   let started = false;
+   let destination;
+   addListeners(doContinueLine,doEndLine);
+   function doContinueLine(evt) {
+      let needsRefresh = false;
+      let [x,y] = getClientXY(canvas,evt);
+      if (!started) {
+         if (Math.abs(x - start_x) < 3 && Math.abs(y - start_y < 3))
+            return;
+         OSG.clearRect(0,0,OSC.width,OSC.height);
+         OSC.style.display = "block";
+         selectItem(null);
+         sourceItem.selected = true;
+         needsRefresh = true;
+         started = true;
+      }
+      let newSource = sourceItem.getLineSource(x,y);
+      if (newSource !== null)
+         source = newSource;
+      let newDestinationItem = currentCircuit.itemHitForLineDestination(x,y);
+      if (newDestinationItem === sourceItem)
+          newDestinationItem = null;
+      if (newDestinationItem === null)
+          destination = null;
+      else {
+          destination = newDestinationItem.getLineDestination(x,y);
+          if (destination === null)
+             newDestinationItem = null;
+      }
+      if (newDestinationItem === null) {
+         if (destinationItem !== null) {
+            destinationItem.selected = false;
+            sourceItem.selected = true;
+            needsRefresh = true;
+         }
+      }
+      else if (newDestinationItem !== destinationItem) {
+         if (destinationItem === null)
+            sourceItem.selected = false;
+         else
+            destinationItem.selected = false;
+         newDestinationItem.selected = true;
+         needsRefresh = true;
+      }
+      destinationItem = newDestinationItem;
+      OSG.clearRect(0,0,OSC.width,OSC.height);
+      if (destinationItem === null) {
+          OSG.beginPath();
+          OSG.moveTo(102+source.connect_x,source.connect_y);
+          OSG.lineTo(102+x,y);
+          OSG.strokeStyle = "green";
+          OSG.stroke();
+      }
+      else {
+          OSG.beginPath();
+          OSG.moveTo(102+source.connect_x,source.connect_y);
+          OSG.lineTo(102+destination.connect_x,destination.connect_y);
+          OSG.lineWidth = 6;
+          OSG.strokeStyle = "white";
+          OSG.stroke();
+          OSG.lineWidth = 2;
+          OSG.strokeStyle = "green";
+          OSG.stroke();
+      }
+      if (needsRefresh)
+         drawCurrentCircuit();
+   }
+   function doEndLine(evt) {
+      removeListeners(doContinueLine,doEndLine);
+      if (!started) {
+         OSC.style.display = "none";
+         selectItem(sourceItem);
+         return;
+      }
+      sourceItem.selected = false;
+      if (destinationItem !== null) {
+         OSC.style.display = "none";
+         destinationItem.selected = false;
+         let line = new Line(source,destination);
+         currentCircuit.addItem(line);
+         selectItem(line);
+         addUndoItem({name: "Add Wire", item: line, container: currentCircuit});
+      }
+      else if (mousing){ 
+         OSC.addEventListener("mousedown",doAddTack,false);
+         let [x,y] = getClientXY(canvas,evt);
+         addTackWhileDrawing = { x: x, y: y };
+         addTackWileDrawingTimer = setTimeout(doFinish, 250);
+      }
+      else {
+         OSC.style.display = "none";
+         selectItem(sourceItem);
+         drawCurrentCircuit();
+      }
+   }
+   function doAddTack(evt) {
+      if (mousing)
+         OSC.removeEventListener("mousedown",doAddTack,false);
+      else
+         OSC.removeEventListener("touchstart",doAddTack,false);
+      OSC.style.display = "none";
+      clearTimeout(addTackWileDrawingTimer);
+      let [x,y] = getClientXY(canvas,evt);
+      if (Math.abs(x - addTackWhileDrawing.x) <= 2 &&
+           Math.abs(y - addTackWhileDrawing.y) <= 2) {
+         let tack = new Tack();
+         tack.reshape(x - 3.5, y - 3.5, 7, 7);
+         currentCircuit.addItem(tack);
+         let line = new Line(source, tack);
+         currentCircuit.addItem(line);
+         selectItem(tack);
+         addUndoItem({name: "Drop Tack", tack: tack, container: currentCircuit});
+         drawCurrentCircuit();
+         doDrawLine(tack,evt,x,y);
+      }
+      else {
+         drawCurrentCircuit();
+      }
+   }
+   function doFinish() {  
+      if (mousing)
+         OSC.removeEventListener("mousedown",doAddTack,false);
+      else
+         OSC.removeEventListener("touchstart",doAddTack,false);
+      OSC.style.display = "none";
+      addTackWhileDrawing = null;
+      addTackWileDrawingTimer = null;
+      if (started)
+         drawCurrentCircuit();
+      else
+         selectItem(sourceItem);
+   }
+}
+
+function doCheckInputClick(evt) { 
+   if (!running || (mousing && evt.button !== 0))
+      return;
+   let [x,y] = getClientXY(canvas,evt);
+   for (let i = 0; i < currentCircuit.inputs.size(); i++) {
+      let input = currentCircuit.inputs.elementAt(i);
+      if (input.hit(x,y)) {
+         input.on = !input.on;
+         input.drawCenter(graphics);
+         return;
+      }
+   }
+}
+
+function doDoubleClick(evt) {
+   if (loading)
+      return;
+   setMessage();
+   let [x,y] = getClientXY(canvas,evt);
+   for (let i = 0; i < currentCircuit.items.size(); i++) {
+      let item = currentCircuit.items.elementAt(i);
+      if ((item instanceof Circuit) && item.hit(x,y)) {
+         selectItem(item);
+         doEnlarge();
+         return;
+      }
+   }
+   for (let i = 0; i < currentCircuit.lines.size(); i++) { 
+      let line = currentCircuit.lines.elementAt(i);
+      if (line.hit(x,y)) { // add a tack
+         let tack = new Tack();
+         tack.reshape(x-3.5,y-3.5,7,7);
+         let source = line.source;
+         let dest = line.destination;
+         line.delete(currentCircuit);
+         let line1 = new Line(source,tack);
+         let line2 = new Line(tack,dest);
+         currentCircuit.lines.addElement(line1);
+         currentCircuit.lines.addElement(line2);
+         currentCircuit.items.addElement(tack);
+         line1.on = line2.on = tack.on = line.on;
+         selectItem(tack);
+         addUndoItem({name: "Insert Tack in Wire", tack: tack, line: line, container: currentCircuit});
+         return;
+      }
+   }
+}
+
+function drawCurrentCircuit() {
+    graphics.fillStyle = "#EEEAC8";
+    graphics.fillRect(0,0,canvas.width,canvas.height);
+    graphics.strokeStyle = "#0000AA";
+    graphics.beginPath();
+    graphics.moveTo(7.5,7.5);
+    graphics.lineTo(canvas.width-7.5,7.5);
+    graphics.lineTo(canvas.width-7.5,canvas.height-7.5);
+    graphics.lineTo(7.5,canvas.height-7.5);
+    graphics.closePath();
+    graphics.lineWidth = 1;
+    graphics.stroke();
+    graphics.lineWidth = 2;
+    currentCircuit.draw(graphics);
+    if (resizeBox !== null) {
+         let x4 = resizeBox.x + resizeBox.width - 5;
+         let y4 = resizeBox.y + resizeBox.height - 5;
+         graphics.strokeStyle = "gray";
+         graphics.fillStyle = "black";
+         graphics.strokeRect(resizeBox.x,resizeBox.y,resizeBox.width,resizeBox.height);
+         graphics.fillRect(resizeBox.x,resizeBox.y,6,6);
+         graphics.fillRect(resizeBox.x,y4,6,6);
+         graphics.fillRect(x4,resizeBox.y,6,6);
+         graphics.fillRect(x4,y4,6,6);
+    }
+}
+
+function selectItem(item, inScroller = false) {
+   if (item === selectedItem)
+      return;
+   let needDraw = false;
+   if (selectedItem !== null) {
+      selectedItem.selected = false;
+      if (selectedItemInScroller)
+         selectedItem.owner.draw();
+      else
+          needDraw = true;
+      resizeBox = null;
+      selectedItemInScroller = false;
+   }
+   selectedItem = item;
+   selectedItemInScroller = inScroller;
+   if (item !== null) {
+      item.selected = true;
+      if (inScroller) {
+         selectedItem.owner.draw();
+         let scrollPosition = 100*scrollItems.indexOf(selectedItem.owner);
+         if (scrollPosition >= 0) { // should always happen
+            if (scroller.scrollTop > scrollPosition)
+               scroller.scrollTop = scrollPosition;
+            else if (scroller.scrollTop < scrollPosition - 400)
+               scroller.scrollTop = scrollPosition - 400;
+         }
+      }
+      else {
+         if (item instanceof Gate || item instanceof Circuit)
+            resizeBox = new FloatRect(item.boundingBox.x, item.boundingBox.y, item.boundingBox.width, item.boundingBox.height);
+         needDraw = true;
+      }
+   }
+   if (needDraw)
+      drawCurrentCircuit();
+   setEnabledStates();
+}
+
+function setEnabledStates() {
+   let empty = currentCircuit.items.size() === 0 && currentCircuit.inputs.size() === 0 && currentCircuit.outputs.size() === 0;
+   clearBtn.disabled = currentCircuitIndex === 0 ? empty : currentCircuit.items.size() === 0;
+   newBtn.disabled = empty && scrollItems.length === 6;
+   saveBtn.disabled =  empty && currentCircuitIndex === 0 && scrollItems.length ===6;
+   deleteBtn.disabled = selectedItem === null;
+   iconifyBtn.disabled = empty || currentCircuitIndex > 0;
+   deiconifyBtn.disabled = selectedItem === null || !selectedItemInScroller;
+   shrinkBtn.disabled = currentCircuitIndex === 0;
+   enlargeBtn.disabled = selectedItem === null || selectedItemInScroller || !(selectedItem instanceof Circuit);
+}
+
+function getTitle(circuit) {
+   let title = titleInput.value.trim();
+   if (title !== "")
+      circuit.name = title;
+   else if (circuit.name === null) {
+      title = "Untitled " + (++untitledCt);
+      circuit.name = title;
+      titleInput.value = title;
+   }
+}
+
+function doClear() {
+   if (loading)
+      return;
+   powerOff();
+   setMessage();
+   if (selectedItem !== null) {
+      if (selectedItemInScroller)
+         selectItem(null);
+      else {
+         selectedItem.selected = false;
+         selectedItem = null;
+         resizeBox = null;
+         selectedItemInScroller = false;
+      }
+   } 
+   if (currentCircuitIndex === 0) {
+      circuitStack = [new Circuit()];
+      addUndoItem({name: "Clear",  newstack: circuitStack, circuit: currentCircuit, title: titleInput.value});
+      currentCircuit = circuitStack[0];
+      currentCircuit.reshape(5,5,canvas.width-10,canvas.height-10);
+   }
+   else {
+      addUndoItem({name: "Clear Subcircuit", items: currentCircuit.items,
+                       lines: currentCircuit.lines, title: titleInput.value});
+      for (let i = 0; i < currentCircuit.inputs.size(); i++) {
+         currentCircuit.inputs.elementAt(i).destination = new Vector();
+      }
+      for (let i = 0; i < currentCircuit.outputs.size(); i++) {
+         currentCircuit.outputs.elementAt(i).source = null;
+      }
+      currentCircuit.items = new Vector();
+      currentCircuit.lines = new Vector();
+   }
+   drawCurrentCircuit();
+   document.getElementById("powercheck").checked = false;
+   setEnabledStates();
+}
+
+function doNew() {
+   if (loading)
+      return;
+   setMessage();
+   selectItem(null);
+   powerOff();
+   let stack = circuitStack;
+   currentCircuit = new Circuit();
+   currentCircuit.reshape(5,5,canvas.width-10,canvas.height-10);
+   circuitStack = [currentCircuit];
+   currentCircuitIndex = 0;
+   drawCurrentCircuit();
+   let scrolls = scrollItems.splice(6,10000);
+   for (let i = scrolls.length-1; i >= 0; i--)
+      scroller.removeChild(scrolls[i].canvas);
+   scroller.scrollTop = 0;
+   let newtitle = "Untitled " + (++untitledCt);
+   addUndoItem({name: "New", stack: stack, scrollitems: scrolls,
+               oldtitle: titleInput.value, newstack: circuitStack, newtitle: newtitle});
+   titleInput.value = newtitle;
+   setEnabledStates();
+}
+
+
+function doDelete() {
+   if (selectedItem === null)
+      return;
+   setMessage();
+   if (selectedItemInScroller) {
+      let pos = scrollItems.indexOf(selectedItem.owner);
+      scrollItems.splice(pos,1);
+      scroller.removeChild(selectedItem.owner.canvas);
+      addUndoItem({ name: "Delete Scroll Icon", item: selectedItem.owner, position: pos });
+   }
+   else {
+      selectedItem.delete(currentCircuit);
+      addUndoItem( { name: "Delete", item: selectedItem, owner: currentCircuit } );
+   }
+   selectItem(null);
+}
+
+function doIconify() {
+   if (loading)
+      return;
+   setMessage();
+   if (currentCircuitIndex > 0 ||
+          (currentCircuit.items.size() === 0 && currentCircuit.inputs.size() === 0 && currentCircuit.outputs.size() === 0))
+      return;
+   if (selectedItem !== null && !selectedItemInScroller) {
+       selectedItem.selected = false;
+       selectedItem = null;
+       resizeBox = null;
+   }
+   let oldCircuit = currentCircuit;
+   oldCircuit.iconify(20,10,70,80);
+   getTitle(oldCircuit);
+   currentCircuit = new Circuit();
+   currentCircuit.reshape(5,5,canvas.width-10,canvas.height-10);
+   circuitStack = [currentCircuit];
+   currentCircuitIndex = 0;
+   drawCurrentCircuit();
+   titleInput.value = "Untitled " + (++untitledCt);
+   scrollItems.push(new ScrollItem(oldCircuit));
+   selectItem(oldCircuit, true);
+   addUndoItem({name: "Iconify", scrollitem: scrollItems[scrollItems.length-1], newtitle: titleInput.value, newstack: circuitStack});
+}
+function doDeiconify() {
+   if (selectedItem === null || !selectedItemInScroller)
+      return;
+   setMessage();
+   getTitle(currentCircuit);
+   let stack = circuitStack;
+   let oldCircuit = circuitStack[0];
+   let oldtitle = titleInput.value;
+   for (let i = currentCircuitIndex; i > 0; i--) {
+      let r = circuitStack[i].boundingBoxInContainer.getIntRect();
+      circuitStack[i].iconify(r.x,r.y,r.width,r.height);
+   }
+   let oldscrollitem = selectedItem.owner;
+   let pos = scrollItems.indexOf(oldscrollitem);
+   scrollItems.splice(pos,1);
+   scroller.removeChild(selectedItem.owner.canvas);
+   currentCircuit = selectedItem;
+   circuitStack = [currentCircuit];
+   currentCircuitIndex = 0;
+   currentCircuit.selected = false;
+   selectedItem = null;
+   resizeBox = null;
+   setEnabledStates();
+   selectedItemInScroller = false;
+   currentCircuit.deiconify(0,0,canvas.width,canvas.height,null);
+   titleInput.value = currentCircuit.name;
+   let newscrollitem = null;
+   if (oldCircuit.items.size() > 0 || oldCircuit.inputs.size() > 0 || oldCircuit.outputs.size() > 0) {
+      oldCircuit.iconify(20,10,70,80);
+      scrollItems.push(new ScrollItem(oldCircuit));
+      newscrollitem = scrollItems[scrollItems.length-1];
+   }
+   drawCurrentCircuit();
+   addUndoItem({name:"Deiconify", position: pos, oldstack: stack,
+                   oldscrollitem: oldscrollitem, oldtitle: oldtitle, newscrollitem: newscrollitem});
+}
+
+function doShrink() {
+   if (currentCircuitIndex === 0)
+       return;
+   setMessage();
+   getTitle(currentCircuit);  console.log(currentCircuit.name)
+   let oldCircuit = currentCircuit;
+   let r = currentCircuit.boundingBoxInContainer;
+   currentCircuit.iconify(r.x, r.y, r.width, r.height);
+   circuitStack.pop();
+   currentCircuitIndex--;
+   currentCircuit = circuitStack[circuitStack.length - 1];
+   if (selectedItem !== null && !selectedItemInScroller)
+      selectedItem.selected = false;
+   selectItem(oldCircuit);
+   titleInput.value = currentCircuit.name;
+   addUndoItem({name: "Shrink Circuit", item: oldCircuit});
+}
+function doEnlarge() {
+   if (selectedItem === null || selectedItemInScroller || !(selectedItem instanceof Circuit))
+      return;
+   setMessage();
+   getTitle(currentCircuit);
+   selectedItem.deiconify(0,0,canvas.width,canvas.height,currentCircuit);
+   circuitStack.push(selectedItem);
+   currentCircuitIndex++;
+   currentCircuit = selectedItem;
+   selectedItem.selected = false;
+   selectedItem = null;
+   resizeBox = null;
+   setEnabledStates();
+   drawCurrentCircuit();
+   titleInput.value = currentCircuit.name;
+   addUndoItem({name: "Enlarge Subcircuit", item: currentCircuit});
+}
+
+function runStep() {  
+   if (!running)
+      return;
+   if (runCountdown > 0)
+      runCountdown--;
+   if (runCountdown === 0) {
+      let changed = currentCircuit.computeTopLevel();
+      if (runSpeed === 0)
+          changed = changed || currentCircuit.computeTopLevel();
+      if (changed)
+          drawCurrentCircuit(); 
+      runCountdown = runSpeed === 0? 0 : runSpeed === 1? 3 : 30;
+   }
+   requestAnimationFrame(runStep);
+}
+function doPower() {
+   if (loading) {
+      document.getElementById("powercheck").checked = false;
+      return;
+   }
+   setMessage();
+   let newRunning = document.getElementById("powercheck").checked;
+   if (newRunning === running)
+      return;
+   running = newRunning;
+   if (running) {
+      runCountdown = 0;
+      requestAnimationFrame(runStep);
+   }
+   else {
+      currentCircuit.powerOff();
+      drawCurrentCircuit();
+   }
+}
+function powerOff() {
+   document.getElementById("powercheck").checked = false;
+   doPower();
+}
+function doSpeed() {
+   runSpeed = Number(document.getElementById("speedselect").value);
+}
+
+//------------ File handling -------------------------------
+
+function setUpFileHandling() {
+    if (window.showOpenFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.getFile) {
+        loadBtn.addEventListener("click",doLoad,false);
+    }
+    else {
+        let chooser = document.createElement("input");
+        chooser.type = "file";
+        chooser.id = "chooseloadfile";
+        chooser.style.display = "none";
+        document.getElementById("content").appendChild(chooser);
+        loadBtn.addEventListener("click",doBasicLoad,false);
+    }
+    if (window.showSaveFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.createWritable) {
+        saveBtn.addEventListener("click",doSave,false);  
+    }
+    else {
+        saveBtn.addEventListener("click",doBasicSave,false);
+    }
+    function doBasicSave() {
+        if (loading)
+           return;
+        selectItem(null);
+        getTitle(currentCircuit);
+        let content = circuitsToText(circuitStack,scrollItems);
+        let blob = new Blob([content], {type: 'text/plain'});
+        let link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = circuitStack[0].name + ".txt";
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    async function doSave() {
+        if (loading)
+           return;
+        selectItem(null);
+        getTitle(currentCircuit);
+        let content = circuitsToText(circuitStack,scrollItems);
+        let blob = new Blob([content], {type: 'text/plain'});
+        let options = { suggestedName: circuitStack[0].name + ".txt" };
+        try {
+            let fileHandle = await window.showSaveFilePicker(options);
+            let stream = await fileHandle.createWritable();
+            await stream.write(blob);
+            await stream.close();
+            setMessage("File has been saved.");
+        }
+        catch (e) {
+            if (e.name !== "AbortError") {
+                setMessage("Error while saving file: " + e);
+            }
+        }
+    }
+    function doBasicLoad() {
+        powerOff();
+        selectItem(null);
+        setMessage();
+        let chooser = document.getElementById("chooseloadfile");
+        chooser.value = "";
+        document.getElementById("chooseloadfile").addEventListener("change",handleBasicFileLoad,false);
+        chooser.click();
+    }
+    async function handleBasicFileLoad() {
+       loadBtn.disabled = true;
+       loading = true;
+       try {
+            let chooser = document.getElementById("chooseloadfile");
+            chooser.removeEventListener("change",handleBasicFileLoad,false);
+            if (chooser.files.length === 0)
+               return;
+            setMessage("Trying to load file " + chooser.files.name);
+            if ( chooser.files[0].type && ! /^text/i.test(chooser.files[0].type))
+                throw "Only text files can be loaded.";
+            let text = await chooser.files[0].text();
+            newCircuit(text);
+            setMessage("Successfully loaded file " + chooser.files[0].name);
+       }
+       catch (e) {
+           setMessage("File load failed (" + e + ")");
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+           setEnabledStates();
+       }
+    }
+    async function doLoad() {
+       powerOff();
+       selectItem(null);
+       setMessage("Load file -- select a file or cancel!");
+       loading = true;
+       loadBtn.disabled = true;
+       try {
+           let files = await window.showOpenFilePicker();
+           if (files.length === 0) {
+              setMessage("File load canceled"); // (Can this happen?)
+              return;
+           }
+           let fileData = await files[0].getFile();
+           if ( fileData.type && ! /^text/i.test(fileData.type)) 
+               throw "Only text files can be loaded.";
+           let text = await fileData.text();
+           newCircuit(text);
+           setMessage("Successfully loaded file " + fileData.name);
+       }
+       catch (e) {
+           if (e.name === "AbortError")
+              setMessage("File load canceled");
+           else
+              setMessage("File load failed. (" + e + ")");
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+           setEnabledStates();
+       }
+    }
+}
+function newCircuit(text,addundo=true) {
+     powerOff();
+     let circuits,scrolls;
+     try {
+        [circuits,scrolls] = textToCircuits(text);
+     }
+    catch (e) {
+        throw "Error in file: " + e;
+     }
+     let oldStack = circuitStack;
+     let oldTitle = titleInput.value;
+     for (let i = 0; i < circuits.length; i++)
+        circuits[i].reshape(5,5,canvas.width-10,canvas.height-10);
+     circuitStack = circuits;
+     currentCircuitIndex = circuitStack.length - 1;
+     currentCircuit = circuitStack[currentCircuitIndex];
+     titleInput.value = currentCircuit.name;
+     let removedScrolls = scrollItems.splice(6,10000);
+     for (let i = removedScrolls.length-1; i >= 0; i--)
+        scroller.removeChild(removedScrolls[i].canvas);
+     let addedScrolls = [];
+     for (let i = 0; i < scrolls.length; i++) {
+         scrolls[i].reshape(20,10,70,80);
+         let item = new ScrollItem(scrolls[i]);
+         addedScrolls.push(item);
+         scrollItems.push(item);
+     }
+     drawCurrentCircuit();
+     if (addundo) {
+         addUndoItem({name: "Load Local File", removedscrollitems: removedScrolls,
+                    newscrollitems: addedScrolls, oldstack: oldStack, newstack: circuitStack,
+                    oldtitle: oldTitle});
+     }
+}
+
+function textToCircuits(text) { // returns an array containing new circuitStack and scroll items
+                                // can throw a string that contains an error message
+   let pos = 0;
+   if (getLine() !== "This is an xLogicCircuits data file." || getLine() != "DO NOT EDIT THIS FILE!")
+      inputError("Input is not a legal xLogicCircuits file.");
+   if (getLine() !== "File format version 1.0")
+      inputError("File requires a newer version of xLogicCircuits.");
+   return [getCircuitStack(),getScrollItems()];
+   function inputError(msg = "Bad data found in file.") {
+      throw msg;
+   }
+   function getCircuitStack() {
+      let circuits = [];
+      let ct = getInt();
+      if (ct < 0)
+         inputError();
+      for (let i = 0; i < ct; i++) {
+         let ch = getNonBlank();
+         if (ch === '@') {
+            if (i === 0)
+               inputError();
+            let pos = getInt();
+            let parent = circuits[circuits.length-1];
+            if (pos < 0 || pos >= parent.items.size())
+               inputError();
+            let cir = parent.items.elementAt(pos);
+            if (! (cir instanceof Circuit) )
+               inputError();
+            cir.iconified = false;
+            cir.boundingBoxInContainer = getFloatRect();
+            cir.saveContainerWhileEnlarged = parent;
+            circuits.push(cir);
+         }
+         else if (ch === '=') {
+            if (i != 0)          // added later to prevent having more than one main circuit on the circuit stack
+               inputError();
+            let cir = getCircuit(null);
+            cir.iconified = false;
+            circuits.push(cir);
+         }
+         else
+            inputError();
+      }
+      return circuits;
+   }
+   function getScrollItems() {
+      let circuits = [];
+      let ct = getInt();
+      if (ct < 0)
+         inputError();
+      for (let i = 0; i < ct; i++)
+         circuits.push(getCircuit(null));
+      return circuits;
+   }
+   function getCircuit(parentLines) {
+      let circuit = new Circuit();
+      circuit.iconified = true;  // can be changed in getCircuitStack()
+      circuit.name = getLine();
+      circuit.boundingBox = getFloatRect();
+      circuit.savedBoundingBox = getFloatRect();
+      let itemCt = getInt();
+      let lineCt = getInt();
+      let inputCt = getInt();
+      let outputCt = getInt();
+      if (itemCt < 0 || lineCt < 0 || inputCt < 0 || outputCt < 0)
+         inputError();
+      let lines = new Array(lineCt);
+      for (let i = 0; i < lineCt; i++)
+         lines[i] = new Line(null,null);
+      circuit.inputs = new Vector();
+      for (let i = 0; i < inputCt; i++)
+         circuit.inputs.addElement(getCircuitIONub(true,lines,parentLines));
+      circuit.outputs = new Vector();
+      for (let i = 0; i < outputCt; i++)
+         circuit.outputs.addElement(getCircuitIONub(false,lines,parentLines));
+      circuit.items = new Vector();
+      for (let i = 0; i < itemCt; i++) {
+         let code = getNonBlank();
+         let item;
+         if (code == 'T')
+            item = getTack(lines);
+         else if (code == '*')
+            item = getCircuit(lines);
+         else
+            item = getGate(code,lines);
+         circuit.items.addElement(item);
+      }
+      for (let i = 0; i < lineCt; i++)
+         if (lines[i].source === null || lines[i].destination === null)
+            inputError();
+      circuit.lines = new Vector();
+      for (let i = 0; i < lineCt; i++)
+         circuit.lines.addElement(lines[i]);
+      return circuit;
+   }
+   function getTack(lines)  {
+      let tack = new Tack();
+      tack.connect_x = getInt();
+      tack.connect_y = getInt();
+      tack.boundingBox = new FloatRect(tack.connect_x - 3.5, tack.connect_y - 3.5, 7, 7);
+      tack.source = getSource(tack,lines);
+      tack.destination = getDestination(tack,lines);
+      return tack;
+   }
+   function getCircuitIONub(input, lines, parentLines)  {
+      let ch = getNonBlank();
+      if (input && ch != '<')
+         inputError();
+      else if (!input && ch != '>')
+         inputError();
+      let side = getInt();
+      if (side < 0 || side > 3)
+         inputError();
+      let position = getFloat();
+      if (position < 0 || position > 1)
+         inputError();
+      let nub = new CircuitIONub(side,position,input);
+      if (input) {
+         nub.source = getSource(nub,parentLines);
+         nub.destination = getDestination(nub,lines);
+      }
+      else {
+         nub.source = getSource(nub,lines);
+         nub.destination = getDestination(nub,parentLines);
+      }
+      return nub;
+   }
+   function getGate(typeCode, lines)  {
+      let gate = null;
+      let facing = getInt();
+      if (facing < 0 || facing > 3)
+         inputError();
+      if (typeCode === 'N')
+         gate = new Gate(Gate.NOTGATE,facing);
+      else if (typeCode === 'A')
+         gate = new Gate(Gate.ANDGATE,facing);
+      else if (typeCode === 'R')
+         gate = new Gate(Gate.ORGATE,facing);
+      else
+         inputError();
+      gate.boundingBox = getFloatRect();
+      gate.in1.source = getSource(gate.in1,lines);
+      if (typeCode != 'N')
+         gate.in2.source = getSource(gate.in2,lines);
+      gate.out.destination = getDestination(gate.out,lines);
+      return gate;
+   }
+   function getDestination(source, lines) {
+      let size = getInt();
+      if (size < 0)
+         inputError();
+      if (size > 0 && lines === null)
+         inputError();
+      let des = new Vector();
+      for (let i = 0; i < size; i++) {
+         let linePos = getInt();
+         if (linePos < 0 || linePos >= lines.length)
+            inputError();
+         des.addElement(lines[linePos]);
+         lines[linePos].source = source;
+      }
+      return des;
+   }
+   function getSource(destination, lines)  {
+      let linePos = getInt();
+      if (linePos < 0)
+         return null;
+      if (lines === null || linePos >= lines.length)
+         inputError();
+      lines[linePos].destination = destination;
+      return lines[linePos];
+   }
+   function getFloatRect() {
+      return new FloatRect(getFloat(),getFloat(),getFloat(),getFloat());
+   }
+   function getFloat() {
+      return getInt()/8192.0;
+   }
+   function getInt() {
+      let n = 0;
+      let neg = false;
+      let ch = getNonBlank();
+      if (ch === '-') {
+         neg = true;
+         ch = getChar();
+      }
+      if (ch < '0' || ch > '9')
+         inputError();
+      do {
+         n = 10*n + ch.charCodeAt(0) - 48;
+         ch = getChar();
+      } while (ch >= '0' && ch <= '9');
+      return (neg? -n : n);
+   }
+   function getChar() {
+      if (pos >= text.length)
+         inputError("Illegal data in file; unexpected end of file encountered.");
+      return text[pos++];
+   }
+   function getNonBlank() {
+      let ch;
+      do {
+         ch = getChar();
+      } while (ch === ' ' || ch === '\r' || ch === '\n' || ch === '\t');
+      return ch;
+   }
+   function getLine() {
+      let buf = "";
+      let ch;
+      do {
+         ch = getChar();
+      } while (ch === '\n' || ch === '\r');
+      do {
+         buf += ch;
+         ch = getChar();
+      } while (ch !== '\n' && ch !== '\r');
+      return buf.trim();
+   }
+}
+
+function circuitsToText(circuitStack,scrollItems) {
+   let text = ["This is an xLogicCircuits data file.","DO NOT EDIT THIS FILE!","File format version 1.0"]; // start with prolog
+   let currentLine = "";
+   putInt(circuitStack.length);
+   println();
+   for (let i = 0; i < circuitStack.length; i++) {
+      let cir = circuitStack[i];
+      if (i === 0) {
+         putString('=');
+         putCircuit(cir);
+      }
+      else {
+         putString('@');
+         putInt(cir.saveContainerWhileEnlarged.items.indexOf(cir));
+         putFloatRect(cir.boundingBoxInContainer);
+         println();
+      }
+   }
+   putInt(scrollItems.length - 6);
+   println();
+   for (let i = 6; i < scrollItems.length; i++)
+      putCircuit(scrollItems[i].item);
+   return text.join("\n");
+   function putCircuit(circuit) {
+      putString(circuit.name);
+      println();
+      let itemCt = circuit.items.size();
+      let lineCt = circuit.lines.size();
+      let inputCt = circuit.inputs.size();
+      let outputCt = circuit.outputs.size();
+      putFloatRect(circuit.boundingBox);
+      println();
+      putFloatRect(/*circuit.savedBoundingBox === null ? circuit.boundingBox :*/ circuit.savedBoundingBox);
+      println();
+      putString(itemCt + " " + lineCt + " " + inputCt + " " + outputCt);
+      println();
+      for (let i = 0; i < lineCt; i++)
+         circuit.lines.elementAt(i).pos = i;
+      for (let i = 0; i < inputCt; i++)
+         putCircuitIONub(circuit.inputs.elementAt(i));
+      for (let i = 0; i < outputCt; i++)
+         putCircuitIONub(circuit.outputs.elementAt(i));
+      for (let i = 0; i < itemCt; i++) {
+         let item = circuit.items.elementAt(i);
+         if (item instanceof Gate)
+            putGate(item);
+         else if (item instanceof Circuit) {
+            putString('*');
+            putCircuit(item);
+         }
+         else
+            putTack(item);
+      }
+   }
+   function putTack(tack) {
+      putString('T');
+      putInt(tack.connect_x);
+      putInt(tack.connect_y);
+      if (tack.source === null)
+         putInt(-1);
+      else
+         putInt(tack.source.pos);
+      putDestination(tack.destination);
+      println();
+   }
+   function putCircuitIONub(nub) {
+      if (nub.kind === IONub.OUTPUT)
+         putString('>');
+      else
+         putString('<');
+      putInt(nub.side);
+      putFloat(nub.absolutePosition);
+      if (nub.source === null)
+         putInt(-1);
+      else
+         putInt(nub.source.pos);
+      putDestination(nub.destination);
+      println();
+   }
+   function putGate(gate) {
+      if (gate.kind === Gate.NOTGATE)
+         putString('N');
+      else if (gate.kind === Gate.ORGATE)
+         putString('R');
+      else
+         putString('A');
+      putInt(gate.facing);
+      putFloatRect(gate.boundingBox);
+      if (gate.in1.source === null)
+         putInt(-1);
+      else
+         putInt(gate.in1.source.pos);
+      if (gate.kind !== Gate.NOTGATE) {
+         if (gate.in1.source === null)
+           putInt(-1);
+         else
+           putInt(gate.in2.source.pos);
+      }
+      putDestination(gate.out.destination);
+      println();
+   }
+   function putDestination(destination) {
+      putInt(destination.size());
+      for (let i = 0; i < destination.size(); i++) {
+         let line = destination.elementAt(i);
+         putInt(line.pos);
+      }         
+   }
+   function putFloatRect(r) {
+      putFloat(r.x);
+      putFloat(r.y);
+      putFloat(r.width);
+      putFloat(r.height);
+   }
+   function putFloat(x) {
+      currentLine += Math.round(x*8192) + " ";
+   }
+   function putInt(x) {
+      currentLine += Math.round(x) + " ";
+   }
+   function putString(s) {
+      currentLine += s;
+   }
+   function println() {
+      text.push(currentLine);
+      currentLine = "";
+   }
+ }
+
+
+function checkForExample() {
+   let ex = window.location.search.match("^\\?file=([a-zA-Z0-9/.%_+-]+)");
+   if (ex) {
+      loadExample(decodeURIComponent(ex[1]));
+   }
+   async function loadExample(url) {
+      let controller = new AbortController();
+      loading = true;
+      setMessage("Trying to load file of examples from '" + url + "'.  Please wait!");
+      let timedout = false;
+      setTimeout(function(){timedout = true; controller.abort();}, 5000);
+      try {
+          let response = await fetch(url, {signal: controller.signal});
+          if (!response.ok)
+             throw "HTTP error status " +  response.status;
+          let text = await response.text();
+          newCircuit(text,false);
+          setMessage("Loaded examples from '" + url + "'.");
+      }
+      catch (e) {
+          if (timedout)
+              setMessage("Failed to load examples from '" + url + "' (Request timed out)");
+          setMessage("Failed to load examples from '" + url + "' (" + 
+              (e instanceof Error? e.message : e) + ")");
+      }
+      finally {
+          loading = false;
+          setEnabledStates();
+      }
+   }
+}
+
+//------ Undo and Redo ----------------------------------------------
+
+function addUndoItem(item) {
+   if (redoStartIndex < undoItems.length)
+      undoItems.splice(redoStartIndex, UNDO_MAX);
+   if (undoItems.length > UNDO_MAX)
+      undoItems.shift();
+   undoItems.push(item);
+   redoStartIndex = undoItems.length;
+   undoBtn.innerHTML = "Undo " + item.name;
+   undoBtn.disabled = false;
+   redoBtn.innerHTML = "Redo";
+   redoBtn.disabled = true;
+}
+function doUndo() {
+   setMessage();
+   if (redoStartIndex === 0)
+      return;
+   redoStartIndex--;
+   applyUndo(undoItems[redoStartIndex]);
+   if (redoStartIndex === 0) {
+       undoBtn.disabled = true;
+       undoBtn.innerHTML = "Undo";
+   }
+   else {
+       undoBtn.innerHTML = "Undo " + undoItems[redoStartIndex-1].name;
+   }
+   redoBtn.innerHTML = "Redo " + undoItems[redoStartIndex].name;
+   redoBtn.disabled = false;
+}
+function doRedo() { 
+   setMessage();
+   if (redoStartIndex >= undoItems.length)
+      return;
+   applyRedo(undoItems[redoStartIndex]);
+   redoStartIndex++;
+   if (redoStartIndex === undoItems.length) {
+      redoBtn.disabled = true;
+      redoBtn.innerHTML = "Redo";
+   }
+   else {
+      redoBtn.innerHTML = "Redo " + undoItems[redoStartIndex].name;
+   }
+   undoBtn.innerHTML = "Undo " + undoItems[redoStartIndex-1].name;
+   undoBtn.disabled = false;
+}
+
+function applyUndo(undo) {
+   if (loading)
+      return;
+   selectItem(null);
+   switch(undo.name) {
+   case "Delete":
+      undo.item.unDelete(undo.owner);
+      selectItem(undo.item);
+      break;
+   case "Delete Scroll Icon":
+      if (undo.position === scrollItems.length)
+         scroller.appendChild(undo.item.canvas);
+      else
+         scroller.insertBefore(undo.item.canvas,scrollItems[undo.position].canvas);
+      scrollItems.splice(undo.position,0,undo.item);
+      selectItem(undo.item.item,true);
+      break;
+   case "Clear":
+      circuitStack = [undo.circuit];
+      currentCircuit = undo.circuit;
+      currentCircuitIndex = 0;
+      titleInput.value = undo.title;
+      break;
+   case "Clear Subcircuit":
+      currentCircuit.items = undo.items;
+      currentCircuit.lines = undo.lines;
+      for (let i = 0; i < currentCircuit.lines.size(); i++) {
+         let it = currentCircuit.lines.elementAt(i);
+         it.destination.source = it;
+         it.source.destination.addElement(it);
+      }
+      titleInput.value = undo.title;
+      break;
+   case "New":
+      titleInput.value = undo.oldtitle;
+      circuitStack = undo.stack;
+      currentCircuitIndex = circuitStack.length - 1;
+      currentCircuit = circuitStack[currentCircuitIndex];
+      for (let i = 0; i < undo.scrollitems.length; i++) {
+         scroller.appendChild(undo.scrollitems[i].canvas);
+         scrollItems.push(undo.scrollitems[i]);
+      }
+      break;
+   case "Resize":
+      undo.item.reshape(undo.startbox[0], undo.startbox[1], undo.startbox[2], undo.startbox[3]);
+      selectItem(undo.item);
+      break;
+   case "Add Item":
+   case "Add Wire":
+      undo.item.delete(undo.container);
+      break;
+   case "Move Item":
+      undo.item.dragTo(undo.startPosition[0],undo.startPosition[1],undo.bounds);
+      selectItem(undo.item);
+      break;
+   case "Insert Tack in Wire":
+      undo.tack.delete(undo.container);
+      undo.line.unDelete(undo.container);
+      selectItem(undo.line);
+      break;
+   case "Drop Tack":
+      undo.tack.delete(undo.container);
+      break;
+   case "Shrink Circuit":
+      undo.item.deiconify(0,0,canvas.width,canvas.height,currentCircuit);
+      circuitStack.push(undo.item);
+      currentCircuit = undo.item;
+      currentCircuitIndex = circuitStack.length-1;
+      break;
+   case "Enlarge Subcircuit":
+      let r = undo.item.boundingBoxInContainer;
+      undo.item.iconify(r.x,r.y,r.width,r.height);
+      circuitStack.pop();
+      currentCircuitIndex = circuitStack.length-1;
+      currentCircuit = circuitStack[currentCircuitIndex];
+      selectItem(undo.item);
+      break;
+   case "Iconify":
+      scrollItems.pop();
+      scroller.removeChild(undo.scrollitem.canvas);
+      circuitStack = [undo.scrollitem.item];
+      currentCircuit = undo.scrollitem.item;
+      currentCircuitIndex = 0;
+      currentCircuit.deiconify(0,0,canvas.width,canvas.height);
+      titleInput.value = currentCircuit.name;
+      break;
+   case "Deiconify":
+      if (undo.position === scrollItems.length)
+         scroller.appendChild(undo.oldscrollitem.canvas);
+      else
+         scroller.insertBefore(undo.oldscrollitem.canvas,scrollItems[undo.position].canvas);
+      scrollItems.splice(undo.position,0,undo.oldscrollitem);
+      undo.oldscrollitem.item.iconify(20,10,70,80);
+      if (undo.newscrollitem === null) {
+         circuitStack = undo.oldstack;
+         currentCircuitIndex = circuitStack.length-1;
+         currentCircuit = circuitStack[currentCircuitIndex];
+         titleInput.value = undo.oldtitle;
+      }
+      else {
+         scrollItems.pop();
+         scroller.removeChild(undo.newscrollitem.canvas);
+         circuitStack = undo.oldstack;
+         currentCircuitIndex = circuitStack.length-1;
+         currentCircuit = circuitStack[currentCircuitIndex];
+         circuitStack[0].deiconify(0,0,canvas.width,canvas.height);
+         for (let i = 1; i < circuitStack.length; i++)
+            circuitStack[i].deiconify(0,0,canvas.width,canvas.height,circuitStack[i-1]);
+         titleInput.value = currentCircuit.name;
+      }
+      selectItem(undo.oldscrollitem.item,true);
+      break;
+   case "Load Local File":
+      scrollItems.splice(6,10000);
+      for (let i = undo.newscrollitems.length-1; i >= 0; i--)
+         scroller.removeChild(undo.newscrollitems[i].canvas);
+      for (let i = 0; i < undo.removedscrollitems.length; i++) {
+         scrollItems.push(undo.removedscrollitems[i]);
+         scroller.appendChild(undo.removedscrollitems[i].canvas);
+      }
+      circuitStack = undo.oldstack;
+      currentCircuitIndex = circuitStack.length-1;
+      currentCircuit = circuitStack[currentCircuitIndex];
+      titleInput.value = undo.oldtitle;
+      break;
+   default:
+      alert("Unknown undo item: " + undo.name);
+   }
+   drawCurrentCircuit();
+   setEnabledStates();
+}
+
+function applyRedo(redo) {
+   if (loading)
+      return;
+   selectItem(null);
+   switch(redo.name) {
+   case "Delete":
+      redo.item.selected = false;
+      redo.item.delete(redo.owner);
+      break;
+   case "Delete Scroll Icon":
+      scroller.removeChild(redo.item.canvas);
+      scrollItems.splice(redo.position,1);
+      break;
+   case "Clear":
+      circuitStack = redo.newstack;
+      currentCircuit = circuitStack[0];
+      currentCircuitIndex = 0;
+      titleInput.value = redo.title;
+      break;
+   case "Clear Subcircuit":
+      for (let i = 0; i < currentCircuit.inputs.size(); i++) {
+         currentCircuit.inputs.elementAt(i).destination = new Vector();
+      }
+      for (let i = 0; i < currentCircuit.outputs.size(); i++) {
+         currentCircuit.outputs.elementAt(i).source = null;
+      }
+      currentCircuit.items = new Vector();
+      currentCircuit.lines = new Vector();
+      titleInput.value = redo.title;
+      break;
+   case "New":
+      titleInput.value = redo.newtitle;
+      circuitStack = redo.newstack;
+      currentCircuit = circuitStack[0];
+      currentCircuitIndex = 0;
+      for (let i = redo.scrollitems.length-1; i >= 0; i--)
+          scroller.removeChild(redo.scrollitems[i].canvas);
+      scrollItems.splice(6,10000);
+      scroller.scrollTop = 0;
+      break;
+   case "Resize":
+      redo.item.reshape(redo.endbox[0], redo.endbox[1], redo.endbox[2], redo.endbox[3]);
+      selectItem(redo.item);
+      break;
+   case "Add Item":
+   case "Add Wire":
+      redo.item.unDelete(redo.container);
+      selectItem(redo.item);
+      break;
+   case "Move Item":
+      redo.item.dragTo(redo.endPosition[0],redo.endPosition[1], redo.bounds);
+      selectItem(redo.item);
+      break;
+   case "Insert Tack in Wire":
+      redo.line.delete(redo.container);
+      redo.tack.unDelete(redo.container);
+      selectItem(redo.tack);
+      break;
+   case "Drop Tack":
+      redo.tack.unDelete(redo.container);
+      selectItem(redo.tack);
+      break;
+   case "Shrink Circuit":
+      let r = redo.item.boundingBoxInContainer;
+      redo.item.iconify(r.x, r.y, r.width, r.height);
+      circuitStack.pop();
+      currentCircuitIndex = circuitStack.length-1;
+      currentCircuit = circuitStack[currentCircuitIndex];
+      selectItem(redo.item);
+      titleInput.value = currentCircuit.name;
+      break;
+   case "Enlarge Subcircuit":
+      redo.item.deiconify(0,0,canvas.width,canvas.height,currentCircuit);
+      circuitStack.push(redo.item);
+      currentCircuitIndex = circuitStack.length-1;
+      currentCircuit = circuitStack[currentCircuitIndex];
+      titleInput.value = currentCircuit.name;
+      break;
+   case "Iconify":
+      scrollItems.push(redo.scrollitem);
+      scroller.appendChild(redo.scrollitem.canvas);
+      redo.scrollitem.item.iconify(20,10,70,80);
+      circuitStack = redo.newstack;
+      currentCircuitIndex = circuitStack.length-1;
+      currentCircuit = circuitStack[currentCircuitIndex];
+      selectItem(redo.scrollitem.item,true);
+      titleInput.value = redo.newtitle;
+      break;
+   case "Deiconify":
+      scrollItems.splice(redo.position,1);
+      scroller.removeChild(redo.oldscrollitem.canvas);
+      currentCircuit = redo.oldscrollitem.item;
+      circuitStack = [currentCircuit];
+      currentCircuitIndex = 0;
+      currentCircuit.deiconify(0,0,canvas.width,canvas.height);
+      titleInput.value = currentCircuit.name;
+      if (redo.newscrollitem !== null) {
+          for (let i = redo.oldstack.length-1; i > 0; i--) {
+            let r = redo.oldstack[i].boundingBoxInContainer.getIntRect();
+            redo.oldstack[i].iconify(r.x,r.y,r.width,r.height);
+          }
+          redo.oldstack[0].iconify(20,10,70,80);
+          scrollItems.push(redo.newscrollitem);
+          scroller.appendChild(redo.newscrollitem.canvas);
+      }
+      break;
+   case "Load Local File":
+      scrollItems.splice(6,10000);
+      for (let i = redo.removedscrollitems.length-1; i >= 0; i--)
+         scroller.removeChild(redo.removedscrollitems[i].canvas);
+      for (let i = 0; i < redo.newscrollitems.length; i++) {
+         scrollItems.push(redo.newscrollitems[i]);
+         scroller.appendChild(redo.newscrollitems[i].canvas);
+      }
+      circuitStack = redo.newstack;
+      currentCircuitIndex = circuitStack.length-1;
+      currentCircuit = circuitStack[currentCircuitIndex];
+      titleInput.value = currentCircuit.name;
+      break;
+   default:
+      alert("Unknown redo item: " + redo.name);
+   }
+   drawCurrentCircuit();
+   setEnabledStates();
+}
+
+//--------------------------------------------------------------
+
+function adjustToWindowSize() {
+    let canvasRect = document.getElementById("scroller").getBoundingClientRect(); 
+    OSC.style.left = (canvasRect.left+window.scrollX+2) + "px";
+    OSC.style.top = (canvasRect.top+window.scrollY+2) + "px";
+}
+
+function doSize() {
+   let size = document.getElementById("sizeselect").value.split("x");
+   let width = Number(size[0]);
+   let height = Number(size[1]);
+   let contentWidth = width + 106;
+   if (contentWidth < 756)
+      contentWidth = 756;
+   document.getElementById("content").style.width = contentWidth + "px";
+   scroller.style.height = size[1] + "px";
+   canvas.width = width;
+   canvas.height = height;
+   OSC.width = width+102;
+   OSC.height = height;
+   currentCircuit.reshape(5,5,canvas.width-10,canvas.height-10);
+   if (selectedItem != null && !selectedItemInScroller && (selectedItem instanceof Gate || selectedItem instanceof Circuit)) {
+      resizeBox = new FloatRect(selectedItem.boundingBox.x, selectedItem.boundingBox.y,
+                                selectedItem.boundingBox.width, selectedItem.boundingBox.height);
+   }
+   drawCurrentCircuit();
+}
+
+//----------------------------------------------------------------
+
+function init() {
+    try {
+        canvas = document.getElementById("circuit");
+        graphics = canvas.getContext("2d");
+        OSC = document.getElementById("overlay");
+        OSG = OSC.getContext("2d");
+        graphics.lineWidth = 2;
+        OSG.lineWidth = 2;
+        graphics.lineCap = "round";
+    } catch(e) {
+        document.getElementById("message").innerHTML = "Canvas graphics is required for this application but is not available.";
+        return;
+    }
+    adjustToWindowSize();
+    window.addEventListener("resize",adjustToWindowSize,false);
+    scroller = document.getElementById("scroller");
+    message = document.getElementById("message");
+    scrollItems = [
+        new ScrollItem( new Gate(Gate.NOTGATE, Gate.FACERIGHT), "NOT Gate", Gate.NOTGATE ),
+        new ScrollItem( new Gate(Gate.ANDGATE, Gate.FACERIGHT), "AND Gate", Gate.ANDGATE ),
+        new ScrollItem( new Gate(Gate.ORGATE, Gate.FACERIGHT), "OR Gate", Gate.ORGATE ),
+        new ScrollItem( new CircuitIONub(CircuitIONub.ONLEFT,0,true), "INPUT", 3 ),
+        new ScrollItem( new CircuitIONub(CircuitIONub.ONLEFT,0,false), "OUTPUT", 4 ),
+        new ScrollItem( new Tack(), '"TACK"', 5 )
+    ];
+    canvas.onmousedown = function(evt) { mousing = true; doMouseOnCircuit(evt); };
+    canvas.ontouchstart = function(evt) { mousing = false; doMouseOnCircuit(evt); };
+    canvas.ondblclick = doDoubleClick;
+    loadBtn = document.getElementById("loadbtn");
+    saveBtn = document.getElementById("savebtn");
+    newBtn = document.getElementById("newbtn");
+    newBtn.onclick = doNew;
+    clearBtn = document.getElementById("clearbtn");
+    clearBtn.onclick = doClear;
+    deleteBtn = document.getElementById("deletebtn");
+    deleteBtn.onclick = doDelete;
+    undoBtn = document.getElementById("undobtn");
+    undoBtn.onclick = doUndo;
+    undoBtn.disabled = true;
+    redoBtn = document.getElementById("redobtn");
+    redoBtn.onclick = doRedo;
+    redoBtn.disabled = true;
+    iconifyBtn = document.getElementById("iconifybtn");
+    iconifyBtn.onclick = doIconify;
+    deiconifyBtn = document.getElementById("deiconifybtn");
+    deiconifyBtn.onclick = doDeiconify;
+    enlargeBtn = document.getElementById("enlargebtn");
+    enlargeBtn.onclick = doEnlarge;
+    shrinkBtn = document.getElementById("shrinkbtn");
+    shrinkBtn.onclick = doShrink;
+    document.getElementById("powercheck").onchange = doPower;
+    document.getElementById("powercheck").checked = false;
+    document.getElementById("speedselect").onchange = doSpeed;
+    document.getElementById("speedselect").value = "0";
+    document.getElementById("sizeselect").onchange = doSize;
+    document.getElementById("sizeselect").value = "700x500";
+    setUpFileHandling();
+    scroller.scrollTop = 0;
+    titleInput = document.getElementById("title");
+    titleInput.value = "Untitled " + (++untitledCt);
+    currentCircuit = new Circuit();
+    currentCircuit.reshape(5,5,canvas.width-10,canvas.height-10);
+    circuitStack = [currentCircuit];
+    currentCircuitIndex = 0;
+    setEnabledStates();
+    drawCurrentCircuit();
+    checkForExample();
+}
+
+window.onload = init;
+</script>
+</head>
+<body>
+<div id="content">
+
+
+<p style="border-bottom: 1.5pt solid black; white-space:pre; margin-top:0; margin-bottom: 0"><span style="font-size:200%; font-weight:bold;margin: 5pt 0 5pt 0;">xLogicCircuits</span><span style="margin-left: 50pt"><b>Click for: <a href="info.html">information and instructions</a>.</b></span></p>
+
+
+<noscript><p>JavaScript is not available.  It is required to use this page!</p></noscript>
+
+<table border=0 cellspacing=0 cellpadding=4>
+<tr><td colspan=3><span id="message" style="font-weight:bold; color: #BB0000">&nbsp;</span></td></tr>
+<tr>
+   <td>
+     <button id="newbtn" title="Delete everything and start from scratch.">New</button>
+     <button id="loadbtn" title="Load a local file. (One some browsers, this will look like selecting a file for upload.)">Load</button>
+     <button id="savebtn" title="Save current circuit to a local file.  (On some browsers, this can look like a standard file download.)">Save</button>
+     <label style="margin-left:20px" title="Turns power on and off.  While power is on, clicking a circuit input will turn it on and off."><input type="checkbox" id="powercheck">Power</label>
+     <select id="speedselect" style="margin-left:20px" title="Controls how fast on/off values propagate through the circuit.  Only applies when power is on.">
+        <option value="0">Fast Speed</option>
+        <option value="1">Moderate Speed</option>
+        <option value="2">Slow Speed</option>
+     </select>
+   </td>
+   <td><button id="enlargebtn" style="margin-left:30px" title="If the currently selected item is a subcircuit in the current circuit, this will this will let you view and edit that subcircuit.  You can also double-click the subcircuit to enlarge it.">Enlarge</button>
+       <button id="shrinkbtn" title="If you are viewing a subcircuit that has been enlarged from the circuit that contains it, this will shrink the subcircuit back down and display its container instead.">Shrink</button> </td>
+   <td><button id="undobtn" style="margin-left:30px" title="Undo your most recent action.">Undo</button></td>
+</tr>
+<tr>
+   <td>
+     <span>Title:&nbsp;<input type="text" id="title" size="15"></span>
+     <button id="deletebtn" style="margin-left:40px" title="Delete the currenty selected item.">Delete</button>
+     <button id="clearbtn" title="Delete contents of the circuit that is currently displayed.  If the current circuit is a subcircuit, only gates, tacks, and wires are deleted, but not inputs and outputs.">Clear</button>
+   </td>
+   <td><button id="deiconifybtn" style="margin-left:30px" title="If the currently selected item is an iconified circuit that has been added to the scroller, this will show that circuit.  If the current circuit was not empty, it will be iconified and added to the scroller.  You can also deiconify by double-clicking the icon.">Deiconify</button>
+       <button id="iconifybtn" title="Make the current circuit into an icon in the scroller, which can then be added as a subcircuit to another circuit.">Iconify</button></td>
+   <td><button id="redobtn" style="margin-left:30px" title="Redo the action that was most recently undone.">Redo</button></td>
+</tr>
+</table>
+
+
+<table border=0 cellspacing=0 cellpadding=0>
+<tr valign=top>
+    <td><div id="scroller"></div></td>
+    <td><div id="canvasholder"><canvas id="circuit" width=700 height=500></canvas></div></td>
+</tr>
+</table>
+
+<p style="margin: 7px 0 0 0"><label><b>Circuit Board Size:</b>
+  <select id="sizeselect">
+      <option value="320x240">320 by 240</option>
+      <option value="400x300">400 by 300</option>
+      <option value="500x400">500 by 400</option>
+      <option value="640x480">640 by 480</option>
+      <option value="700x500">700 by 500</option>
+      <option value="800x600">800 by 600</option>
+      <option value="900x700">900 by 700</option>
+      <option value="400x400">400 by 400</option>
+      <option value="500x500">500 by 500</option>
+      <option value="600x600">600 by 600</option>
+  </select>
+</label></p>
+
+</div>
+
+<canvas id="overlay" width=802 height=500></canvas>
+
+</body>
+</html>
