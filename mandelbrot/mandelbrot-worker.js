@@ -106,17 +106,28 @@ var /* double */ log2of10 = Math.log(10)/Math.log(2);
 function createHPData() {
     chunks = xmin.length - 1;
     y = new ArrayType(chunks+1);
-    xs = new Array(columnCount);
+    xs = new Array(columnCount);  // xs contains x-values for pixels
     xs[0] = xmin; // must have xs.length = chunks+1
+/* changed method for getting xs[i], May 2023
     for (var i = 1; i < columnCount; i++) {
         xs[i] = new ArrayType(chunks+1);
     }
     if (columnCount > 1) {
-        for (var i = 1; i < columnCount; i++) {
+        for (var i = 1; i < columnCount; i++) {  // xs[i] = xs[i-1] + dx
             for (var j = 0; j <= chunks; j++) {
                 xs[i][j] = xs[i-1][j];
             }
             add(xs[i],dx,chunks+1);
+        }
+    }
+*/
+    for (var i = 1; i < columnCount; i++) {  // xs[i] = xmin + dx*i
+        xs[i] = new ArrayType(chunks+1);
+        var carry = 0;                       
+        for (j = chunks; j >= 0; j--) {
+            xs[i][j] = xmin[j] + dx[j]*i + carry;
+            carry = xs[i][j] >>> 16;
+            xs[i][j] = xs[i][j] & 0xFFFF;
         }
     }
     zx = new ArrayType(chunks);

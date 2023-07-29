@@ -25,6 +25,7 @@
         done previously by successive subtraction, which introduced errors.  Thanks to
         Robert Munafo for finding and fixing the bug.
     August, 2022.  Use localStorage to save workerCount between sessions.
+    May, 2023. Attempt to make a WebGPU worker available for high precision computations.
     May, 2023.  Corrected use of putImageData (which was bizarrely wrong in its 
         interpretation of the difference between CSS pixels and device pixels -- but
         in practice the error had no effect on any device where I used this app.
@@ -72,7 +73,7 @@
        margin-left: 20px;
        padding: 0;
    }
-   #status {
+   #status, #gpuinfo {
        white-space: nowrap;
        font-weight: bold;
        color: #AA0000;
@@ -182,6 +183,13 @@ var interlaceOrder = (function() {
 var digits, chunks;
 var /* BigDecimal */ twoTo16 = new BigDecimal("65536");
 var log2of10 = Math.log(10)/Math.log(2);
+
+var gpuWorker;          // Variables added May 2023 for WebGPU support
+var gpu_ok = false;
+var gpuJobCt;
+var cpuJobCt;
+var runningWithGPU;
+var currentGPUJob;
 
 
 function convert( /* int[] */ x, /* BigDecimal */ X, /* int */ count) {
@@ -303,7 +311,7 @@ function repaint() {
     }
 }
 
-function newWorkers(count) {
+function newWorkers(count) { // Note (May 2023): the WebGPU worker is not recreated.
     var i;
     if (workers) {
        for (i = 0; i < workers.length; i++) {
@@ -415,6 +423,18 @@ function startJob() {
             j.xmin, j.dx, j.yVal
         ]);
     }
+    if (gpu_ok && highPrecision && document.getElementById("gpuselect").checked) {  // WebGPU support Added May 2023
+        gpuWorker.postMessage(["setup",jobNum, maxIterations,highPrecision,-1]);  // gpuWorker will respond with [jobNum,"gpuready"]
+        document.getElementById("gpuinfo").innerHTML = "Using the WebGPU worker.";
+        runningWithGPU = true;
+        currentGPUJob = null;
+    }
+    else {
+       document.getElementById("gpuinfo").innerHTML = "&nbsp;";
+       runningWithGPU = false;
+    }
+    gpuJobCt = 0;
+    cpuJobCt = 0;
     running = true;
     document.getElementById("stop").disabled = false;
     var prec = highPrecision? "high precision, " + digits + " digits" : "normal precision";
@@ -428,16 +448,45 @@ function startJob() {
 
 function jobFinished(msg) {
     var job = msg.data;
+    if (job[0] === "gpufail") {  // WebGPU support added May 2023
+        document.getElementById("gpumessage").innerHTML = "WebGPU has FAILED!! (" + job[2] + ")";
+        document.getElementById("gpuinfo").innerHTML = "WebGPU use has been abandoned because of an error.";
+        document.getElementById("gpuholder").style.display = "none";
+        gpu_ok = false;
+        gpuWorker.terminate();
+        gpuWorker = null;
+        runningWithGPU = false;
+        if (currentGPUJob !== null)
+            jobs.push(currentGPUJob); // redo the failed job with a CPU worker
+        return;
+    }
     if (job[0] != jobNum)
        return;
+    if (job[1] === "gpuready") { // for WebGPU support, May 2023
+       if (jobs.length > 0) {
+           var j = jobs.pop();
+           gpuWorker.postMessage([
+                "task", j.row, j.columns,
+                j.xmin, j.dx, j.yVal
+            ]);
+           currentGPUJob = j;
+       }
+       return;
+    }
     if (jobs.length > 0) {
-       var worker = workers[job[3]];
+       var worker = (job[3] === -1)? gpuWorker : workers[job[3]];  // WebGPU support (woker number -1) added May 2023
        var j = jobs.pop();
        worker.postMessage([
             "task", j.row, j.columns,
             j.xmin, j.dx, j.yVal
         ]);
+       if (job[3] === -1)
+          currentGPUJob = j;
     }
+    if (job[3] === -1)
+       gpuJobCt++;
+    else
+       cpuJobCt++;
     timePerJob = ( (new Date().getTime()) - jobStartTime) / jobsCompleted;
     var iterationCounts = job[2];
     var row = job[1];
@@ -463,12 +512,16 @@ function jobFinished(msg) {
           if (document.getElementById("secondpass").checked) {
              startSecondPass();
           }
+          else if (runningWithGPU)  // WebGPU support added May 2023
+               document.getElementById("gpuinfo").innerHTML = "WebGPU worker did " + gpuJobCt + " rows; CPU workers did " + cpuJobCt + " rows.";
        }
     }
     else {
         if (jobsCompleted == canvas.height + 1) {
             state = IDLE;
             stopJob();
+            if (runningWithGPU)  // WebGPU support added May 2023
+               document.getElementById("gpuinfo").innerHTML = "WebGPU worker did " + gpuJobCt + " rows; CPU workers did " + cpuJobCt + " rows.";
         }
     }
 }
@@ -537,6 +590,11 @@ function startSecondPass() {
             j.xmin, j.dx, j.yVal
         ]);
     }
+    if (runningWithGPU) { // WebGPU support added May 2023
+        j.workerNum = -1;
+        gpuWorker.postMessage(["setup",jobNum, maxIterations,highPrecision,-1]); // gpuWorker will respond with [jobNum,"gpuready"]
+        currentGPUJob = null;
+    }
     running = true;
     document.getElementById("stop").disabled = false;
     var prec = highPrecision? "high precision, " + digits + " digits" : "normal precision";
@@ -595,7 +653,7 @@ function putRow(row) {
            }
        }
     }
-    OSG.putImageData(imageData,0,row); // correction applied May 2023
+    OSG.putImageData(imageData,0,row);
 }
 
 function setDefaults() {
@@ -2439,6 +2497,30 @@ function checkForExample() {
     }
 }
 
+function initGpuWorker(msg) { // responds to first message from WebGPU worker, with response "ok" or "error"; added May 2023
+   var data = msg.data;
+   if (data[0] === "ok") {
+      gpu_ok = true;
+      document.getElementById("gpuholder").style.display = "block";
+      document.getElementById("gpuselect").checked = true;
+      let msg = "WebGPU has been initialized and is available for use (in high precision computation only).";
+      if (data[1] === true)  // data[1] is adapter.isFallbackAdapter
+         msg += "<br>WARNING: Your browser is doing WebGPU with software emulation, which might have poor performance.";
+      document.getElementById("gpumessage").innerHTML = msg;   
+      gpuWorker.onmessage = jobFinished;
+      if (running && highPrecision && jobs.length > 0) {
+          gpuWorker.postMessage(["setup",jobNum, maxIterations,highPrecision,-1]);  // add gpuWorker to current job
+          document.getElementById("gpuinfo").innerHTML = "Using the WebGPU worker.";
+          runningWithGPU = true;
+      }
+   }
+   else { //  (data[0] must be "error")
+      document.getElementById("gpumessage").innerHTML = "WebGPU can't be used:  " + data[1];
+      gpuWorker.terminate();
+      gpuWorker = null;
+   }
+}
+
 function init() {
     try {
         canvas = document.getElementById("canvas");
@@ -2501,6 +2583,9 @@ function init() {
     checkForExample();
     undoList = [];
     undoCount = 0;
+    gpuWorker = new Worker("mandelbrot-worker-gpu.js"); // WebGPU support added May 2023
+    gpuWorker.onmessage = initGpuWorker;
+    gpuWorker.postMessage("init");
 }
 </script>
 </head>
@@ -2508,9 +2593,10 @@ function init() {
 
 <noscript><b>Sorry, this page requires JavaScript.</b></noscript>
 
-<h2 style="margin-top:0">Explore the Mandelbrot Set</h2>
+<h2 style="margin-top:0">Explore the Mandelbrot Set<br>Experimental Version with WebGPU Support</h2>
 <p><b>Drag on the image to draw a box, and the program will zoom in on that box.<br>
 (<a href="MB-info.html" style="font-size:120%">Click here</a> for more info, instructions, and examples.)</b></p>
+<p id="gpumessage" style="font-weight:bold; color:#990000">This is an experimental version with WebGPU support, if it is available in your browser.</p>
 <p id="message"></p>
 
 <table border=0 cellpadding=0 cellspacing=0>
@@ -2522,7 +2608,7 @@ function init() {
    <div class="group">
       <p><label title="If checked, lines in image are computed out of order.  This can give a general idea of the image more quickly."><input type="checkbox" id="interlaced">Interlaced Drawing</label></p>
       <p><label title="If checked, extra computations are done that can often give the completed image a smoother look, by computing two samples per pixel and averaging the resulting colors."><input type="checkbox" id="secondpass">Do a Second Pass</label></p>
-      <p><label title="Increasing this might speed up computation by using more of your computer's processing time.  (Values above the number of threads that your computer supports will not add additional speed.)">Workers: <select id="threadCountSelect">
+      <p><label title="Increasing this might speed up computation by using more of your computer's processing time.  (Values above the number of CPU threads that your computer supports will not add additional speed.)">CPU Workers: <select id="threadCountSelect">
           <option value="1">1</option>
           <option value="2">2</option>
           <option value="3">3</option>
@@ -2535,6 +2621,7 @@ function init() {
           <option value="12">12</option>
           <option value="16">16</option>
       </select></label></p>
+      <p id="gpuholder" style="display:none"><label title="If checked, WebGPU will be used for high precision computation, along with the CPU workers.  High precision is only used when you have zoomed in so far that ordinary numbers don't have enough precision for the calsulation."><input id="gpuselect" type=checkbox>Use WebGPU for HP</label></p>
    </div>
    <div class="group">
       <p><button id="undo">Undo</button></p>
@@ -2648,6 +2735,7 @@ function init() {
   <p><div id="canvas-holder">
      <canvas id="canvas" width="800" height="600"></canvas>
   </div></p>
+  <p id="gpuinfo">&nbsp;</p>
   </div>
 </td>
 </tr>
