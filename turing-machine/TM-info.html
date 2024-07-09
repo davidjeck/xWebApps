@@ -38,8 +38,8 @@
 
 <hr>
 
-<p><span style="font-size:167%">T</span>he program <a href="TM.html">TM.html</a> implements a simulated
-Turing Machine.  A Turing Machine is a very simple abstract model
+<p><span style="font-size:167%">T</span>he web app <a href="TM.html">TM.html</a> implements simulated
+Turing Machines.  A Turing Machine is a very simple abstract model
 of computation.  The machine has an infinite <i>tape</i> that is divided into
 <i>cells</i> (or squares).  Each cell contains a <i>symbol</i> (or character)
 chosen from some small set of possible symbols.  Most of the cells are blank, that is,
@@ -90,7 +90,7 @@ position and halt.  To run it again, first click the button that says "Reset Sta
 to return the machine to its initial state, then click "Run".  There is a "Run Speed"
 pop-up menu that allows you to change the delay between steps in the program.
 As alternative to "Run" you can click the "Step" button, which executes just
-one rule in the machines's program.  There is also a "Step Back" button that will undo
+one rule in the machine's program.  There is also a "Step Back" button that will undo
 one step in the execution; you can use it to "unwind" part of a computation so that you
 can replay it.  "Step Back" can undo up to 100 steps.</p>
 
@@ -103,7 +103,10 @@ border around the state number when it is ready for input.  Similarly, if you cl
 the cells of the tape, a cyan box will be drawn around the cell, and you can type a new symbol
 for the cell.  The cyan highlight will move one cell to the right, so you can type an entire
 string of symbols onto the tape.  (There are also an input box and a button labeled "Set
-tape contents to:" that you can use to change the contents of the tape.)</p>
+tape contents to:" that you can use to change the contents of the tape.)
+If you are using a mouse (but not a touch screen), you can also edit an existing
+rule by clicking a value in the "New State", "New Symbol", or "Move" column in
+the table of rules and then typing a new value.</p>
 
 <p>The "Rule Editor" can be used to create or modify Turing Machine programs.
 The editor has five pop-up menus that contain the data for one rule.
@@ -127,10 +130,46 @@ represented as "same" in the menu and in the table of rules.  When used for the 
 the wildcard means
 that the machine should not change the current symbol in the cell.</p>
 
-<p>(If you are using a mouse (but not a touch screen), you can also edit an existing
-rule by clicking in the "New State", "New Symbol", or "Move" column in
-the table of rules and typing a new value.  If you want to enter the wildcard
-symbol, you can enter it by typing a&nbsp;"*".)</p>
+<p>The "New Turing Machine" button lets you start creating a Turing machine from scratch.
+It will pop up a dialog where you can enter a name and description of the machine.  You
+can also specify the maximum state number that can be used in the machine and the set of
+symbols that can occur on its tape.  The only way to change all of this information after
+creating the machine is with the "Show Edit/Import/Export" button.</p>
+
+<p><b>Advice about making new Turing machines:</b> Start by clicking "New Turing Machine"
+to create a new machine with an empty table of rules.  
+Add some symbols to the tape, and set the initial position of the machine on the tape.
+If you then click "Step", no applicable rule will exist, but the Rule Editor will be
+set up to create the required rule.  Set the pop-up menus in the Rule Editor for NewSymbol, NewState, and Direction to
+the appropriate values for the machine that you want to create, and click "Create Rule".
+Clicking the "Step" button will apply that rule &mdash; and will configure the Rule Editor
+for the next step.  Continue in this way, clicking "Step" and creating rules when
+needed.  If you get confused, use the "Step&nbsp;Back" button to back up a few steps
+in the computation.  Eventually, you should have a machine that works for the input that
+you gave it.  Then try it on a variety of different inputs, to make sure that you have
+all the cases covered.  That might require creating more rules.</p>
+
+<p><b>Saving your work:</b> The "Save file" button lets you save the current Turing machine
+and its tape to a local file on your computer.  Files saved in this way can be reloaded into
+the app using the "Load file" button.  The mechanism used for working with local files will
+depend on what web browser you are using.  In many browsers, it will look like saving and
+opening files in other applications. But in some browsers,  when you save a file, it will
+look like you are downloading a file from the Internet, and loading a file can look like
+uploading a file.</p>
+
+<p>The "Show Edit/Import/Export" button lets you edit the specification of the current machine.
+It also provides an alternative way to work with local files.  The machine's specification is
+in a data format called "JSON."  Clicking the button will pop up a dialog where you can
+view and edit Turing machine specifications in JSON format.  
+To see the JSON representation for the current machine, click the
+"Grab Current Example" button in the dialog.  You can edit the description and
+click the "Apply" button to apply your changes to the current machine.
+To save the machine to a file, you can copy the machine description
+out of the dialog box and into a text editor window using copy-and-paste.
+Then, you can save the description from the text editor into a file.
+To load a saved machine description back into the program, you can open
+the file in a text editor, copy-and-paste the description into the
+Input/Export dialog box, and click the "Apply" button.</p>
 
 <hr>
 
@@ -169,7 +208,7 @@ The machine halts on the right end of the sum.</li>
 a space, with the Turing Machine positioned on the right end of the second number.
 The machine computes the product of the two numbers.  In the process, both
 numbers are erased, and the product is created to the left of the two original numbers.
-At the end, the machine is positiones on the right end of the product.</li>
+At the end, the machine is positioned on the right end of the product.</li>
 <li><b>3N+1 with Counter</b> &mdash; A "3N+1 sequence" (also called a "hailstone sequence")
 is produced by starting with
 some integer and performing the following operation over and over:  If the number is
@@ -177,12 +216,12 @@ even, divide the number by 2, and if the number is odd, multiply the number by
 3 and add&nbsp;1.  Stop if the result is equal to&nbsp;1.  For example, the 3N+1 sequence starting
 from 3 is: 3, 10, 5, 16, 8, 4, 2, 1.  This machine should be started with a tape that contains
 a zero, followed by a blank space, followed by a string of&nbsp;x's.
-The machine should be positioned on the black square between the zero and the x's.
+The machine should be positioned on the blank square between the zero and the x's.
 If the number of x's is even, the machine erases half of the x's (that is,
 it divides the number of x's by 2); if the number is odd, it adds two x's for each existing
 x plus one additional x (that is, it multiplies the number of x's by 3 and adds 1).
 Except, if there is only one x, then the machine erases the x and halts.
-After doing this, it adds 1 to the binary number that is to the left of the x's.  It then
+In cases when it does not halt, it adds 1 to the binary number that is to the left of the x's.  It then
 repeats the process, halting when the number of x's has been reduced to&nbsp;1. Thus,
 the machine computes a 3N+1 sequence, with the numbers in the sequence represented by
 the number of x's in each phase of the computation.  And it counts the number of steps
@@ -192,42 +231,6 @@ machine will halt if the number of x's is less than 2<sup>60</sup>.  (See this
 <a href="https://en.wikipedia.org/wiki/Hailstone_sequence">Wikipedia&nbsp;article</a>.)
 </li>
 </ul>
-
-<hr>
-
-<h3>Saving Your Work</h3>
-
-<p>It is possible to save all the data for a Turing Machine program and tape,
-and you can load the saved data back into the program to use the machine
-again.  Unfortunately, the method for doing that is kind of clunky...</p>
-
-<p>Click the "Show Import/Export" button.  This will pop up a dialog box that
-you can use for saving and loading Turing Machine descriptions.  A Turing Machine and tape
-are described using a very strict data-representation format known as JSON.
-To see the JSON representation for the current machine, click the
-"Grab Current Example" button.  You can then copy the machine description
-out of the dialog box and into a text editor window using copy-and-paste.
-Then, you can save the description from the text editor into a file.
-To load a saved machine description back into the program, you can open
-the file in a text editor, copy-and-paste the description into the
-Input/Export dialog box, and click the "Apply" button.</p>
-
-<p>The same JSON format is used for the sample machines in the source code
-of the web page <a href="TM.html">TM.html</a>.  See the source code
-of that page for more information about the format.</p>
-
-<p><b>Advice about making new Turing machines:</b> Start by clicking "New Turing Machine"
-and setting the contents of the tape and the initial position of the machine on the tape.
-If you then click "Step", the necessary rule won't exist, but the Rule Editor will be
-set up to create it.  Set the pop-up menus for NewSymbol, NewState, and Direction to
-the appropriate values for the machine that you want to create, and click "Create Rule".
-Clicking the "Step" button will apply that rule &mdash; and will configure the Rule Editor
-for the next step.  Continue in this way, clicking "Step" and creating rules when
-needed.  If you get confused, use the "Step&nbsp;Back" button to back up a few steps
-in the computation.  Eventually, you should have a machine that works for the input that
-you gave it.  Then try it on a variety of different inputs, to make sure that you have
-all the cases covered.</p>
-
 
 <hr>
 <div align=right><a href="http://math.hws.edu/eck/index.html"><i>David Eck</i></a></div>

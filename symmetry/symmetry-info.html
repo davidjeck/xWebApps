@@ -33,11 +33,20 @@
 <h2>Planar Symmetry Groups</h2>
 
 <p>The three web pages <a href="wallpaper.html">wallpaper.html</a>, <a href="rosette.html">rosette.html</a>,
-and <a href="frieze.html">frieze.html</a> let the user draw symmetric patterns in the plane.  
-In many browsers, you will be able to save your work by right-clicking the drawing area and choosing
-"Save Image" or "View Image" from the pop-up menu.  (The
-<a href="wallpaper.html">wallpaper</a> page is the most interesting.)  The programs
-should be easy to use, but a few instructions are given later on this page.  First, some explanation of
+and <a href="frieze.html">frieze.html</a> let the user draw symmetric patterns in the plane.  (The
+wallpaper page is the most interesting.)</p>
+
+<p>In many browsers, you will be able to save your image by right-clicking the drawing area and choosing
+"Save Image" or "View Image" from the pop-up menu.  There is a "Save" button that can
+save the data that defines the image to a local file on your computer, and there is a "Load" 
+button for reloading the file back into the app.  In most browsers, saving and loading files will use file save/open 
+dialogs similar to those used in other programs. (Some browsers still use an older kind of file handling. In those 
+browsers, saving a file will look just like downloading a file from the Internet, and loading a file will look 
+like uploading a file to the Internet.)</p>
+  
+<p>The programs should be easy to use, and you can hover your
+mouse over a button or text input to get more information about it. And you will
+find a few instructions later on this page.  First, however, some explanation of
 what is meant by symmetry.</p>
 
 <hr align=center width="33%">
@@ -76,7 +85,7 @@ no reflection symmetries.  The groups that we get when we add reflection symmetr
 <b>dihedral groups</b>.  For example, the dihedral group <b>D<sub>137</sub></b> is the symmetry group
 of a pattern that has 137 rotation symmetries and 137 reflection symmetries.</b>  The rotation
 and dihedral groups are sometimes referred to collectively as <b>rosette groups</b>.
-The web page <a href="rosette.html">rosette.html</a> lets you draw patterns with symmetry group
+The web app <a href="rosette.html">rosette.html</a> lets you draw patterns with symmetry group
 <b>R<sub>n</sub></b> or <b>D<sub>n</sub></b> for <b>n</b> up to&nbsp;20.  There is a set of
 radio buttons that allows you to select the number of rotation symmetries, and there is a
 checkbox that adds reflection symmetries.  When you draw something in the white area, all the
@@ -107,8 +116,8 @@ symmetries, so its symmetry group is <b>not</b>  a frieze group:</p>
 <p align=center><img src="not-frieze.png" width="735" height="64"></p>
 
 <p>With this restriction there are only seven different frieze groups.  They have names
-like <b>p1m1</b> and <b>pma2</b> (though sometimes they are simply called <b>F<sub>1</sub></b>
-through <b>F<sub>7</sub></b>).  In the program, there is a set of radio buttons for selecting
+like <b>p1m1</b> and <b>pma2</b> (though other names are also used).  In the program, 
+there is a set of radio buttons for selecting
 the frieze group that you want to use.</p>
 
 <p>The simplest frieze group, <b>p111</b>, has translation symmetry
@@ -141,15 +150,15 @@ a reflection symmetry.  A "g" indicates a glide reflection symmetry.</p>
 
 <p>For a wallpaper group, the pattern can be made out of translated copies of a basic area,
 whose shape can be a rectangle, a square, or a parallelogram.  There are input boxes at
-the top of the program that let you specify the shape of the basic area.  There is always
+the top of the program that affect the shape of the basic area.  There is always
 a "Translation amount" input box, which gives the horizontal size of the basic area.
 That is, it is the size of the smallest horizontal translation symmetry (in pixels).
 For the first eight groups, the size of the smallest translation in the second direction
-doesn't depend on the horizontal translation size.  For those groups, there is a
-second input box, "2nd Translation", that gives the size of the smallest translation in
-the second direction.  For the groups <b>p1</b> and <b>p2</b>, the basic area can be
-a parallelogram.  For those two groups, there is a third input box, "Angle", that
-lets you specify the angle between the two translation directions (in degrees).</p>
+can be different from the horizontal translation size.  For those groups, there is a
+second input box, "2nd Translation", that gives the vertical size of the basic area.
+For the groups <b>p1</b> and <b>p2</b>, the basic area can be
+a parallelogram.  For those two groups, there is a third input box, "Row&nbsp;Offset", that
+gives the horizontal offset of one row of copies of the basic area from the row above.</p>
 
 <p>For the last five groups, the basic area can be taken to be a parallelogram
 (actually a rhombus), and the Translation Amount specifies the length of a side of

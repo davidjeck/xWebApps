@@ -1,0 +1,12 @@
+[
+   { "name": "3.4.6.4-Tiling", "url": "KevinMitchellTilings/3.4.6.4-Tiling.txt" },
+   { "name": "3.6.6*.6-Tiling", "url": "KevinMitchellTilings/3.6.6*.6-Tiling.txt" },
+   { "name": "4.6*.4.6*.4.6*-Tiling", "url": "KevinMitchellTilings/4.6*.4.6*.4.6*-Tiling.txt" },
+   { "name": "4.8.8-Tiling", "url": "KevinMitchellTilings/4.8.8-Tiling.txt" },
+   { "name": "6.6*.6.6*-Tiling", "url": "KevinMitchellTilings/6.6*.6.6*-Tiling.txt" },
+   { "name": "9.9.6*-Tiling", "url": "KevinMitchellTilings/9.9.6*-Tiling.txt" },
+   { "name": "Bows-n-Arrows", "url": "KevinMitchellTilings/Bows-n-Arrows.txt" },
+   { "name": "Mongolian-E", "url": "KevinMitchellTilings/Mongolian-E.txt" },
+   { "name": "Pentagons", "url": "KevinMitchellTilings/Pentagons.txt" },
+   { "name": "Persian", "url": "KevinMitchellTilings/Persian.txt" }
+]

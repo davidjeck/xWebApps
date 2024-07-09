@@ -1,4 +1,4 @@
-; xModels Tutorial 6:  Polygons, Lathing and Extrusion
+; xModels Tutorial 5:  Polygons, Lathing and Extrusion
 
 ; xModels has a "polygon" for creating polygon objects.
 ; The polygon command takes a list of (x,y) points and

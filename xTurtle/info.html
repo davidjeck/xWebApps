@@ -19,23 +19,7 @@
       border-right: thin solid black;
       background-color: #F8F8F8;
    }
-   #examples td, #examples tr {
-       margin: 0;
-       padding: 0;
-   }
-   #examples {
-       padding: 0;
-       margin: 7px auto;
-       border: 2px solid darkgray;
-       border-spacing: 0;
-   }
-   #examples td {
-       border: 2px solid darkgray;
-   }
-   #examples img, #examples a {
-       display: block;
-   }
-   .cmd {
+  .cmd {
       color: #990000;
       white-space: pre;
    }
@@ -149,7 +133,16 @@ menu above the text area.</p>
 
 <p>If you want to create a new program of your own, select "[New&nbsp;Program]"
 from the pop-up menu.  The text area will be cleared, and you can enter your
-own program.</p>
+own program.  The "Save" button lets you save the program from the text area
+to a local text file on your computer. The "Load" button lets you select a
+text file on from your computer to be loaded into the text area.
+In most browsers, saving and loading files will use file save/open dialogs similar
+to those used in other programs.  (Some browsers still use an older kind of file
+handling. In those browsers, saving a file will look just like downloading a
+file from the Internet, and loading a file will
+look like uploading a file to the Internet.)  Saving and loading files is new
+in November, 2023.</p>
+
 
 <p>To run the program on the text area, just click on the
 "Run&nbsp;the&nbsp;Program" button.  If the program is written correctly, it
@@ -211,6 +204,16 @@ and other controls that appear to the left of the drawing area</p>
     a more realistic simulation of multitasking.</li>
 </ul>
 
+<hr align=center width="33%">
+
+<p>If you use xTurtle on your own web site, note that it requires the
+<a href="programs/">programs&nbsp;folder</a>, which contains the sample
+programs for the file menu.  It is possible to run the app without
+the sample programs by adding "?files=none" to the URL.  It is also
+possible to use different sample programs, as in this example:</p>
+
+<p align=center><a href="xTurtle.html?files=KevinMitchellTilings%2Fprogramlist.txt">Run xTurtle with an alternate set of sample programs.</a></p>
+
 <hr>
 
 <h3><a id="language">The xTurtle Language</a></h3>
@@ -218,7 +221,7 @@ and other controls that appear to the left of the drawing area</p>
 <p>What follows is somewhat informal, but fairly complete, specification of 
 the xTurtle programming language, as implemented in the xTurtle web&nbsp;app.
 For many purposes, you might find the turtorial examples from
-the <a href="web&nbsp;">web&nbsp;app</a>
+the <a href="xTurtle.html">web&nbsp;app</a>
 more useful.  You might want to look at those examples first, in any case.</p>
 
 <p><b>Program Structure</b></p>
@@ -230,11 +233,12 @@ They are ignored when the program is run.</p>
 <p>The layout of a program on the page is ignored.  You can have more than
 one command on a line, and you can split commands over several lines.
 You can't have spaces in the middle of words.  (The command <span class="cmd">PenUp</span>,
-for example, <strong>cannot</strong> be written as "Pen Up".)  No distinction
+for example, <strong>cannot</strong> be written as "Pen Up".)  Names
+are <strong>not</strong> case sensitive; that is, no distinction
 is made between upper and lower case letters.  (So you can write
 PenUp, penUp,
 penup, or even PeNUp,
-and they will all mean the same to the computer.</p>
+and they will all mean the same to the computer.)</p>
 
 <p>A program consists of a sequence of one or more of the following:
 statements, variable declarations, subroutine declarations,
@@ -386,7 +390,7 @@ their values.  The read-only variables are:</p>
 <ul>
 <li><span class="cmd">forkNumber</span> &mdash; used to distinguish
 among multiple turtles when doing multitasking, as described below.
-<li><span class="cmd">headin</span>g &mdash; the direction in which
+<li><span class="cmd">heading</span>g &mdash; the direction in which
 the turtle is facing, given in degrees between -180 and 180, where
 an angle of zero means that the turtle is facing to the right and
 positive angles are measured counterclockwise.

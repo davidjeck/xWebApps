@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-    Web page written by David Eck, http://math.hws.edu/eck/index.html
+    Web page written by David Eck, https://math.hws.edu/eck/index.html
     You can do anything you like with this web page and with the code, but
     if you use a substantial portion of it, you should include attribution.
 
@@ -28,6 +28,7 @@
     May, 2023.  Corrected use of putImageData (which was bizarrely wrong in its 
         interpretation of the difference between CSS pixels and device pixels -- but
         in practice the error had no effect on any device where I used this app.
+    October, 2023.  Added "Save file" and "Load file" buttons.
 -->
 <html>
 <head>
@@ -1162,11 +1163,12 @@ function addUndoItem(name, oldValue, newValue) {
     document.getElementById("redo").innerHTML = "Redo";
 }
 
-function applyUndoItem(name, value) {
+function applyUndoItem(name, value) { 
     applyUndoInProgress = true;
     switch (name) {
       case "Restore Defaults":
       case "Import Example":
+      case "Load File":  // Added October 2023
          installExampleFromXML(value,false,true);
          break;
       case "Change PaletteOffset":
@@ -2250,7 +2252,8 @@ function currentExampletoXML() {
             "</mandelbrot_settings_2>\n";
 }
 
-function installExampleFromXML(xmlString, recordUndo, respectSize, dontShowError) {
+function installExampleFromXML(xmlString, recordUndo, respectSize, dontShowError, undoText = "Import Example") {
+             // fifth parameter added October 2023 to support loading local files
     var oldXML = currentXML;
     stopJob();
     try {
@@ -2356,7 +2359,7 @@ function installExampleFromXML(xmlString, recordUndo, respectSize, dontShowError
       setLimits(xmin,xmax,ymin,ymax,false);
       startJob();
       if (recordUndo && undoList) {
-          addUndoItem("Import Example", oldXML, currentXML);
+          addUndoItem(undoText, oldXML, currentXML);
       }
       return null;
     }
@@ -2439,6 +2442,130 @@ function checkForExample() {
     }
 }
 
+function setUpFileHandling() {  // File handling for saving and loading files; added October 2023.
+   var saveBtn = document.getElementById("saveBtn");
+   var loadBtn = document.getElementById("loadBtn");
+   var loading = false;
+   if (window.showOpenFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.getFile) {
+        loadBtn.addEventListener("click",doLoad,false);
+    }
+    else {
+        let chooser = document.createElement("input");
+        chooser.type = "file";
+        chooser.id = "chooseloadfile";
+        chooser.style.display = "none";
+        document.getElementById("controls").appendChild(chooser);
+        loadBtn.addEventListener("click",doBasicLoad,false);
+        loadBtn.title += "  This will look like uploading a file, but it will only be loaded locally.";
+    }
+    if (window.showSaveFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.createWritable) {
+        saveBtn.addEventListener("click",doSave,false);  
+    }
+    else {
+        saveBtn.addEventListener("click",doBasicSave,false);
+        saveBtn.title += "  This will look like downloading a file named 'mandelbrot_params.xml'.";
+    }
+    function doBasicSave() {
+        if (loading)
+           return;
+        let content = currentExampletoXML();
+        let blob = new Blob([content], {type: 'text/xml'});
+        let link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "mandelbrot_params.xml";
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    async function doSave() {
+        if (loading)
+           return;
+        let content = currentExampletoXML();
+        let blob = new Blob([content], {type: 'text/xml'});
+        let options = { suggestedName: "mandelbrot_params.xml" };
+        try {
+            let fileHandle = await window.showSaveFilePicker(options);
+            let stream = await fileHandle.createWritable();
+            await stream.write(blob);
+            await stream.close();
+            setMessage("File has been saved.");
+        }
+        catch (e) {
+            if (e.name !== "AbortError") {
+                setMessage("Error while attempting to save file!");
+                alert("Error while saving file:\n" + e);
+            }
+        }
+    }
+    function doBasicLoad() {
+        let chooser = document.getElementById("chooseloadfile");
+        chooser.value = "";
+        document.getElementById("chooseloadfile").addEventListener("change",handleBasicFileLoad,false);
+        chooser.click();
+    }
+    async function handleBasicFileLoad() {
+       loadBtn.disabled = true;
+       loading = true;
+       try {
+            let chooser = document.getElementById("chooseloadfile");
+            chooser.removeEventListener("change",handleBasicFileLoad,false);
+            if (chooser.files.length === 0)
+               return;
+            setMessage("Trying to load file " + chooser.files.name);
+            if ( chooser.files[0].type && ! /^text/i.test(chooser.files[0].type))
+                throw "Only text files can be loaded.";
+            let text = await chooser.files[0].text();
+            newParams(text);
+            setMessage("Successfully loaded file " + chooser.files[0].name);
+       }
+       catch (e) {
+           setMessage("File load failed!");
+           alert("File load failed:\n" + e);
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    async function doLoad() {
+       setMessage("Load file -- select a file or cancel!");
+       loading = true;
+       loadBtn.disabled = true;
+       try {
+           let files = await window.showOpenFilePicker();
+           if (files.length === 0) {
+              setMessage("File load canceled"); // (Can this happen?)
+              return;
+           }
+           let fileData = await files[0].getFile();
+           if ( fileData.type && ! /^text/i.test(fileData.type)) 
+               throw "Only text files can be loaded.";
+           let text = await fileData.text();
+           newParams(text);
+           setMessage("Successfully loaded file " + fileData.name);
+       }
+       catch (e) {
+           if (e.name === "AbortError")
+              setMessage("File load canceled");
+           else {
+              setMessage("File load failed!");
+              alert("File load failed:\n" + e);
+           }
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    function newParams(text) {
+        let error = installExampleFromXML(text, true, false, true, "Load File");
+        if (error)
+           throw "File could not be loaded because it does not contain\na legal Mandebrot parameter specification.";
+    }
+    function setMessage(msg) {
+       document.getElementById("status").innerHTML = msg;
+    }
+}
+
 function init() {
     try {
         canvas = document.getElementById("canvas");
@@ -2495,6 +2622,7 @@ function init() {
     document.getElementById("undo").disabled = true;
     document.getElementById("redo").onclick = doRedo;
     document.getElementById("redo").disabled = true;
+    setUpFileHandling();
     setUpDragging();
     changeWorkerCount(); // has to be done before setDefaults
     setDefaults();
@@ -2639,6 +2767,8 @@ function init() {
       </select></p>
    </div>
    <div class="group">
+      <p><button id="saveBtn" title="Save XML code for the current image to a local file.">Save File</button>
+      <button id="loadBtn" title="Load image specification from a local XML file." style="margin-left:15px">Load file</button></p>
       <p><button id="importXML" title="Put up an input box into which you can copy-and-paste the XML code for an example, or get the XML for the current example.">Show XML Import/Export</button></p>
    </div>
 </div>

@@ -145,28 +145,34 @@ something interesting enough to make it worth the wait for a larger image.
 Note that as long as "Interlaced Drawing" is turned on, the image starts to become recognizable
 after 15 or 20% of the lines in the image have been computed.</p>
 
-<p><b>Saving your Work:</b>  Some browsers (Chrome and Firefox) make it possible to
-save the image from the program.  Just right-click the image and choose "Save Image"
-or "View Image."  ("View Image" will open the image in a new page, and you can
-save it from there.)</p>
+<p><b>Saving your Work:</b>  The "Save File" button lets you save the settings
+for the current image to a local file on your computer.  This does not save the
+image; it saves the information that is needed to re-compute the image.  The file
+that is saved can be loaded back into the program using the "Load File" button.
+In most browsers, saving and loading files will use file save/open dialogs similar
+to those used in other programs.  (Some browsers still use an older kind of file
+handling. In those browsers, saving a file will look just like downloading a
+file named "mandelbrot_params.xml" from the Internet, and loading a file will look like uploading a file to
+the Internet.)  Saving and loading files is new in October, 2023.</p>
 
-<p>It is also possible to save all the settings that produced the image,
-and you can load the saved settings back into the program to recover the
-image.  Unfortunately, the method for doing that is kind of clunky...
-Click the "Show XML Import/Export" button.  This will show a text input
-box and some buttons that you can use to view, load, and save settings.
+<p>For saving the actual image, many browsers, such as Chrome and Firefox, make
+it possible to save the image as a PNG file.  Just right-click the image and choose
+"Save Image" or "View Image."  ("View Image" will open the image in a new page, and you can
+save it from there, using the browser's Save command.)</p>
+
+<p>The "Show XML Import/Export" button makes it possible to edit the Mandelbrot
+settings by hand.  It can also be used as alternative way to save and load
+the Mandelbrot settings.  Clicking the button will show a popup dialog with a text input
+box and some buttons that you can use to view, edit, load, and save settings.
 Click the "Grab Current Example" button to get the settings for the
 current image.  They're in a format called "XML".  You don't need to
 understand the format, but you will be able to tell what most of the data means.
-You can copy-and-paste the settings from the text-input box into
-a text editor program, where you can save them in a file.</p>
-
-<p>To load some saved settings back into the program, click the
-"Show XML Import/Export" button.  Open the file where the settings
-are saved.  Copy-and-paste the settings from the file into the
-text-input box in the Mandelbrot program.  And click the "Apply"
-button to generate the image.  (Note that the settings can include an
-image size, but that size is ignored when the settings are loaded.)</p>
+You can, for example, change the range of x- and y-values shown in the image.
+To save the settings, copy-and-paste them from the text-input box into
+a text editor program; from there, you can save them to a file.  To load
+the setting from a file, open the file in a text editor,  copy-and-paste
+the settings into the text input box in the "Show XML Import/Export" popup,
+and click the "Apply" button.</p>
 
 <hr>
 

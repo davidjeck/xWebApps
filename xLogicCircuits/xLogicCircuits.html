@@ -2274,7 +2274,7 @@ function doShrink() {
    if (currentCircuitIndex === 0)
        return;
    setMessage();
-   getTitle(currentCircuit);  console.log(currentCircuit.name)
+   getTitle(currentCircuit);
    let oldCircuit = currentCircuit;
    let r = currentCircuit.boundingBoxInContainer;
    currentCircuit.iconify(r.x, r.y, r.width, r.height);
@@ -2998,6 +2998,7 @@ function applyUndo(undo) {
       circuitStack.push(undo.item);
       currentCircuit = undo.item;
       currentCircuitIndex = circuitStack.length-1;
+      titleInput.value = currentCircuit.name;
       break;
    case "Enlarge Subcircuit":
       let r = undo.item.boundingBoxInContainer;
@@ -3006,6 +3007,7 @@ function applyUndo(undo) {
       currentCircuitIndex = circuitStack.length-1;
       currentCircuit = circuitStack[currentCircuitIndex];
       selectItem(undo.item);
+      titleInput.value = currentCircuit.name;
       break;
    case "Iconify":
       scrollItems.pop();

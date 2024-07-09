@@ -18,22 +18,6 @@
       border-right: thin solid black;
       background-color: #F8F8F8;
    }
-   #examples td, #examples tr {
-       margin: 0;
-       padding: 0;
-   }
-   #examples {
-       padding: 0;
-       margin: 7px auto;
-       border: 2px solid darkgray;
-       border-spacing: 0;
-   }
-   #examples td {
-       border: 2px solid darkgray;
-   }
-   #examples img, #examples a {
-       display: block;
-   }
    .cmd {
       color: #990000;
       white-space: pre;
@@ -99,11 +83,45 @@ instructions are actually binary numbers and are not really meant to be
 read or written by humans.  Programs for the xComputer are therefore
 usually written in <span class="term">assembly language</span>.
 An assembly language program must be translated into machine language before
-it can be executed by a computer.  The <A HREF="#language">assembly&nbsp;language</A> for xComputer has
-31 different instructions, which are listed <A HREF="#instructions">below</A>.</p>
+it can be executed by a computer.  The <a href="#language">assembly&nbsp;language</a> for xComputer has
+31 different instructions, which are listed <a href="#instructions">below</A>.</p>
 
-<HR>
-<H3>The xComputer Simulator</h3>
+<hr align=center width="33%">
+
+<p>The <a href="xComputer.html">xComputer web page</a> has two main sections.  
+At the top is a text editor where an xComputer assembly language program
+can be entered.  And on the bottom is the xComputer simulator itself.</p>
+
+<p>Above the text area is a popup menu that lists some sample programs
+that are available.   Selecting an item from the popup menu will
+show the corresponding program in the text editor.  The web page attempts to load eight 
+sample programs into the popup menu.  You can learn a lot about xComputer and
+its assembly language by reading the first five or six sample programs.</p>
+
+<p>If you want to create a new program of your own, select "[New&nbsp;Program]"
+from the pop-up menu.  The text area will be cleared, and you can enter your
+your program there.  The "Save" button lets you save the program from the text area
+to a local text file on your computer. The "Load" button lets you select a
+text file on from your computer to be loaded into the text area.
+In most browsers, saving and loading files will use file save/open dialogs similar
+to those used in other programs.  (Some browsers still use an older kind of file
+handling. In those browsers, saving a file will look just like downloading a
+file from the Internet, and loading a file will
+look like uploading a file to the Internet.)  Saving and loading files is new
+in November, 2023.</p>
+
+<p>Beneath the text editor is a "Load Program into xComputer" button.  Click that
+button to load the program into the simulator.  But if
+there are syntax errors in the program, an error message will be displayed
+below the text editor instead.  In the case of an error, the input cursor
+in the text editor will be moved to the point in the program where
+the error was found.  Only the first syntax error in the program is
+found and reported.  (For undefined word errors, the error occurs
+at the end of the program, when no definition has been found for the word.)</p>
+
+
+<hr>
+<h3 id="running">The xComputer Simulator</h3>
 
 <p>The point of the simulator is to illustrate the
 step-by-step operation of a computer as it executes a program.

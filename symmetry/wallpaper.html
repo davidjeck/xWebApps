@@ -2,8 +2,28 @@
 <!--
     Web page written by David Eck, http://math.hws.edu/eck/index.html
     You can do anything you like with this web page and with the code, but
-    if you use a substantial portion of it, you should include attribution.
-    (Added freehand drawing tool, June 2017.)
+    if you use a substantial portion of it, you should include attribution
+    in the source code.
+    
+    June 2017: Added freehand drawing tool.
+    
+    November 2023: Some significant changes...
+        1) Added saving and loading local files.
+        2) For the groups p1 and p2, changed the handling of
+           fundamental regions that are non-rectangular parallelograms.
+           Previously, an Angle was specified, but that never really
+           worked correctly.  Now, a Row Offset gives the amount by which
+           one row of duplicates is horizontally offset from the previous
+           row.  Row Offset zero gives a rectangular fundamental region.
+        3) Values for translation1, translation2, and row offset can now
+           only change when "Apply" button is clicked or Enter is typed
+           in an input box (or as part of a file load).  Previously, they
+           could change whenever drawAll() was called.
+        4) The default tool when the app is opened is now the Freehand
+           tool, and the default group is p4m, so someone who just
+           starts drawing sees something more interesting.
+        5) The default 2nd Translation is now equal to Translation.
+           (Previously, the values were 100 and 150, now both are 150.)
 -->
 <html>
 <head>
@@ -13,6 +33,18 @@
 h2, h3 {
     text-align: center;
     color: white;
+    font-weight: bold;
+}
+h3 {
+    margin: 0;
+    padding: 0;
+}
+h2 {
+    margin: 0;
+    padding: 8px;
+}
+#error {
+    color: #FFBBBB;
     font-weight: bold;
 }
 a:link {
@@ -42,6 +74,9 @@ body {
 input[name="rotations"] {
     margin-left: 20px;
 }
+label {
+    white-space: pre;
+}
 </style>
 <script type="text/javascript">
 
@@ -56,12 +91,12 @@ var items = [];
 var itemCount = 0;
 var dragItem = null;
 
-var translation1, translation2, angle;
+var translation1 = 150, translation2 = 150, rowOffset = 0;
 
-var groupNum = 1;
+var groupNum = 11;
 
 var currentColor = "#000000";
-var currentTool = 0;
+var currentTool = 5;
 var currentLineWidth = 3;
 var currentLineCap = "round";
 
@@ -72,29 +107,41 @@ var FREEHAND_TOOL = 5;
 var colors = ["#000000", "#FF0000", "#00BB00", "#0000FF", "#00BBBB", "#DD00DD",
                      "#FFFF00", "#DDDDDD", "#999999", "#555555"];
 
+function checkInputs() { 
+    let newT1, newT2, newRO;
+    newT1 = Number(document.getElementById("translation1").value.trim());
+    if (isNaN(newT1) || newT1 < 30 || newT1 > 400) {
+        document.getElementById("error").innerHTML = "Translation must be a number, 30 to 400.  Change not applied!";
+        return false;
+    }
+    if (groupNum == 1 || groupNum == 5) {
+        newRO = Number(document.getElementById("offset").value.trim());
+        if (isNaN(newRO)) {
+            document.getElementById("error").innerHTML = "Row Offset must be a number.  Change not applied!";
+            return false;
+        }
+        newRO = newRO % newT1;
+        if (newRO < 0)
+           newRO += newT1;
+        if (newRO > newT1/2)
+           newRO -= newT1;
+    }
+    if (groupNum < 10) {
+        newT2 = Number(document.getElementById("translation2").value.trim());
+        if (isNaN(newT2) || newT2 < 30 || newT2 > 400) {
+            document.getElementById("error").innerHTML = "2nd Translation must be a number, 30 to 400.  Change not applied!";
+            return false;
+        }
+    }
+    translation1 = newT1;
+    translation2 = newT2;
+    rowOffset = newRO;
+    return true;
+}
+
 function drawAll() { 
     OSG.fillStyle = "#FFFFFF";
     OSG.fillRect(0,0,canvas.width,canvas.height);
-    translation1 = Number(document.getElementById("translation1").value.trim());
-    if (isNaN(translation1) || translation1 < 30 || translation1 > 400) {
-        document.getElementById("error").innerHTML = "Translation must be a number, 30 to 400.";
-        return;
-    }
-    if (groupNum == 1 || groupNum == 5) {
-        angle = Number(document.getElementById("angle").value.trim());
-        if (isNaN(angle) || angle < 10 || angle > 170) {
-            document.getElementById("error").innerHTML = "Angle must be a number, 10 to 170";
-            return;
-        }
-    }
-    if (groupNum < 10) {
-        translation2 = Number(document.getElementById("translation2").value.trim());
-        if (isNaN(translation2) || translation2 < 30 || translation2 > 400) {
-            document.getElementById("error").innerHTML = "2nd Translation must be a number, 30 to 400.";
-            return;
-        }
-    }
-    document.getElementById("error").innerHTML = "&nbsp;";
     for (var i = 0; i < itemCount; i++) {
         drawItem(OSG,items[i]);
     }
@@ -140,8 +187,8 @@ function drawItem(graphics,item) {
     var transY;
     var hOffset;
     if (groupNum == 1 || groupNum == 5) {
-        transY = translation2 * Math.sin(angle/180*Math.PI);
-        hOffset = Math.cos(angle/180*Math.PI);
+        transY = translation2;
+        hOffset = rowOffset/transY; // horizontal offset per vertical pixel
     }
     else if (groupNum < 10) {
         transY = translation2;
@@ -290,8 +337,8 @@ function drawItem(graphics,item) {
             graphics.save();
             graphics.translate(0,ty);
             var tx = startX;
-            if (Math.abs(hOffset) > 1e-6) {
-                tx -= hOffset * ty;
+            if (hOffset != 0) {
+                tx += hOffset * ty;
                 while (tx+maxX < 0)
                     tx += translation1;
                 while (tx+maxX > translation1)
@@ -389,10 +436,7 @@ function drawGrid(graphics) {
         var w = canvas.width;
         var h = canvas.height;
         if (groupNum < 10) {
-            if (angle != 90 && (groupNum == 1 || groupNum == 5)) 
-                dy = translation2 * Math.sin(angle/180*Math.PI);
-            else
-                dy = translation2;
+            dy = translation2;
         }
         else {
             dy = translation1;
@@ -403,15 +447,20 @@ function drawGrid(graphics) {
             y += dy;
         }
         var x,dx;
-        if (groupNum < 13 && (angle == 90 || groupNum != 1 && groupNum != 5)) {
+        if (groupNum < 13 && (rowOffset == 0 || groupNum != 1 && groupNum != 5)) {
             x = dx = translation1;
             while (x < w) {
                 graphics.strokeLine(x,0,x,h);
                 x += dx;
             }
         }
-        else if (groupNum < 13) {
-            var offset = -h*Math.cos(angle/180*Math.PI);
+        else if (groupNum < 13) { // and rowOffset is not 0 and groupNum is 1 or 5
+            var rows = h / translation2;
+            var offset;
+            if (rowOffset <= translation1/2)
+                offset = rows*rowOffset;
+            else
+                offset = rows*(rowOffset - translation1);
             dx = translation1;
             if (offset > 0) {
                 x = 0;
@@ -452,6 +501,17 @@ function drawGrid(graphics) {
     graphics.restore();
 }
 
+function doApply() {
+    if (checkInputs()) {
+        drawAll();
+    }
+}
+
+function checkForReturnKey(evt) {
+    if (evt.keyCode == 13)
+       doApply();
+}
+
 function undo() {
     if (clearedItems != null) {
         items = clearedItems;
@@ -468,6 +528,8 @@ function undo() {
             document.getElementById("undo").disabled = true;
         document.getElementById("redo").disabled = false;
     }
+    document.getElementById("clear").disabled = itemCount === 0;
+    document.getElementById("savebtn").disabled = itemCount === 0;
 }
 
 function redo() {
@@ -476,7 +538,8 @@ function redo() {
         drawAll();
         if (itemCount == items.length)
             document.getElementById("redo").disabled = true;
-        document.getElementById("undo").disabled = false;
+        document.getElementById("clear").disabled = false;
+        document.getElementById("savebtn").disabled = false;
     }
 }
 
@@ -494,6 +557,8 @@ function clearDrawing() {
     items = [];
     itemCount = 0;
     drawAll();
+    document.getElementById("clear").disabled = true;
+    document.getElementById("savebtn").disabled = true;
     document.getElementById("redo").disabled = true;
     document.getElementById("undo").disabled = clearedItems == null;
 }
@@ -513,7 +578,7 @@ function selectLineWidth(lineWidth) {
 }
 
 function selectTool(tool) {
-    currentTool = tool;
+    currentTool = Number(tool);
     if (currentTool == FREEHAND_TOOL || currentLineWidth >= 3) {
         currentLineCap = "round";
     }
@@ -526,15 +591,18 @@ function selectGroup(num) {
     num = Number(num);
     if (num == groupNum)
         return;
+    document.getElementById("translation1").value = "" + translation1; // (make sure inputs match current values)
     groupNum = num;
     if (num == 1 || num == 5) {
-        document.getElementById("angleholder").style.display = "inline";
+        document.getElementById("offsetholder").style.display = "inline";
+        document.getElementById("offset").value = "" + rowOffset;
     }
     else {
-        document.getElementById("angleholder").style.display = "none";
+        document.getElementById("offsetholder").style.display = "none";
     }
     if (num < 10) {
         document.getElementById("trans2holder").style.display = "inline";
+        document.getElementById("translation2").value = "" + translation2;
     }
     else {
         document.getElementById("trans2holder").style.display = "none";
@@ -543,11 +611,11 @@ function selectGroup(num) {
 }
 
 function installMouser(theCanvas) {
-    function convertX(clientX) {
-        return clientX - theCanvas.getBoundingClientRect().left;
+    function convertX(clientX) { 
+        return Math.round(clientX - theCanvas.getBoundingClientRect().left);
     }
     function convertY(clientY) {
-        return clientY - theCanvas.getBoundingClientRect().top;
+        return Math.round(clientY - theCanvas.getBoundingClientRect().top);
     }
     function doMouseDrag(evt){
         if (dragItem == null)
@@ -588,6 +656,8 @@ function installMouser(theCanvas) {
             itemCount = items.length;
             document.getElementById("undo").disabled = false;
             document.getElementById("redo").disabled = true;
+            document.getElementById("clear").disabled = false;
+            document.getElementById("savebtn").disabled = false;
             clearedItems = null;
             if (currentTool != FREEHAND_TOOL) {
                drawItemToOSC(dragItem);
@@ -603,6 +673,7 @@ function installMouser(theCanvas) {
         }
         if (dragItem != null || evt.button > 0)
            return;
+        document.getElementById("error").innerHTML = "&nbsp;";
         theCanvas.addEventListener("mousemove", doMouseDrag);
         document.addEventListener("mouseup", doMouseUp);
         dragItem = {};
@@ -622,10 +693,10 @@ function installMouser(theCanvas) {
 
 function installTouchHandler(theCanvas) {
     function convertX(clientX) {
-        return clientX - theCanvas.getBoundingClientRect().left;
+        return Math.round(clientX - theCanvas.getBoundingClientRect().left);
     }
     function convertY(clientY) {
-        return clientY - theCanvas.getBoundingClientRect().top;
+        return Math.round(clientY - theCanvas.getBoundingClientRect().top);
     }
     function doTouchMove(evt){
         if (dragItem == null)
@@ -671,6 +742,8 @@ function installTouchHandler(theCanvas) {
             itemCount = items.length;
             document.getElementById("undo").disabled = false;
             document.getElementById("redo").disabled = true;
+            document.getElementById("clear").disabled = false;
+            document.getElementById("savebtn").disabled = false;
             clearedItems = null;
             if (currentTool != FREEHAND_TOOL) {
                drawItemToOSC(dragItem);
@@ -692,6 +765,7 @@ function installTouchHandler(theCanvas) {
         if (dragItem != null) {
             doTouchEnd();
         }
+        document.getElementById("error").innerHTML = "&nbsp;";
         theCanvas.addEventListener("touchmove",doTouchMove);
         theCanvas.addEventListener("touchend",doTouchEnd);
         theCanvas.addEventListener("touchcancel",doTouchCancel);
@@ -773,6 +847,266 @@ function addExtraFunctionsToGraphics(graphics) {
 }
 
 
+function setUpFileHandling() {  // File handling for saving and loading files; added November 2023.
+   var saveBtn = document.getElementById("savebtn");
+   var loadBtn = document.getElementById("loadbtn");
+   var loading = false;
+   if (window.showOpenFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.getFile) {
+        loadBtn.addEventListener("click",doLoad,false);
+    }
+    else {
+        let chooser = document.createElement("input");
+        chooser.type = "file";
+        chooser.id = "chooseloadfile";
+        chooser.style.display = "none";
+        document.getElementById("content").appendChild(chooser);
+        loadBtn.addEventListener("click",doBasicLoad,false);
+        loadBtn.title += "  This will look like uploading a file, but it will only be loaded locally.";
+    }
+    if (window.showSaveFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.createWritable) {
+        saveBtn.addEventListener("click",doSave,false);  
+    }
+    else {
+        saveBtn.addEventListener("click",doBasicSave,false);
+        saveBtn.title += "  This will look like downloading a file named wallpaper_symmetry.json.";
+    }
+    function doBasicSave() {
+        if (loading || itemCount === 0)
+           return;
+        let content = getCurrentData();
+        if (content === null)
+            return;
+        let name = "wallpaper_symmetry.json";
+        let blob = new Blob([content], {type: 'text/json'});
+        let link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = name;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    async function doSave() {
+        if (loading || itemCount === 0)
+           return;
+        let content = getCurrentData();
+        if (content === null)
+            return;
+        let name = "wallpaper_symmetry.json";
+        let blob = new Blob([content], {type: 'text/json'});
+        let options = { suggestedName: name };
+        try {
+            let fileHandle = await window.showSaveFilePicker(options);
+            let stream = await fileHandle.createWritable();
+            await stream.write(blob);
+            await stream.close();
+            setMessage("File has been saved.");
+        }
+        catch (e) {
+            if (e.name !== "AbortError") {
+                setMessage("Error while attempting to save file:\n" + e);
+            }
+        }
+    }
+    function doBasicLoad() {
+        let chooser = document.getElementById("chooseloadfile");
+        chooser.value = "";
+        document.getElementById("chooseloadfile").addEventListener("change",handleBasicFileLoad,false);
+        chooser.click();
+    }
+    async function handleBasicFileLoad() {
+       loadBtn.disabled = true;
+       loading = true;
+       try {
+            let chooser = document.getElementById("chooseloadfile");
+            chooser.removeEventListener("change",handleBasicFileLoad,false);
+            if (chooser.files.length === 0)
+               return;
+            let text = await chooser.files[0].text();
+            newData(text);
+       }
+       catch (e) {
+           setMessage("File load failed:\n" + e);
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    async function doLoad() {
+       loading = true;
+       loadBtn.disabled = true;
+       try {
+           let files = await window.showOpenFilePicker();
+           if (files.length === 0) {
+              return;
+           }
+           let fileData = await files[0].getFile();
+           let text = await fileData.text();
+           newData(text);
+       }
+       catch (e) {
+           if (e.name !== "AbortError") {
+              setMessage("File load failed:\n" + e);
+           }
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    const intToGroup = [ null, "p1", "pg", "pm", "cm", "p2", "pgg", "pmm", "cmm", "pmg", "p4", "p4m", "p4g", "p3", "p3m1", "p31m", "p6", "p6m" ];
+    const groupToInt = { "p1": 1, "pg": 2, "pm": 3, "cm": 4, "p2": 5, "pgg": 6, "pmm": 7, "cmm": 8, "pmg": 9,
+                         "p4": 10, "p4m": 11, "p4g": 12, "p3": 13, "p3m1": 14, "p31m": 15, "p6": 16, "p6m": 17 };
+    const colorToName = { "#000000": "Black", "#FF0000": "Red", "#00BB00": "Green", "#0000FF": "Blue", "#00BBBB": "Cyan", "#DD00DD": "Magenta",
+                          "#FFFF00": "Yellow", "#DDDDDD": "Light Gray", "#999999": "Gray", "#555555": "Dark Gray" };
+    const nameToColor = { "Black": "#000000", "Red": "#FF0000", "Green": "#00BB00", "Blue": "#0000FF", "Cyan": "#00BBBB", "Magenta": "#DD00DD",
+                          "Yellow": "#FFFF00", "Light Gray": "#DDDDDD", "Gray": "#999999", "Dark Gray": "#555555" };
+    const intToTool = [ "Line", "Rectangle", "Oval", "Filled Rect", "Filled Oval", "Freehand" ];
+    const toolToInt = { "Line": 0, "Rectangle": 1, "Oval": 2, "Filled Rect": 3, "Filled Oval": 4, "Freehand": 5 };
+    function getCurrentData() {
+        let data = [];
+        data.push("{");
+        data.push('  "group": "' + intToGroup[groupNum] + '",');
+        let translate1 = Number(document.getElementById("translation1").value.trim());
+        data.push('  "translate1": ' + translation1 + ',');
+        if (groupNum < 10) {
+            data.push('  "translate2": ' + translation2 + ',');
+        }
+        if (groupNum == 1 || groupNum == 5) {
+            data.push('  "rowOffset": ' + rowOffset + ',');
+        }
+        data.push('  "items": [');
+        for (let i = 0; i < itemCount; i++ ) {
+            let item = items[i];
+            if (item.type === 3 || item.type === 4)
+                data.push(`    { "tool": "${intToTool[item.type]}", "color": "${colorToName[item.color]}",`);
+            else
+                data.push(`    { "tool": "${intToTool[item.type]}", "color": "${colorToName[item.color]}", "lineWidth": ${item.lineWidth},`);
+            if (item.type !== 5) {
+                data.push(`     "x1": ${item.x1}, "y1": ${item.y1}, "x2": ${item.x2}, "y2": ${item.y2} }` + (i === itemCount-1 ? "" : ","));
+            }
+            else {
+                data.push('      "points": [');
+                data.push("        " + item.lines[0].x1 + ", " + item.lines[0].y1 + ",");
+                for (let j = 0; j < item.lines.length; j++) {
+                    let line = item.lines[j];
+                    data.push("        " + line.x2 + ", " + line.y2 + (j === item.lines.length-1 ? "" : ","));
+                }
+                data.push('      ]');
+                data.push(i === itemCount-1 ? '    }' : '    },');
+            }
+        }
+        data.push('  ]');
+        data.push("}\n");
+        return data.join("\n");
+    }
+    function newData(text) {
+        let data;
+        try {
+            data = JSON.parse(text);
+        }
+        catch (e) {
+            console.log(e);
+            throw "File content does not have legal JSON syntax.";
+        }
+        let newGroup, newTranslate1, newTranslate2, newOffset, newItems;
+        if ( !(data.group in groupToInt) )
+            throw "File data does not specify a legal group name.";
+        newGroup = groupToInt[data.group];
+        if ( typeof data.translate1 !== "number" || data.translate1 < 30 || data.translate1 > 400 )
+            throw "File does not specify a legal translate1.";
+        newTranslate1 = data.translate1;
+        if (newGroup == 1 || newGroup == 5) {
+            if ( typeof data.rowOffset !== "number" )
+                throw "File does not specify a legal rowOffset.";
+            newOffset = data.rowOffset % newTranslate1;
+            if (newOffset < 0)
+               newOffset += newTranslate1;
+            if (newOffset > newTranslate1/2)
+                newOffset -= newTranslate1;
+        }
+        else
+            newOffset = 0;
+        if (newGroup < 10) {
+            if ( typeof data.translate2 !== "number" || data.translate2 < 30 || data.translate2 > 400)
+                throw "File does not specify a legal translate2";
+            else
+                newTranslate2 = data.translate2;
+        }
+        else
+            newTranslate2 = newTranslate1;
+        if (typeof data.items !== "object" || !data.items.length)
+            throw "File does not specify a set of items to draw.";
+        newItems = [];
+        data.items.forEach( item => {
+            let newItem = {};
+            if ( !(item.tool in toolToInt) )
+                throw "An item in the file does not specify a legal tool.";
+            newItem.type = toolToInt[item.tool];
+            if ( !(item.color in nameToColor) )
+                throw "An item in the file does not specify a legal color.";
+            newItem.color = nameToColor[item.color];
+            if (newItem.type === 3 || newItem.type === 4)
+                newItem.lineWidth = 1; // (not used for filled shapes)
+            else {
+                if ( typeof item.lineWidth !== "number" || item.lineWidth < 1 || item.lineWidth > 20)
+                    throw "An item in the file does not specify a legal lineWidth.";
+                newItem.lineWidth = item.lineWidth;
+            }
+            if (newItem.type == FREEHAND_TOOL || newItem.lineWidth >= 3) {
+                newItem.lineCap = "round";
+            }
+            else {
+                newItem.lineCap = "butt";
+            }
+            if (newItem.type !== 5) {
+                if (typeof item.x1 !== "number" || typeof item.x2 !== "number" || typeof item.y1 !== "number" || typeof item.y2 !== "number" )
+                    throw "An item in the file does not specify legal coordinates.";
+                newItem.x1 = item.x1;
+                newItem.y1 = item.y1;
+                newItem.x2 = item.x2;
+                newItem.y2 = item.y2;
+            }
+            else {
+                if (typeof item.points !== "object" || !item.points.length || item.points.length < 4)
+                    throw "A Freehand item in the file does not specify coordinates.";
+                item.points.forEach( num => {
+                    if (typeof num !== "number")
+                       throw "A Freehand item in the file has a non-numeric coordinate value.";
+                } );
+                newItem.lines = [];
+                for (let i = 0; i+3 < item.points.length-1; i += 2) {
+                    let line = { type: 0, color: newItem.color, lineWidth: newItem.lineWidth, lineCap: "round",
+                       x1: item.points[i], y1: item.points[i+1], x2: item.points[i+2], y2: item.points[i+3] };
+                    newItem.lines.push(line);
+                }
+            }
+            newItems.push(newItem);
+        });
+        groupNum = newGroup;
+        document.getElementById("g" + groupNum).checked = true;
+        translation1 = newTranslate1;
+        document.getElementById("translation1").value = "" + newTranslate1;
+        translation2 = newTranslate2;
+        document.getElementById("translation2").value = "" + newTranslate2;
+        rowOffset = newOffset;
+        document.getElementById("offset").value = "" + newOffset;
+        items = newItems;
+        itemCount = items.length;
+        document.getElementById("undo").disabled = itemCount === 0;
+        document.getElementById("clear").disabled = itemCount === 0;
+        document.getElementById("savebtn").disabled = itemCount === 0;
+        document.getElementById("redo").disabled = true;
+        document.getElementById("trans2holder").style.display = (groupNum < 10)? "inline" : "none";
+        document.getElementById("offsetholder").style.display = (groupNum === 1 || groupNum === 5)? "inline" : "none";
+        drawAll();
+    }
+    function setMessage(msg) {
+       alert(msg);
+    }
+}
+
+
+
 function init() {
 
     try {
@@ -793,18 +1127,24 @@ function init() {
         return;
     }
 
-    document.getElementById("g1").checked = true;
+    document.getElementById("g11").checked = true;
     document.getElementById("t" + currentTool).checked = true;
     document.getElementById("lw" + currentLineWidth).checked = true;
     document.getElementById("c0").checked = true;
     document.getElementById("undo").disabled = true;
     document.getElementById("redo").disabled = true;
-    document.getElementById("translation1").value = "150";
-    document.getElementById("translation2").value = "100";
-    document.getElementById("angle").value = "90";
+    document.getElementById("clear").disabled = true;
+    document.getElementById("savebtn").disabled = true;
+    document.getElementById("translation1").value = "" + translation1;
+    document.getElementById("translation2").value = "" + translation2;
+    document.getElementById("offset").value = "" + rowOffset;
     document.getElementById("showGridCB").checked = false;
+    document.getElementById("translation1").onkeydown = checkForReturnKey;
+    document.getElementById("translation2").onkeydown = checkForReturnKey;
+    document.getElementById("offset").onkeydown = checkForReturnKey;
     installMouser(canvas);
     installTouchHandler(canvas);
+    setUpFileHandling();
     drawAll();  // ??? Show Grid won't draw grid if it's the first thing done, unless this is here -- WHY ???
     graphics.font = "14pt Serif";
     graphics.fillStyle = "black";
@@ -820,6 +1160,7 @@ function init() {
 <h2 style="color:#900">Sorry, this page requires JavaScript</h2>
 </noscript>
 
+<div id=content>
 
 <h2>Wallpaper Symmetry</h2>
 
@@ -827,89 +1168,94 @@ function init() {
 <h3>(<a href="symmetry-info.html">Click here</a> for info and instructions.)</h3>
 
 
+
 <table border=0 cellpadding=5 cellspacing=5 align=center>
 <tr>
+    <td colspan=2><span id="error">&nbsp;</span></td>
+</tr>
+<tr>
 <td colspan=3 bgcolor="#DDDDDD">
-    <label for="translation1">Translation Amount:</label> <input type=text size=3 id="translation1">
-    <span id="trans2holder" style="margin-left:.5cm">
-        <label for="translation2">2nd Translation:</label> <input type=text size=3 id="translation2">
+    <label title="Horizontal translation in pixels, in the range 30 to 400.  You must click Apply or press Enter for a change to take effect.">Translation Amount: <input type=text size=3 maxlength=3 id="translation1"></label>
+    <span id="trans2holder" style="margin-left:20px; display:none">
+        <label title="Vertical translation in pixels, in the range 30 to 400.  You must click Apply or press Enter for a change to take effect.">2nd Translation: <input type=text size=3 maxlength=3 id="translation2"></label>
     </span>
-    <span id="angleholder" style="margin-left:.5cm">
-        <label for="angle">Angle:</label> <input type=text size=3 id="angle">
+    <span id="offsetholder" style="margin-left:20px; display: none">
+        <label title="Amount by which each row is offset horizontally from the previous row.  Any value is equivalent to one between plus and minus Translation/2. You must click Apply or press Enter for a change to take effect.">Row Offset: <input type=text size=3 maxlength=4 id="offset"></label>
     </span>
-    <button style="margin-left:0.2cm" onclick="drawAll()">Apply</button>
-    <span id="error" style="margin-left:.5cm; color:#900000"></span>
+    <button style="margin-left:20px" onclick="doApply()" title="Check input and if legal, apply to current image.  You can also do this by pressing Enter in an input box.">Apply</button>
 </td>
 </tr>
 <tr>
 <td valign=top bgcolor="#DDDDDD">
 <p>
-<b>Symmetry Group:</b><br><br>
-<input type="radio" name="group" value="1" id="g1" onclick="selectGroup(this.value)"> <label for="g1">p1</label><br>
-<input type="radio" name="group" value="2" id="g2" onclick="selectGroup(this.value)"> <label for="g2">pg</label><br>
-<input type="radio" name="group" value="3" id="g3" onclick="selectGroup(this.value)"> <label for="g3">pm</label><br>
-<input type="radio" name="group" value="4" id="g4" onclick="selectGroup(this.value)"> <label for="g4">cm</label><br><br>
-<input type="radio" name="group" value="5" id="g5" onclick="selectGroup(this.value)"> <label for="g5">p2</label><br>
-<input type="radio" name="group" value="6" id="g6" onclick="selectGroup(this.value)"> <label for="g6">pgg</label><br>
-<input type="radio" name="group" value="7" id="g7" onclick="selectGroup(this.value)"> <label for="g7">pmm</label><br>
-<input type="radio" name="group" value="8" id="g8" onclick="selectGroup(this.value)"> <label for="g8">cmm</label><br>
-<input type="radio" name="group" value="9" id="g9" onclick="selectGroup(this.value)"> <label for="g9">pmg</label><br><br>
-<input type="radio" name="group" value="10" id="g10" onclick="selectGroup(this.value)"> <label for="g10">p4</label><br>
-<input type="radio" name="group" value="11" id="g11" onclick="selectGroup(this.value)"> <label for="g11">p4m</label><br>
-<input type="radio" name="group" value="12" id="g12" onclick="selectGroup(this.value)"> <label for="g12">p4g</label><br><br>
-<input type="radio" name="group" value="13" id="g13" onclick="selectGroup(this.value)"> <label for="g13">p3</label><br>
-<input type="radio" name="group" value="14" id="g14" onclick="selectGroup(this.value)"> <label for="g14">p3m1</label><br>
-<input type="radio" name="group" value="15" id="g15" onclick="selectGroup(this.value)"> <label for="g15">p31m</label><br><br>
-<input type="radio" name="group" value="16" id="g16" onclick="selectGroup(this.value)"> <label for="g16">p6</label><br>
-<input type="radio" name="group" value="17" id="g17" onclick="selectGroup(this.value)"> <label for="g17">p6m</label>
+<b>Symmetry<br>Group:</b><br><br>
+<label><input type="radio" name="group" value="1" id="g1" onclick="selectGroup(this.value)"> p1</label><br>
+<label><input type="radio" name="group" value="2" id="g2" onclick="selectGroup(this.value)"> pg</label><br>
+<label><input type="radio" name="group" value="3" id="g3" onclick="selectGroup(this.value)"> pm</label><br>
+<label><input type="radio" name="group" value="4" id="g4" onclick="selectGroup(this.value)"> cm</label><br><br>
+<label><input type="radio" name="group" value="5" id="g5" onclick="selectGroup(this.value)"> p2</label><br>
+<label><input type="radio" name="group" value="6" id="g6" onclick="selectGroup(this.value)"> pgg</label><br>
+<label><input type="radio" name="group" value="7" id="g7" onclick="selectGroup(this.value)"> pmm</label><br>
+<label><input type="radio" name="group" value="8" id="g8" onclick="selectGroup(this.value)"> cmm</label><br>
+<label><input type="radio" name="group" value="9" id="g9" onclick="selectGroup(this.value)"> pmg</label><br><br>
+<label><input type="radio" name="group" value="10" id="g10" onclick="selectGroup(this.value)"> p4</label><br>
+<label><input type="radio" name="group" value="11" id="g11" onclick="selectGroup(this.value)"> p4m</label><br>
+<label><input type="radio" name="group" value="12" id="g12" onclick="selectGroup(this.value)"> p4g</label><br><br>
+<label><input type="radio" name="group" value="13" id="g13" onclick="selectGroup(this.value)"> p3</label><br>
+<label><input type="radio" name="group" value="14" id="g14" onclick="selectGroup(this.value)"> p3m1</label><br>
+<label><input type="radio" name="group" value="15" id="g15" onclick="selectGroup(this.value)"> p31m</label><br><br>
+<label><input type="radio" name="group" value="16" id="g16" onclick="selectGroup(this.value)"> p6</label><br>
+<label><input type="radio" name="group" value="17" id="g17" onclick="selectGroup(this.value)"> p6m</label>
 </p>
 </td>
 <td valign=top>
 <canvas id="canvas" width=600 height=600><p style="color:red">Sorry. This web page requires canvas graphics,<br>
 which your web browser does not support.</p></canvas>
 <p align=center id="bb">
-<button id="undo" onclick="undo()">Undo</button>
-   <button id="redo" onclick="redo()">Redo</button>
-   <button id="clear" onclick="clearDrawing()">Clear</button>
-   <input type="checkbox" onchange="draw()" id="showGridCB" style="margin-left:10px"><label for="showGridCB" style="color:white">Show&nbsp;Grid</label>
+   <button id="undo" onclick="undo()" title="Remove the most recently drawn item.  Can also undo Clear if used immediately after clearing.">Undo</button>
+   <button id="redo" onclick="redo()" title="Restore the draw item that was removed most recently by Undo.">Redo</button>
+   <button id="clear" onclick="clearDrawing()" title="Clear the current image.  This can be undone if you click 'Undo' immediately after clearing.">Clear</button>
+   <input type="checkbox" onchange="draw()" id="showGridCB" style="margin-left:30px"><label for="showGridCB" style="color:white">Show&nbsp;Grid</label>
+   <button id="savebtn" style="margin-left:30px" title="Save to local file.  This will not save the image; it saves a specification of the image that can be reloaded into this web app.">Save</button>
+   <button id="loadbtn" title="Load image specification from a local file.  File load cannot be undone.">Load</button>
 </p>
 </td>
 <td valign=top bgcolor="#DDDDDD">
 <b>Tool:</b><br>
-<input type="radio" name="tool" value="0" id="t0" onclick="selectTool(this.value)"> <label for="t0">Line</label><br>
-<input type="radio" name="tool" value="1" id="t1" onclick="selectTool(this.value)"> <label for="t1">Rectangle</label><br>
-<input type="radio" name="tool" value="2" id="t2" onclick="selectTool(this.value)"> <label for="t2">Oval</label><br>
-<input type="radio" name="tool" value="3" id="t3" onclick="selectTool(this.value)"> <label for="t3">Filled Rect</label><br>
-<input type="radio" name="tool" value="4" id="t4" onclick="selectTool(this.value)"> <label for="t4">Filled Oval</label><br>
-<input type="radio" name="tool" value="5" id="t5" onclick="selectTool(this.value)"> <label for="t5"
-       title="Note: Freehand drawing significantly increases time for Undo / Redo / Change-of-Group">Freehand</label><br>
+<label><input type="radio" name="tool" value="0" id="t0" onclick="selectTool(this.value)"> Line</label><br>
+<label><input type="radio" name="tool" value="1" id="t1" onclick="selectTool(this.value)"> Rectangle</label><br>
+<label><input type="radio" name="tool" value="2" id="t2" onclick="selectTool(this.value)"> Oval</label><br>
+<label><input type="radio" name="tool" value="3" id="t3" onclick="selectTool(this.value)"> Filled Rect</label><br>
+<label><input type="radio" name="tool" value="4" id="t4" onclick="selectTool(this.value)"> Filled Oval</label><br>
+<label title="Note: Freehand drawing can significantly increase time for Undo / Redo / Change-of-Group"><input type="radio" name="tool" value="5" id="t5" onclick="selectTool(this.value)"> Freehand</label><br>
 </p>
 <p>
 <b>Line Width:</b><br>
-<input type="radio" name="linewidth" value="1" id="lw1" onclick="selectLineWidth(this.value)"> <label for="lw1">1</label><br>
-<input type="radio" name="linewidth" value="2" id="lw2" onclick="selectLineWidth(this.value)"> <label for="lw2">2</label><br>
-<input type="radio" name="linewidth" value="3" id="lw3" onclick="selectLineWidth(this.value)"> <label for="lw3">3</label><br>
-<input type="radio" name="linewidth" value="4" id="lw4" onclick="selectLineWidth(this.value)"> <label for="lw4">4</label><br>
-<input type="radio" name="linewidth" value="5" id="lw5" onclick="selectLineWidth(this.value)"> <label for="lw5">5</label><br>
-<input type="radio" name="linewidth" value="10" id="lw10" onclick="selectLineWidth(this.value)"> <label for="lw10">10</label><br>
-<input type="radio" name="linewidth" value="20" id="lw20" onclick="selectLineWidth(this.value)"> <label for="lw20">20</label><br>
+<label><input type="radio" name="linewidth" value="1" id="lw1" onclick="selectLineWidth(this.value)"> 1</label><br>
+<label><input type="radio" name="linewidth" value="2" id="lw2" onclick="selectLineWidth(this.value)"> 2</label><br>
+<label><input type="radio" name="linewidth" value="3" id="lw3" onclick="selectLineWidth(this.value)"> 3</label><br>
+<label><input type="radio" name="linewidth" value="4" id="lw4" onclick="selectLineWidth(this.value)"> 4</label><br>
+<label><input type="radio" name="linewidth" value="5" id="lw5" onclick="selectLineWidth(this.value)"> 5</label><br>
+<label><input type="radio" name="linewidth" value="10" id="lw10" onclick="selectLineWidth(this.value)"> 10</label><br>
+<label><input type="radio" name="linewidth" value="20" id="lw20" onclick="selectLineWidth(this.value)"> 20</label><br>
 </p>
 <p>
 <b>Color:</b><br>
-<input type="radio" name="color" value="0" id="c0" onclick="selectColor(this.value)"> <label for="c0">Black</label><br>
-<input type="radio" name="color" value="1" id="c1" onclick="selectColor(this.value)"> <label for="c1">Red</label><br>
-<input type="radio" name="color" value="2" id="c2" onclick="selectColor(this.value)"> <label for="c2">Green</label><br>
-<input type="radio" name="color" value="3" id="c3" onclick="selectColor(this.value)"> <label for="c3">Blue</label><br>
-<input type="radio" name="color" value="4" id="c4" onclick="selectColor(this.value)"> <label for="c4">Cyan</label><br>
-<input type="radio" name="color" value="5" id="c5" onclick="selectColor(this.value)"> <label for="c5">Magenta</label><br>
-<input type="radio" name="color" value="6" id="c6" onclick="selectColor(this.value)"> <label for="c6">Yellow</label><br>
-<input type="radio" name="color" value="7" id="c7" onclick="selectColor(this.value)"> <label for="c7">Light Gray</label><br>
-<input type="radio" name="color" value="8" id="c8" onclick="selectColor(this.value)"> <label for="c8">Gray</label><br>
-<input type="radio" name="color" value="9" id="c9" onclick="selectColor(this.value)"> <label for="c9">Dark Gray</label><br>
+<label><input type="radio" name="color" value="0" id="c0" onclick="selectColor(this.value)"> Black</label><br>
+<label><input type="radio" name="color" value="1" id="c1" onclick="selectColor(this.value)"> Red</label><br>
+<label><input type="radio" name="color" value="2" id="c2" onclick="selectColor(this.value)"> Green</label><br>
+<label><input type="radio" name="color" value="3" id="c3" onclick="selectColor(this.value)"> Blue</label><br>
+<label><input type="radio" name="color" value="4" id="c4" onclick="selectColor(this.value)"> Cyan</label><br>
+<label><input type="radio" name="color" value="5" id="c5" onclick="selectColor(this.value)"> Magenta</label><br>
+<label><input type="radio" name="color" value="6" id="c6" onclick="selectColor(this.value)"> Yellow</label><br>
+<label><input type="radio" name="color" value="7" id="c7" onclick="selectColor(this.value)"> Light Gray</label><br>
+<label><input type="radio" name="color" value="8" id="c8" onclick="selectColor(this.value)"> Gray</label><br>
+<label><input type="radio" name="color" value="9" id="c9" onclick="selectColor(this.value)"> Dark Gray</label><br>
 </p>
 </td>
 </tr>
 </table>
 
+</div>
 </body>
 </html>

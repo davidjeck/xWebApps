@@ -12,6 +12,13 @@
     Pascal and was translated into a Java applet in about 1997.  This JavaScript
     version is a 2023 translation of the Java applet, and its heritage is
     responsible for some of the code not following the usual JavaScript conventions.
+    
+    The ability to save and load local files was added in November, 2023.  At the
+    same time, the handling of the popup menu of examples was changed to allow
+    the list of the programs to be set by a search component in the URL that is
+    used to access the web app -- see the long comment at the beginning of the
+    script, below.
+    
 -->
 <html>
 <head>
@@ -93,6 +100,33 @@
 </style>
 
 <script>
+   
+/* programsToLoad contains a list of sample programs that are available on the web site.
+ * If this web app is loaded thruogh a URL with no search component, the programs will appear in
+ * a popup menu above the textarea that serves as a program editor in the app, and the first program
+ * will be loaded into the textarea.  If the search component in the URL is "?files=none", this
+ * behavior is surpressed.  Otherwise, in a search component has the form "?files=..." then ... must 
+ * be a relative URL to a text file containing a list of files for the popup menu. The content
+ * of the file should be a JSON object with the same form as programsToLoad.  That string
+ * will replace programsToLoad and will be treated in the same way.  If the file can't be
+ * loaded, or if its content does not have the correct form, no files will appear in the menu.
+ * The value of an array of objects.  Each object has a "name" property, which will appear
+ * in the popup menu, and a "url" property, which is a relative URL to the the file.
+ */
+   
+let programsToLoad = [  
+    { "name": "Tutorial 1: Basics", "url": "sample-programs/Tutorial1_Basics.txt" },
+    { "name": "Tutorial 2: Animation", "url": "sample-programs/Tutorial2_Animation.txt" },
+    { "name": "Tutorial 3: 3D", "url": "sample-programs/Tutorial3_3D.txt" },
+    { "name": "Tutorial 4: Complex Objects", "url": "sample-programs/Tutorial4_ComplexObjects.txt" },
+    { "name": "Tutorial 5: Polygons, etc.", "url": "sample-programs/Tutorial5_PolygonsEtc.txt" },
+    { "name": "Tutorial 6: Segmented Animations", "url": "sample-programs/Tutorial6_Segments.txt" },
+    { "name": "Wheel-in-square Example", "url": "sample-programs/WheelInSquare.txt" },
+    { "name": "Lathing Example: Goblet", "url": "sample-programs/Goblet.txt" },
+    { "name": "Nested Object Example", "url": "sample-programs/NestedSquares.txt" }
+];
+
+
    
 /*-----------------Scene classes--------*/
 
@@ -1054,7 +1088,7 @@ let PredefinedSymbols = {
 class ParseError extends Error{
    constructor(message, pos) {
        super(message);
-       this.errorPosition = pos;
+       this.pos = pos;
    }
 }
    
@@ -1817,6 +1851,8 @@ function doProgramChange() {
    let currentProg = programs[programInEditor];
    currentProg.text = document.getElementById("program").value;
    let p = document.getElementById("selectprogram").value;
+   document.getElementById("programerror").innerHTML = "&nbsp;";
+   document.getElementById("status").innerHTML = "xModels Status: Idle";
    if (p == "new") {
        untitledCount++;
        let pos = programs.length;
@@ -2029,6 +2065,243 @@ function doAnimStyleSelect() {
    animationStyle = document.getElementById("animationstyle").value;
 }
 
+
+function setUpFileHandling() {  // File handling for saving and loading files; added November 2023.
+   var saveBtn = document.getElementById("saveBtn");
+   var loadBtn = document.getElementById("loadBtn");
+   var loading = false;
+   if (window.showOpenFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.getFile) {
+        loadBtn.addEventListener("click",doLoad,false);
+    }
+    else {
+        let chooser = document.createElement("input");
+        chooser.type = "file";
+        chooser.id = "chooseloadfile";
+        chooser.style.display = "none";
+        document.getElementById("controls").appendChild(chooser);
+        loadBtn.addEventListener("click",doBasicLoad,false);
+        loadBtn.title += "  This will look like uploading a file, but it will only be loaded locally.";
+    }
+    if (window.showSaveFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.createWritable) {
+        saveBtn.addEventListener("click",doSave,false);  
+    }
+    else {
+        saveBtn.addEventListener("click",doBasicSave,false);
+        saveBtn.title += "  This will look like downloading a file.";
+    }
+    function doBasicSave() {
+        if (loading)
+           return;
+        let content = document.getElementById("program").value;
+        let name = programs[programInEditor].name.replace(/&lt;/g,"<").replace(/&amp;/g,"&");
+        let blob = new Blob([content], {type: 'text/plain'});
+        let link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = name + ".txt";
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    async function doSave() {
+        if (loading)
+           return;
+        let content = document.getElementById("program").value;
+        let name = programs[programInEditor].name.replace(/&lt;/g,"<").replace(/&amp;/g,"&");
+        let blob = new Blob([content], {type: 'text/plain'});
+        let options = { suggestedName: name + ".txt" };
+        try {
+            let fileHandle = await window.showSaveFilePicker(options);
+            let stream = await fileHandle.createWritable();
+            await stream.write(blob);
+            await stream.close();
+            setMessage("File has been saved.");
+        }
+        catch (e) {
+            if (e.name !== "AbortError") {
+                setMessage("Error while attempting to save file!");
+                alert("Error while saving file:\n" + e);
+            }
+        }
+    }
+    function doBasicLoad() {
+        let chooser = document.getElementById("chooseloadfile");
+        chooser.value = "";
+        document.getElementById("chooseloadfile").addEventListener("change",handleBasicFileLoad,false);
+        chooser.click();
+    }
+    async function handleBasicFileLoad() {
+       loadBtn.disabled = true;
+       loading = true;
+       try {
+            let chooser = document.getElementById("chooseloadfile");
+            chooser.removeEventListener("change",handleBasicFileLoad,false);
+            if (chooser.files.length === 0)
+               return;
+            let name = chooser.files[0].name.replace("/&/g", "&amp;").replace("/</g", "&lt;");
+            setMessage("Trying to load file " + name);
+            if ( chooser.files[0].type && ! /^text/i.test(chooser.files[0].type))
+                throw "Only text files can be loaded.";
+            let text = await chooser.files[0].text();
+            newProgram(chooser.files[0].name,text);
+            setMessage("Successfully loaded file " + name);
+       }
+       catch (e) {
+           setMessage("File load failed!");
+           alert("File load failed:\n" + e);
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    async function doLoad() {
+       setMessage("Load file -- select a file or cancel!");
+       loading = true;
+       loadBtn.disabled = true;
+       try {
+           let files = await window.showOpenFilePicker();
+           if (files.length === 0) {
+              setMessage("File load canceled"); // (Can this happen?)
+              return;
+           }
+           let fileData = await files[0].getFile();
+           if ( fileData.type && ! /^text/i.test(fileData.type)) 
+               throw "Only text files can be loaded.";
+           let text = await fileData.text();
+           newProgram(fileData.name,text);
+           setMessage("Successfully loaded file " + fileData.name.replace("/&/g", "&amp;").replace("/</g", "&lt;"));
+       }
+       catch (e) {
+           if (e.name === "AbortError")
+              setMessage("File load canceled");
+           else {
+              setMessage("File load failed!");
+              alert("File load failed:\n" + e);
+           }
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    function newProgram(name,text) {
+        let currentProg = programs[programInEditor];
+        currentProg.text = document.getElementById("program").value;
+        document.getElementById("status").innerHTML = "xModels Status: Idle";
+        document.getElementById("programerror").innerHTML = "&nbsp;";
+        let pos = programs.length;
+        name = name.replace(/\.txt$/,"").replace("/&/g", "&amp;").replace("/</g", "&lt;");
+        let prog = { name: name, text: text,
+                    position: pos, status: "user" };
+        programs.push(prog);
+        document.getElementById("program").value = text;
+        let option = document.createElement("option");
+        option.value = "" + (pos+1);
+        option.innerHTML = prog.name;
+        document.getElementById("selectprogram").appendChild(option);
+        document.getElementById("selectprogram").value = "" + (pos+1);
+        programInEditor = pos;
+    }
+    function setMessage(msg) {
+       document.getElementById("status").innerHTML = "xModels Status: " + msg;
+    }
+}
+
+
+function setUpProgramMenu() {  // Big revisions to file menu andling, November 2023
+   var search = location.search;
+   if (search === "?files=none" || search === "?files=") {
+      programsToLoad = null;
+      createMenu();
+      return;
+   }
+   if (search === "" || search.indexOf("?files=") !== 0) {
+      createMenu();
+      return;
+   }
+   programsToLoad = "";
+   document.getElementById("programerror").innerHTML = "Trying to load list of sample scene descriptions...";
+   var fileURL = search.substring(7);
+   var ajaxTimeout;
+   var ajax = new XMLHttpRequest();
+   ajax.open("GET",fileURL);
+   ajax.overrideMimeType("text/plain");
+   ajax.addEventListener("error",function() {
+       clearTimeout(ajaxTimeout);
+       document.getElementById("status").innerHTML = "xModels Status:  Could not load sample file list.";
+       console.log("error while trying to load file list: ajax request error.");
+       document.getElementById("programerror").innerHTML = "&nbsp;";
+       createMenu();
+   });
+   ajax.addEventListener("load",function() {
+       clearTimeout(ajaxTimeout);
+       var text = ajax.responseText;
+       document.getElementById("programerror").innerHTML = "&nbsp;";
+       try {
+           programs = JSON.parse(text);
+           if (programs.length === undefined)
+              throw "error";
+           for (var i = 0; i < programs.length; i++) {
+              if (typeof programs[i] !== "object")
+                 throw "error";
+              if ( ! ( programs[i].name && programs[i].url ))
+                 throw "error";
+              if ( ! ( typeof programs[i].name === "string" && typeof programs[i].url === "string"))
+                 throw "error";
+              program.name = program.name.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+           }
+           programsToLoad = programs;
+       }
+       catch (e) {
+          console.log("error while trying to load file list: " + e);
+          document.getElementById("status").innerHTML = "xModels Status:  Syntax error in sample file list.";
+       }
+       createMenu();
+   });
+   ajaxTimeout = setTimeout(function() {
+       ajax.abort();
+       console.log("error while trying to load file list: request timed out.");
+       document.getElementById("status").innerHTML = "xModels Status:  Could not load sample file list.";
+       document.getElementById("programerror").innerHTML = "&nbsp;";
+       createMenu();
+   }, 10000);
+   try {
+      ajax.send();
+   } catch(e) {
+       clearTimeout(ajaxTimeout);
+       document.getElementById("status").innerHTML = "xModels Status:  Could not load sample file list.";
+       document.getElementById("programerror").innerHTML = "&nbsp;";
+       createMenu();
+   }
+   function createMenu() {
+      if (programsToLoad && programsToLoad.length > 0) {
+         untitledCount = 0;
+         programs = programsToLoad;
+         let options = "<option value='new'>[New Program]</option>";
+         for (let i = 0; i < programs.length; i++) {
+            options += "<option value='" + (i+1) +"'>" + programs[i].name + "</option>";
+            programs[i].position = i;
+            programs[i].status = "not started";
+         }
+         document.getElementById("selectprogram").innerHTML = options;
+         programInEditor = 0;
+         startProgramLoad(programs[0]);
+      }
+      else {
+         document.getElementById("selectprogram").innerHTML =
+                   "<option value='new'>[New Program]</option>" +
+                   "<option value='1'>User Program 1</option>";
+         untitledCount = 1;
+         programs = [
+            { name: "User Program 1", text: "", position: 0, status: "user" }
+         ];
+         programInEditor = 0;
+      }
+      document.getElementById("selectprogram").value = "1";
+      document.getElementById("selectprogram").onchange = doProgramChange;
+   }
+}
+
+
 function init() {
     try {
         canvas = document.getElementById("canvas");
@@ -2041,29 +2314,6 @@ function init() {
          return;
     }
     document.getElementById("selectprogram").onchange = doProgramChange;
-    if (programsToLoad && programsToLoad.length > 0) {
-       untitledCount = 0;
-       programs = programsToLoad;
-       let options = "<option value='new'>[New Scene Description]</option>";
-       for (let i = 0; i < programs.length; i++) {
-          options += "<option value='" + (i+1) +"'>" + programs[i].name + "</option>";
-          programs[i].position = i;
-          programs[i].status = "not started";
-       }
-       document.getElementById("selectprogram").innerHTML = options;
-       programInEditor = 0;
-       startProgramLoad(programs[0]);
-    }
-    else {
-       document.getElementById("selectprogram").innerHTML =
-                 "<option value='new'>[New Scene Description]</option>" +
-                 "<option value='1'>User Program 1</option>";
-       untitledCount = 1;
-       programs = [
-          { name: "User Program 1", text: "", position: 0, status: "user" }
-       ];
-       programInEditor = 0;
-    }
     document.getElementById("selectprogram").value = "1";
     document.getElementById("applyprog").onclick = doCompile;
     document.getElementById("reset").onclick = doClear;
@@ -2081,20 +2331,10 @@ function init() {
     document.getElementById("animationstyle").onchange = doAnimStyleSelect;
     document.getElementById("animationstyle").value = animationStyle;
     document.getElementById("errorreport").onmousedown = function() { document.getElementById("errorreport").style.display = "none"; };
+    setUpFileHandling();
+    setUpProgramMenu();
     doClear();
 }
-
-programsToLoad = [  // Programs available for loading from web site; delete to disable all loading.
-    { name: "Tutorial 1: Basics", url:"sample-programs/Tutorial1_Basics.txt" },
-    { name: "Tutorial 2: Animation", url:"sample-programs/Tutorial2_Animation.txt" },
-    { name: "Tutorial 3: 3D", url:"sample-programs/Tutorial3_3D.txt" },
-    { name: "Tutorial 4: Complex Objects", url:"sample-programs/Tutorial4_ComplexObjects.txt" },
-    { name: "Tutorial 5: Polygons, etc.", url:"sample-programs/Tutorial5_PolygonsEtc.txt" },
-    { name: "Tutorial 6: Segmented Animations", url:"sample-programs/Tutorial6_Segments.txt" },
-    { name: "Wheel-in-square Example", url:"sample-programs/WheelInSquare.txt" },
-    { name: "Lathing Example: Goblet", url:"sample-programs/Goblet.txt" },
-    { name: "Nested Object Example", url:"sample-programs/NestedSquares.txt" },
-];
 
 </script>
 
@@ -2110,19 +2350,48 @@ programsToLoad = [  // Programs available for loading from web site; delete to d
 <p style="border-bottom: 1.5pt solid black;"><span style="font-size:200%; font-weight:bold;margin: 5pt 0 5pt 0;">xModels Graphics</span>
 <span style="margin-left: 50pt"><b>Click for: <a href="info.html">information and instructions</a>.</b></span></p>
 
-<p style="margin:0 0 0 20pt; padding:0">
-    Select Program: <select id="selectprogram" title="Sets the contents of the scene description editor.  To start a new, empty scene description, select '[New Scene Description]'. To change to an existing scene description, select its name.">
-       <option value="1">User scene description 1</option>
+
+<table border=0 cellspacing=0 cellpadding=0>
+
+<tr>
+  <td>
+   <p style="margin:0 0 0 20pt; padding:0">
+    Select Program: <select id="selectprogram" title="Sets the contents of the program editor.  To start a new, empty program, select '[New Program]'. To change to an existing program, select its name.">
+       <option value="1">User Program 1</option>
     </select>
-</p>
-<p style="padding: 0; margin: 5pt 2pt 5pt 20pt">
-   <textarea spellcheck="false" placeholder="Input or paste your xModels scene description here." id="program" wrap="off" rows=20 cols=80></textarea></p>
-<p style="margin:0; padding:0"><button style="margin-left:20pt;" id="applyprog"
-    title="Compile the scene description and, if no error is found, display the scene.  If an error is found, it will be reported below.">Compile and Apply!</button>
+    </p>
+  </td>
+  <td align=right>
+    <p style="margin: 0 0 0 10pt; padding:0">
+       <button id="saveBtn" title="Save the program to a local file.">Save</button>
+       <button id="loadBtn" title="Load a program from a local file." style="margin-left:7px">Load</button>
+    </p>
+  </td>
+</tr>
+
+<tr>
+   <td colspan=2>
+     <p style="padding: 0; margin: 5pt 2pt 5pt 20pt">
+        <textarea spellcheck="false" placeholder="Input or paste your xModels program here." id="program" wrap="off" rows=20 cols=80></textarea>
+     </p>
+   </td>
+</tr>
+
+<tr>
+   <td colspan=2>
+      <p style="margin:0; padding:0"><button style="margin-left:20pt;" id="applyprog"
+         title="Compile the scene description and, if no error is found, display the scene.  If an error is found, it will be reported below.">Compile and Apply!</button></p>
+   </td>
+</tr>
+   
+</table>
+
+
 <p style="color: #AA0000; font-weight: bold" id="programerror">&nbsp;</p>
+
 <hr>
 
-  <p id="status">xModels status: Idle.</p>
+<p id="status">xModels status: Idle.</p>
 
 
 <table border=0 cellpadding=0 cellspacing=0>

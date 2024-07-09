@@ -8,6 +8,10 @@
     machines are included.  They are defined near the top of the script.
     You can modify the value of the variable exampleMachines if you want
     to provide a different set of examples.
+    
+    Support for saving and loading local files was added in October, 2023.
+    Also, the "New Turing Machine" button now pops up a dialog where the
+    user can enter some basic data for the new machine.
 -->
 <html>
 <head>
@@ -121,7 +125,7 @@
        height: 100%;
        display: none;
    }
-   #jsonimport {
+   #jsonimport, #newTM {
        position: absolute;
        left: 50px;
        top: 50px;
@@ -163,7 +167,7 @@ var exampleMachines = [
     {
        "name": "Binary Increment",
           // The name is displayed in the examples menu and in a message at the top of the page.
-          // Default value is "Untitled".
+          // Default value is "Untitled TM".
           
        "description": "The Binary Increment Turing machine will add one to a binary number and halt. " +
                       "It must be started on the right end of the number that is to be incremented.",
@@ -595,7 +599,7 @@ function Program(json_spec) {
     json_spec = json_spec || {};
     if (typeof json_spec != "object"  || json_spec.length)
         throw "Illegal program specification; must be an object";
-    this.name = json_spec.name || "Untitled";
+    this.name = json_spec.name || "Untitled TM";
     this.description = json_spec.description || "";
     this.blank = json_spec.blank || DEFAULT_BLANK;
     this.symbols = json_spec.symbols || DEFAULT_SYMBOLS;
@@ -615,7 +619,7 @@ function Program(json_spec) {
     if ( typeof this.name != "string" )
         throw "Illegal program name in program specification; must be a string.";
     if ( typeof this.description != "string" )
-        throw "Illegal program name in program specification; must be a string.";
+        throw "Illegal program description in program specification; must be a string.";
     if ( typeof this.blank != "string" || this.blank.length != 1)
         throw "Illegal blank symbol in program specification; must be a single character string.";
     if ( typeof this.wildcard != "string" || this.wildcard.length != 1)
@@ -908,8 +912,10 @@ Machine.prototype.apply = function(action) {
 };
 Machine.prototype.toJSON = function() {
     var program = this.program;
+    var description = program.description || "";
     var json = "{\n";
     json += '   "name": "' + program.name + '",\n';
+    json += '   "description": "' + description + '",\n'; 
     json += '   "max_state": ' + program.max_state + ',\n';
     if (program.blank != DEFAULT_BLANK)
         json += '   "blank": "' + program.blank + '",\n';
@@ -1300,13 +1306,6 @@ function doEditRule() {
     elem.appendChild(td);
     document.getElementById("edit-btn").innerHTML = "Change Rule";
     selectRule(oldstate,oldsymbol);
-    if (TM.program.name != "Untitled" && !TM.program.name.endsWith("(modified)")) {
-        TM.program.name += " (modified)";
-        var msg = "Machine name = &quot;" + TM.program.name + "&quot;;&nbsp; max_state = " +
-                        TM.program.max_state + ";&nbsp; symbols = &quot;" + TM.program.symbols + "&quot;";
-        message.setDefault(msg);
-        document.getElementById("description").innerHTML = "";
-    }
     message.reset();
     stepBackStack.reset();
     if (create) {
@@ -1321,11 +1320,6 @@ function doEditRule() {
     }
 }
 
-function doNew() {
-    var oldVal = TM.toJSON();
-    install(new Program());
-    addUndoItem("New Machine", oldVal, TM.toJSON());
-}
 
 function doDeleteSelectedRule() {
     if ( ! selectedRowID )
@@ -1412,7 +1406,7 @@ function installExamples() {
     for (var i = 0; i < exampleMachines.length; i++) {
         try {
             var spec = exampleMachines[i];
-            var name = spec.name || "Untitled";
+            var name = spec.name || "Untitled TM";
             if (name.length > 18)
                 name = name.substring(0,17) + "...";
             var prog = new Program(spec);  // to test for errors
@@ -1641,13 +1635,6 @@ function doKeyPress(evt) {
             document.getElementById("new-symbol").value = action.newSymbol;
             document.getElementById("move").value = action.direction;
         }
-        if (TM.program.name != "Untitled" && !TM.program.name.endsWith("(modified)")) {
-            TM.program.name += " (modified)";
-            var msg = "Machine name = &quot;" + TM.program.name + "&quot;;&nbsp; max_state = " +
-                            TM.program.max_state + ";&nbsp; symbols = &quot;" + TM.program.symbols + "&quot;";
-            message.setDefault(msg);
-            document.getElementById("description").innerHTML = "";
-        }
         addUndoItem("Edit Rule",
             { state: oldstate, symbol: oldsymbol, action: oldAction},
             { state: oldstate, symbol: oldsymbol, action: new Action(action.newSymbol,action.newState,action.direction)});
@@ -1838,6 +1825,7 @@ function applyUndoItem(name, value) {
         case "New Machine":
         case "Install Example":
         case "Import JSON":
+        case "Load File":
             install(new Program(JSON.parse(value)));
             break;
         case "Delete Rule":
@@ -1854,7 +1842,7 @@ function applyUndoItem(name, value) {
                     pos++;
                 }
                 if (pos == holder.children.length)
-                    holder.appendChild(elem);
+                    holder.appendChild(value.elem);
                 else
                     holder.insertBefore(value.elem,holder.children[pos]);
                 selectRule(value.elem.TM_state, TM.program.all_symbols.charAt(value.elem.TM_symbol));
@@ -1896,7 +1884,6 @@ function applyUndoItem(name, value) {
     }
     applyUndoInProgress = false;
 }
-    //   { what: "delete", state: state, symbol: symbol, tr: elem });
 
 
 //----------------------------
@@ -1954,6 +1941,212 @@ function doImportJSON() {
     }
 }
 
+//--------------------------------------
+
+function doNew() {
+    if (running)
+        doStop();
+    let newVal = new Program(0);
+    document.getElementById("newTMname").value = newVal.name;
+    document.getElementById("newTMdescription").value = newVal.description;
+    document.getElementById("newTMsymbols").value = newVal.symbols;
+    document.getElementById("newTMmaxstate").value = "" + newVal.max_state;
+    document.getElementById("jsonimportbg").style.display = "block";
+    document.getElementById("newTM").style.display = "block";
+    document.addEventListener("keydown", doKey, false);
+    document.getElementById("newTMcancel").onclick = dismiss;
+    document.getElementById("newTMok").onclick = apply;
+    function apply() {
+       try {
+          let name = document.getElementById("newTMname").value.trim();
+          let description = document.getElementById("newTMdescription").value.trim();
+          let maxState = Number(document.getElementById("newTMmaxstate").value.trim());
+          let symbols = document.getElementById("newTMsymbols").value.trim();
+          if (name === "")
+             throw "Name cannot be empty.";
+          if (isNaN(maxState) || maxState !== Math.round(maxState) || maxState < 1 || maxState > 99)
+             throw "Maximum State Number must be an integer between 1 and 99.";
+          if (symbols === "")
+             throw "Allowed Symbols cannot be empty.";
+          if (symbols.indexOf("#") >= 0)
+             throw "Allowed Symbols cannot contain # because # represents a blank.";
+          if (symbols.indexOf("*") >= 0)
+             throw "Allowed Symbols cannot contain * because * represents the wildcard.";
+          if (symbols.indexOf(" ") >= 0)
+             throw "Allowed Symbols cannot contain a space because a blank is represented by #.";
+          for (let i = 0; i < symbols.length - 1; i++) {
+             if ( symbols.indexOf(symbols.charAt(i), i+1) >= 0)
+                throw ("All characters in Allowed Symbols must be different.");
+          }
+          newVal.name = name;
+          newVal.description = description;
+          newVal.max_state = maxState;
+          newVal.symbols = symbols;
+          dismiss();
+       }
+       catch (e) {
+          alert("Error: " + e);
+          return;
+       }
+       let oldVal = TM.toJSON();
+       install(newVal);
+       addUndoItem("New Machine", oldVal, TM.toJSON());
+    }
+    function dismiss() {
+        document.getElementById("jsonimportbg").style.display = "none";
+        document.getElementById("newTM").style.display = "none";
+        document.removeEventListener("keydown", doKey, false);
+    }
+    function doKey(evt) {
+        var code = evt.keyCode;
+        if (code == 27) {
+            dismiss();
+        }
+    }
+}
+
+
+//------ Support for saving and loading local files, added in October 2023 ------------------
+
+function setUpFileHandling() { 
+   var saveBtn = document.getElementById("saveBtn");
+   var loadBtn = document.getElementById("loadBtn");
+   var loading = false;
+   if (window.showOpenFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.getFile) {
+        loadBtn.addEventListener("click",doLoad,false);
+    }
+    else {
+        let chooser = document.createElement("input");
+        chooser.type = "file";
+        chooser.id = "chooseloadfile";
+        chooser.style.display = "none";
+        document.getElementById("controls").appendChild(chooser);
+        loadBtn.addEventListener("click",doBasicLoad,false);
+        loadBtn.title += "  This will look like uploading a file, but it will only be loaded locally.";
+    }
+    if (window.showSaveFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.createWritable) {
+        saveBtn.addEventListener("click",doSave,false);  
+    }
+    else {
+        saveBtn.addEventListener("click",doBasicSave,false);
+        saveBtn.title += "  This will look like downloading a JSON text file.";
+    }
+    function doBasicSave() {
+        if (loading)
+           return;
+        let content = TM.toJSON();
+        let blob = new Blob([content], {type: 'text/json'});
+        let link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = TM.program.name + ".json";
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    async function doSave() {
+        if (loading)
+           return;
+        let content = TM.toJSON();
+        let blob = new Blob([content], {type: 'text/json'});
+        let options = { suggestedName: TM.program.name + ".json" };
+        try {
+            let fileHandle = await window.showSaveFilePicker(options);
+            let stream = await fileHandle.createWritable();
+            await stream.write(blob);
+            await stream.close();
+        }
+        catch (e) {
+            if (e.name !== "AbortError") {
+                setMessage("Error while attempting to save file!");
+                alert("Error while attempting to save the file:\n" + e);
+            }
+        }
+    }
+    function doBasicLoad() {
+        let chooser = document.getElementById("chooseloadfile");
+        chooser.value = "";
+        document.getElementById("chooseloadfile").addEventListener("change",handleBasicFileLoad,false);
+        chooser.click();
+    }
+    async function handleBasicFileLoad() {
+       loadBtn.disabled = true;
+       loading = true;
+       try {
+            let chooser = document.getElementById("chooseloadfile");
+            chooser.removeEventListener("change",handleBasicFileLoad,false);
+            if (chooser.files.length === 0)
+               return;
+            setMessage("Trying to load file " + chooser.files.name);
+            let text = await chooser.files[0].text();
+            if (newTM(text)) {
+               setMessage("Successfully loaded file " + chooser.files[0].name);
+            }
+       }
+       catch (e) {
+           alert("File load failed:\n" + e);
+           setMessage("File load failed!");
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    async function doLoad() {
+       setMessage("Load file -- select a file or cancel!");
+       loading = true;
+       loadBtn.disabled = true;
+       try {
+           let files = await window.showOpenFilePicker();
+           if (files.length === 0) {
+              setMessage("File load canceled"); // (Can this happen?)
+              return;
+           }
+           let fileData = await files[0].getFile();
+           let text = await fileData.text();
+           if (newTM(text)) {
+              setMessage("Successfully loaded file " + fileData.name);
+           }
+       }
+       catch (e) {
+           if (e.name === "AbortError")
+              setMessage("File load canceled");
+           else {
+              alert("File load failed:\n" + e);
+              setMessage("File load failed!");
+           }
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    function newTM(text) {
+        let json, prog;
+        try {
+            json = JSON.parse(text);
+        }
+        catch (e) {
+            alert("File could not be loaded because the content\of the file is not legal JSON:\n" + e);
+            setMessage("File could not be loaded becasue of an error in the content of the file.");
+            return false;
+        }
+        try {
+            prog = new Program(json);
+        }
+        catch (e) {
+            alert("File could not be loaded because of an error\nin the Turing machine program:\n" + e);
+            setMessage("File could not be loaded becasue of an error in the content of the file.");
+            return false;
+        }
+        var oldVal = TM.toJSON();
+        install(prog);
+        addUndoItem("Load File", oldVal, text);
+        return true;
+    }
+    function setMessage(msg) {
+        message.setTemp(msg);
+    }
+}
+
 
 function init() {
     message = new Message("message");
@@ -2002,6 +2195,7 @@ function init() {
     document.getElementById("redo").onclick = doRedo;
     document.getElementById("undo").disabled = true;
     document.getElementById("redo").disabled = true;
+    setUpFileHandling();
     var elems = document.getElementsByTagName("select");
     for (i = 0; i < elems.length; i++)
         elems[i].onfocus = noinput;
@@ -2094,15 +2288,15 @@ function init() {
         <input type="text" id="tape-input" style="margin-left:30px" size="15" placeholder="(empty)">
         <span id="tape-input-message" style="color:red"></span>
     </p>
-    <p><button id="new-btn">New Turing Machine</button></p>
     <p></p><button id="delete-btn">Delete Selected Rule</button></p>
-    </div>
-    <div class="group">
     <p><button id="undo">Undo</button></p>
     <p><button id="redo">Redo</button></p>
     </div>
     <div class="group">
-        <p><button id="import-json-btn" title="Put up an input box into which you can copy-and-paste the JSON code for an example, or get the XML for the current example.">Show Import/Export</button></p>
+        <p><button id="new-btn">New Turing Machine</button></p>
+        <p><button id="saveBtn" title="Save JSON specification of the current Turing machine to a local file.">Save File</button>
+           <button id="loadBtn" title="Load Turing machine specification from a local file." style="margin-left:15px">Load file</button></p>
+        <p><button id="import-json-btn" title="Put up an input box into which you can copy-and-paste the JSON code for an example, or edit the JSON for the current machine.">Show Edit/Import/Export</button></p>
     </div>
 </div>
 </td><td>
@@ -2129,13 +2323,22 @@ into this text input box.  Click "Apply" to import the<br>
 example.  Click "Cancel" or press ESC to cancel. The <br>
 "Grab Current Example" button loads the JSON for the<br>
 example that is currently shown in the program; this<br>
-allows you to save the example (or even edit it by hand).</p>
+allows you to save the example or edit it by hand.</p>
 <p><button style="margin-left:50px" id="applyJSONimport">Apply</button>
 <button style="margin-left:20px" id="cancelJSONimport">Cancel</button>
 <button style="margin-left:20px" id="grabcurrent">Grab Current Example</button></p>
 <p><textarea rows="21" cols="55" id="JSONtextinput" placeholder="(JSON code goes here)"></textarea>
 </div>
 
+
+<div id="newTM">
+<h3>Enter Data for the New Machine</h3>
+<p><b>Name: </b><input type=text id='newTMname' size='20' maxlength='50' spellcheck='false'></p>
+<p><b>Description: </b><input type=text id='newTMdescription' size='60' maxlength='256' spellcheck='true'></p>
+<p><b>Maximum state number: </b><input type=text id='newTMmaxstate' size='2' maxlength='2' spellcheck='false'></p>
+<p><b>Allowed Symbols: </b><input type=text id='newTMsymbols' size='20' maxlength='30' spellcheck='false'></p>
+<p style="margin-left:50px"><button id="newTMcancel">Cancel</button><button id="newTMok" style="margin-left: 30px">Apply</button></p>
+</div>
 
 </body>
 </html>

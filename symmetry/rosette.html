@@ -2,8 +2,13 @@
 <!--
     Web page written by David Eck, http://math.hws.edu/eck/index.html
     You can do anything you like with this web page and with the code, but
-    if you use a substantial portion of it, you should include attribution.
-    (Added freehand drawing tool, June 2017.)
+    if you use a substantial portion of it, you should include attribution
+    in the source code.
+    
+    June 2017: Added freehand drawing tool.
+    
+    November 2023:  Added saving and loading local files. Also, the default
+        tool when the app is opened is now the Freehand tool.
 -->
 <html>
 <head>
@@ -42,6 +47,9 @@ body {
 input[name="rotations"] {
     margin-left: 20px;
 }
+label {
+   white-space: pre;
+}
 </style>
 <script type="text/javascript">
 
@@ -60,7 +68,7 @@ var rotationCount = 6;
 var reflection = false;
 
 var currentColor = "#000000";
-var currentTool = 0;
+var currentTool = FREEHAND_TOOL;
 var currentLineWidth = 3;
 var currentLineCap = "round";
 
@@ -223,6 +231,8 @@ function undo() {
             document.getElementById("undo").disabled = true;
         document.getElementById("redo").disabled = false;
     }
+    document.getElementById("clear").disabled = itemCount === 0;
+    document.getElementById("savebtn").disabled = itemCount === 0;
 }
 
 function redo() {
@@ -232,6 +242,8 @@ function redo() {
         if (itemCount == items.length)
             document.getElementById("redo").disabled = true;
         document.getElementById("undo").disabled = false;
+        document.getElementById("savebtn").disabled = false;
+        document.getElementById("clear").disabled = false;
     }
 }
 
@@ -251,6 +263,8 @@ function clearDrawing() {
     drawAll();
     document.getElementById("redo").disabled = true;
     document.getElementById("undo").disabled = clearedItems == null;
+    document.getElementById("savebtn").disabled = true;
+    document.getElementById("clear").disabled = true;
 }
 
 function selectLineWidth(lineWidth) {
@@ -292,10 +306,10 @@ function doReflect(reflect) {
 
 function installMouser(theCanvas) {
     function convertX(clientX) {
-        return clientX - theCanvas.getBoundingClientRect().left;
+        return Math.round(clientX - theCanvas.getBoundingClientRect().left);
     }
     function convertY(clientY) {
-        return clientY - theCanvas.getBoundingClientRect().top;
+        return Math.round(clientY - theCanvas.getBoundingClientRect().top);
     }
     function doMouseDrag(evt){
         if (dragItem == null)
@@ -339,6 +353,8 @@ function installMouser(theCanvas) {
             }
             document.getElementById("undo").disabled = false;
             document.getElementById("redo").disabled = true;
+            document.getElementById("clear").disabled = false;
+            document.getElementById("savebtn").disabled = false;
             clearedItems = null;
         }
         dragItem = null;
@@ -371,10 +387,10 @@ function installMouser(theCanvas) {
 
 function installTouchHandler(theCanvas) {
     function convertX(clientX) {
-        return clientX - theCanvas.getBoundingClientRect().left;
+        return Math.round(clientX - theCanvas.getBoundingClientRect().left);
     }
     function convertY(clientY) {
-        return clientY - theCanvas.getBoundingClientRect().top;
+        return Math.round(clientY - theCanvas.getBoundingClientRect().top);
     }
     function doTouchMove(evt){
         if (dragItem == null)
@@ -423,6 +439,8 @@ function installTouchHandler(theCanvas) {
             }
             document.getElementById("undo").disabled = false;
             document.getElementById("redo").disabled = true;
+            document.getElementById("clear").disabled = false;
+            document.getElementById("savebtn").disabled = false;
             clearedItems = null;
         }
         dragItem = null;
@@ -522,6 +540,231 @@ function addExtraFunctionsToGraphics(graphics) {
 }
 
 
+function setUpFileHandling() {  // File handling for saving and loading files; added November 2023.
+   var saveBtn = document.getElementById("savebtn");
+   var loadBtn = document.getElementById("loadbtn");
+   var loading = false;
+   if (window.showOpenFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.getFile) {
+        loadBtn.addEventListener("click",doLoad,false);
+    }
+    else {
+        let chooser = document.createElement("input");
+        chooser.type = "file";
+        chooser.id = "chooseloadfile";
+        chooser.style.display = "none";
+        document.getElementById("content").appendChild(chooser);
+        loadBtn.addEventListener("click",doBasicLoad,false);
+        loadBtn.title += "  This will look like uploading a file, but it will only be loaded locally.";
+    }
+    if (window.showSaveFilePicker && FileSystemFileHandle && FileSystemFileHandle.prototype.createWritable) {
+        saveBtn.addEventListener("click",doSave,false);  
+    }
+    else {
+        saveBtn.addEventListener("click",doBasicSave,false);
+        saveBtn.title += "  This will look like downloading a file named rosette_symmetry.json.";
+    }
+    function doBasicSave() {
+        if (loading || itemCount === 0)
+           return;
+        let content = getCurrentData();
+        if (content === null)
+            return;
+        let name = "rosette_symmetry.json";
+        let blob = new Blob([content], {type: 'text/json'});
+        let link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = name;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    async function doSave() {
+        if (loading || itemCount === 0)
+           return;
+        let content = getCurrentData();
+        if (content === null)
+            return;
+        let name = "rosette_symmetry.json";
+        let blob = new Blob([content], {type: 'text/json'});
+        let options = { suggestedName: name };
+        try {
+            let fileHandle = await window.showSaveFilePicker(options);
+            let stream = await fileHandle.createWritable();
+            await stream.write(blob);
+            await stream.close();
+            setMessage("File has been saved.");
+        }
+        catch (e) {
+            if (e.name !== "AbortError") {
+                setMessage("Error while attempting to save file:\n" + e);
+            }
+        }
+    }
+    function doBasicLoad() {
+        let chooser = document.getElementById("chooseloadfile");
+        chooser.value = "";
+        document.getElementById("chooseloadfile").addEventListener("change",handleBasicFileLoad,false);
+        chooser.click();
+    }
+    async function handleBasicFileLoad() {
+       loadBtn.disabled = true;
+       loading = true;
+       try {
+            let chooser = document.getElementById("chooseloadfile");
+            chooser.removeEventListener("change",handleBasicFileLoad,false);
+            if (chooser.files.length === 0)
+               return;
+            let text = await chooser.files[0].text();
+            newData(text);
+       }
+       catch (e) {
+           setMessage("File load failed:\n" + e);
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    async function doLoad() {
+       loading = true;
+       loadBtn.disabled = true;
+       try {
+           let files = await window.showOpenFilePicker();
+           if (files.length === 0) {
+              return;
+           }
+           let fileData = await files[0].getFile();
+           let text = await fileData.text();
+           newData(text);
+       }
+       catch (e) {
+           if (e.name !== "AbortError") {
+              setMessage("File load failed:\n" + e);
+           }
+       }
+       finally {
+           loadBtn.disabled = false;
+           loading = false;
+       }
+    }
+    const colorToName = { "#000000": "Black", "#FF0000": "Red", "#00BB00": "Green", "#0000FF": "Blue", "#00BBBB": "Cyan", "#DD00DD": "Magenta",
+                          "#FFFF00": "Yellow", "#DDDDDD": "Light Gray", "#999999": "Gray", "#555555": "Dark Gray" };
+    const nameToColor = { "Black": "#000000", "Red": "#FF0000", "Green": "#00BB00", "Blue": "#0000FF", "Cyan": "#00BBBB", "Magenta": "#DD00DD",
+                          "Yellow": "#FFFF00", "Light Gray": "#DDDDDD", "Gray": "#999999", "Dark Gray": "#555555" };
+    const intToTool = [ "Line", "Rectangle", "Oval", "Filled Rect", "Filled Oval", "Freehand" ];
+    const toolToInt = { "Line": 0, "Rectangle": 1, "Oval": 2, "Filled Rect": 3, "Filled Oval": 4, "Freehand": 5 };
+    function getCurrentData() {
+        let data = [];
+        data.push("{");
+        data.push('  "reflection": ' + document.getElementById("reflectionCB").checked + ',');
+        data.push('  "rotations": ' + rotationCount + ',');
+        data.push('  "items": [');
+        for (let i = 0; i < itemCount; i++ ) {
+            let item = items[i];
+            if (item.type === 3 || item.type === 4)
+                data.push(`    { "tool": "${intToTool[item.type]}", "color": "${colorToName[item.color]}",`);
+            else
+                data.push(`    { "tool": "${intToTool[item.type]}", "color": "${colorToName[item.color]}", "lineWidth": ${item.lineWidth},`);
+            if (item.type !== 5) {
+                data.push(`     "x1": ${item.x1}, "y1": ${item.y1}, "x2": ${item.x2}, "y2": ${item.y2} }` + (i === itemCount-1 ? "" : ","));
+            }
+            else {
+                data.push('      "points": [');
+                data.push("        " + item.lines[0].x1 + ", " + item.lines[0].y1 + ",");
+                for (let j = 0; j < item.lines.length; j++) {
+                    let line = item.lines[j];
+                    data.push("        " + line.x2 + ", " + line.y2 + (j === item.lines.length-1 ? "" : ","));
+                }
+                data.push('      ]');
+                data.push(i === itemCount-1 ? '    }' : '    },');
+            }
+        }
+        data.push('  ]');
+        data.push("}\n");
+        return data.join("\n");
+    }
+    function newData(text) {
+        let data;
+        try {
+            data = JSON.parse(text);
+        }
+        catch (e) {
+            console.log(e);
+            throw "File content does not have legal JSON syntax.";
+        }
+        let newReflection, newRotations, newItems;
+        if ( typeof data.reflection !== "boolean" )
+            throw "File data does not specify a legal true/false value for reflection.";
+        newReflection = data.reflection;
+        if ( typeof data.rotations !== "number" || data.rotations < 1 || data.rotations > 20 || data.rotations !== Math.round(data.rotations) )
+            throw "File does not specify a legal value for number of rotations.";
+        newRotations = data.rotations;
+        if (typeof data.items !== "object" || !data.items.length)
+            throw "File does not specify a set of items to draw.";
+        newItems = [];
+        data.items.forEach( item => {
+            let newItem = {};
+            if ( !(item.tool in toolToInt) )
+                throw "An item in the file does not specify a legal tool.";
+            newItem.type = toolToInt[item.tool];
+            if ( !(item.color in nameToColor) )
+                throw "An item in the file does not specify a legal color.";
+            newItem.color = nameToColor[item.color];
+            if (newItem.type === 3 || newItem.type === 4)
+                newItem.lineWidth = 1; // (not used for filled shapes)
+            else {
+                if ( typeof item.lineWidth !== "number" || item.lineWidth < 1 || item.lineWidth > 20)
+                    throw "An item in the file does not specify a legal lineWidth.";
+                newItem.lineWidth = item.lineWidth;
+            }
+            if (newItem.type == FREEHAND_TOOL || newItem.lineWidth >= 3) {
+                newItem.lineCap = "round";
+            }
+            else {
+                newItem.lineCap = "butt";
+            }
+            if (newItem.type !== 5) {
+                if (typeof item.x1 !== "number" || typeof item.x2 !== "number" || typeof item.y1 !== "number" || typeof item.y2 !== "number" )
+                    throw "An item in the file does not specify legal coordinates.";
+                newItem.x1 = item.x1;
+                newItem.y1 = item.y1;
+                newItem.x2 = item.x2;
+                newItem.y2 = item.y2;
+            }
+            else {
+                if (typeof item.points !== "object" || !item.points.length || item.points.length < 4)
+                    throw "A Freehand item in the file does not specify coordinates.";
+                item.points.forEach( num => {
+                    if (typeof num !== "number")
+                       throw "A Freehand item in the file has a non-numeric coordinate value.";
+                } );
+                newItem.lines = [];
+                for (let i = 0; i+3 < item.points.length-1; i += 2) {
+                    let line = { type: 0, color: newItem.color, lineWidth: newItem.lineWidth, lineCap: "round",
+                       x1: item.points[i], y1: item.points[i+1], x2: item.points[i+2], y2: item.points[i+3] };
+                    newItem.lines.push(line);
+                }
+            }
+            newItems.push(newItem);
+        });
+        reflection = newReflection;
+        document.getElementById("reflectionCB").checked = reflection;
+        rotationCount = newRotations;
+        document.getElementById("r" + rotationCount).checked = true;
+        items = newItems;
+        itemCount = items.length;
+        document.getElementById("undo").disabled = itemCount === 0;
+        document.getElementById("clear").disabled = itemCount === 0;
+        document.getElementById("savebtn").disabled = itemCount === 0;
+        document.getElementById("redo").disabled = true;
+        drawAll();
+    }
+    function setMessage(msg) {
+       alert(msg);
+    }
+}
+
+
+
 function init() {
 
     try {
@@ -546,9 +789,12 @@ function init() {
     document.getElementById("reflectionCB").checked = reflection;
     document.getElementById("undo").disabled = true;
     document.getElementById("redo").disabled = true;
+    document.getElementById("clear").disabled = true;
+    document.getElementById("savebtn").disabled = true;
     document.getElementById("showSlicesCB").checked = false;
     installMouser(canvas);
     installTouchHandler(canvas);
+    setUpFileHandling();
     drawAll();
     graphics.font = "14pt Serif";
     graphics.fillStyle = "black";
@@ -564,6 +810,7 @@ function init() {
 <h2 style="color:#900">Sorry, this page requires JavaScript</h2>
 </noscript>
 
+<div id="content">
 
 <h2>Rosette Symmetry<br><span style="font-size:60%">(Rotation and Dihedral Groups)</span></h2>
 
@@ -574,77 +821,79 @@ function init() {
 <table border=0 cellpadding=5 cellspacing=5 align=center>
 <tr>
 <td valign=top bgcolor="#DDDDDD">
-<p><input type="checkbox" id="reflectionCB" onchange="doReflect(this.checked)"> <label for="reflectionCB"><b>Reflection</b></label></p>
+<p><label><input type="checkbox" id="reflectionCB" onchange="doReflect(this.checked)"> <b>Reflection</b></label></p>
 <p>
 <b>Rotations:</b><br>
-<input type="radio" name="rotations" value="1" id="r1" onclick="selectRotationCount(this.value)"> <label for="r1">none</label><br>
-<input type="radio" name="rotations" value="2" id="r2" onclick="selectRotationCount(this.value)"> <label for="r2">2</label><br>
-<input type="radio" name="rotations" value="3" id="r3" onclick="selectRotationCount(this.value)"> <label for="r3">3</label><br>
-<input type="radio" name="rotations" value="4" id="r4" onclick="selectRotationCount(this.value)"> <label for="r4">4</label><br>
-<input type="radio" name="rotations" value="5" id="r5" onclick="selectRotationCount(this.value)"> <label for="r5">5</label><br>
-<input type="radio" name="rotations" value="6" id="r6" onclick="selectRotationCount(this.value)"> <label for="r6">6</label><br>
-<input type="radio" name="rotations" value="7" id="r7" onclick="selectRotationCount(this.value)"> <label for="r7">7</label><br>
-<input type="radio" name="rotations" value="8" id="r8" onclick="selectRotationCount(this.value)"> <label for="r8">8</label><br>
-<input type="radio" name="rotations" value="9" id="r9" onclick="selectRotationCount(this.value)"> <label for="r9">9</label><br>
-<input type="radio" name="rotations" value="10" id="r10" onclick="selectRotationCount(this.value)"> <label for="r10">10</label><br>
-<input type="radio" name="rotations" value="11" id="r11" onclick="selectRotationCount(this.value)"> <label for="r11">11</label><br>
-<input type="radio" name="rotations" value="12" id="r12" onclick="selectRotationCount(this.value)"> <label for="r12">12</label><br>
-<input type="radio" name="rotations" value="13" id="r13" onclick="selectRotationCount(this.value)"> <label for="r13">13</label><br>
-<input type="radio" name="rotations" value="14" id="r14" onclick="selectRotationCount(this.value)"> <label for="r14">14</label><br>
-<input type="radio" name="rotations" value="15" id="r15" onclick="selectRotationCount(this.value)"> <label for="r15">15</label><br>
-<input type="radio" name="rotations" value="16" id="r16" onclick="selectRotationCount(this.value)"> <label for="r16">16</label><br>
-<input type="radio" name="rotations" value="17" id="r17" onclick="selectRotationCount(this.value)"> <label for="r17">17</label><br>
-<input type="radio" name="rotations" value="18" id="r18" onclick="selectRotationCount(this.value)"> <label for="r18">18</label><br>
-<input type="radio" name="rotations" value="19" id="r19" onclick="selectRotationCount(this.value)"> <label for="r19">19</label><br>
-<input type="radio" name="rotations" value="20" id="r20" onclick="selectRotationCount(this.value)"> <label for="r20">20</label><br>
+<label><input type="radio" name="rotations" value="1" id="r1" onclick="selectRotationCount(this.value)">none</label><br>
+<label><input type="radio" name="rotations" value="2" id="r2" onclick="selectRotationCount(this.value)">2</label><br>
+<label><input type="radio" name="rotations" value="3" id="r3" onclick="selectRotationCount(this.value)">3</label><br>
+<label><input type="radio" name="rotations" value="4" id="r4" onclick="selectRotationCount(this.value)">4</label><br>
+<label><input type="radio" name="rotations" value="5" id="r5" onclick="selectRotationCount(this.value)">5</label><br>
+<label><input type="radio" name="rotations" value="6" id="r6" onclick="selectRotationCount(this.value)">6</label><br>
+<label><input type="radio" name="rotations" value="7" id="r7" onclick="selectRotationCount(this.value)">7</label><br>
+<label><input type="radio" name="rotations" value="8" id="r8" onclick="selectRotationCount(this.value)">8</label><br>
+<label><input type="radio" name="rotations" value="9" id="r9" onclick="selectRotationCount(this.value)">9</label><br>
+<label><input type="radio" name="rotations" value="10" id="r10" onclick="selectRotationCount(this.value)">10</label><br>
+<label><input type="radio" name="rotations" value="11" id="r11" onclick="selectRotationCount(this.value)">11</label><br>
+<label><input type="radio" name="rotations" value="12" id="r12" onclick="selectRotationCount(this.value)">12</label><br>
+<label><input type="radio" name="rotations" value="13" id="r13" onclick="selectRotationCount(this.value)">13</label><br>
+<label><input type="radio" name="rotations" value="14" id="r14" onclick="selectRotationCount(this.value)">14</label><br>
+<label><input type="radio" name="rotations" value="15" id="r15" onclick="selectRotationCount(this.value)">15</label><br>
+<label><input type="radio" name="rotations" value="16" id="r16" onclick="selectRotationCount(this.value)">16</label><br>
+<label><input type="radio" name="rotations" value="17" id="r17" onclick="selectRotationCount(this.value)">17</label><br>
+<label><input type="radio" name="rotations" value="18" id="r18" onclick="selectRotationCount(this.value)">18</label><br>
+<label><input type="radio" name="rotations" value="19" id="r19" onclick="selectRotationCount(this.value)">19</label><br>
+<label><input type="radio" name="rotations" value="20" id="r20" onclick="selectRotationCount(this.value)">20</label><br>
 </p>
 </td>
 <td valign=top>
 <canvas id="canvas" width=600 height=600>Sorry. This web page requires canvas graphics,<br>
 which your web browser does nto support.</p></canvas>
 <p align=center id="bb">
-<button id="undo" onclick="undo()">Undo</button>
-   <button id="redo" onclick="redo()">Redo</button>
-   <button id="clear" onclick="clearDrawing()">Clear</button>
-    <input type="checkbox" onchange="draw()" id="showSlicesCB" style="margin-left:10px"><label for="showSlicesCB" style="color:white">Show&nbsp;Slices</label>
-
+    <button id="undo" onclick="undo()" title="Remove the most recently drawn item.  Can also undo Clear if used immediately after clearing.">Undo</button>
+    <button id="redo" onclick="redo()" title="Restore the draw item that was removed most recently by Undo.">Redo</button>
+    <button id="clear" onclick="clearDrawing()" title="Clear the current image.  This can be undone if you click 'Undo' immediately after clearing.">Clear</button>
+    <input type="checkbox" onchange="draw()" id="showSlicesCB" style="margin-left:30px"><label for="showSlicesCB" style="color:white">Show&nbsp;Slices</label>
+    <button id="savebtn" style="margin-left:30px" title="Save to local file.  This will not save the image; it saves a specification of the image that can be reloaded into this web app.">Save</button>
+    <button id="loadbtn" title="Load image specification from a local file.  File load cannot be undone.">Load</button>
 </p>
 </td>
 <td valign=top bgcolor="#DDDDDD">
 <b>Tool:</b><br>
-<input type="radio" name="tool" value="0" id="t0" onclick="selectTool(this.value)"> <label for="t0">Line</label><br>
-<input type="radio" name="tool" value="1" id="t1" onclick="selectTool(this.value)"> <label for="t1">Rectangle</label><br>
-<input type="radio" name="tool" value="2" id="t2" onclick="selectTool(this.value)"> <label for="t2">Oval</label><br>
-<input type="radio" name="tool" value="3" id="t3" onclick="selectTool(this.value)"> <label for="t3">Filled Rect</label><br>
-<input type="radio" name="tool" value="4" id="t4" onclick="selectTool(this.value)"> <label for="t4">Filled Oval</label><br>
-<input type="radio" name="tool" value="5" id="t5" onclick="selectTool(this.value)"> <label for="t5">Freehand</label><br>
+<label><input type="radio" name="tool" value="0" id="t0" onclick="selectTool(this.value)">Line</label><br>
+<label><input type="radio" name="tool" value="1" id="t1" onclick="selectTool(this.value)">Rectangle</label><br>
+<label><input type="radio" name="tool" value="2" id="t2" onclick="selectTool(this.value)">Oval</label><br>
+<label><input type="radio" name="tool" value="3" id="t3" onclick="selectTool(this.value)">Filled Rect</label><br>
+<label><input type="radio" name="tool" value="4" id="t4" onclick="selectTool(this.value)">Filled Oval</label><br>
+<label><input type="radio" name="tool" value="5" id="t5" onclick="selectTool(this.value)">Freehand</label><br>
 </p>
 <p>
 <b>Line Width:</b><br>
-<input type="radio" name="linewidth" value="1" id="lw1" onclick="selectLineWidth(this.value)"> <label for="lw1">1</label><br>
-<input type="radio" name="linewidth" value="2" id="lw2" onclick="selectLineWidth(this.value)"> <label for="lw2">2</label><br>
-<input type="radio" name="linewidth" value="3" id="lw3" onclick="selectLineWidth(this.value)"> <label for="lw3">3</label><br>
-<input type="radio" name="linewidth" value="4" id="lw4" onclick="selectLineWidth(this.value)"> <label for="lw4">4</label><br>
-<input type="radio" name="linewidth" value="5" id="lw5" onclick="selectLineWidth(this.value)"> <label for="lw5">5</label><br>
-<input type="radio" name="linewidth" value="10" id="lw10" onclick="selectLineWidth(this.value)"> <label for="lw10">10</label><br>
-<input type="radio" name="linewidth" value="20" id="lw20" onclick="selectLineWidth(this.value)"> <label for="lw20">20</label><br>
+<label><input type="radio" name="linewidth" value="1" id="lw1" onclick="selectLineWidth(this.value)">1</label><br>
+<label><input type="radio" name="linewidth" value="2" id="lw2" onclick="selectLineWidth(this.value)">2</label><br>
+<label><input type="radio" name="linewidth" value="3" id="lw3" onclick="selectLineWidth(this.value)">3</label><br>
+<label><input type="radio" name="linewidth" value="4" id="lw4" onclick="selectLineWidth(this.value)">4</label><br>
+<label><input type="radio" name="linewidth" value="5" id="lw5" onclick="selectLineWidth(this.value)">5</label><br>
+<label><input type="radio" name="linewidth" value="10" id="lw10" onclick="selectLineWidth(this.value)">10</label><br>
+<label><input type="radio" name="linewidth" value="20" id="lw20" onclick="selectLineWidth(this.value)">20</label><br>
 </p>
 <p>
 <b>Color:</b><br>
-<input type="radio" name="color" value="0" id="c0" onclick="selectColor(this.value)"> <label for="c0">Black</label><br>
-<input type="radio" name="color" value="1" id="c1" onclick="selectColor(this.value)"> <label for="c1">Red</label><br>
-<input type="radio" name="color" value="2" id="c2" onclick="selectColor(this.value)"> <label for="c2">Green</label><br>
-<input type="radio" name="color" value="3" id="c3" onclick="selectColor(this.value)"> <label for="c3">Blue</label><br>
-<input type="radio" name="color" value="4" id="c4" onclick="selectColor(this.value)"> <label for="c4">Cyan</label><br>
-<input type="radio" name="color" value="5" id="c5" onclick="selectColor(this.value)"> <label for="c5">Magenta</label><br>
-<input type="radio" name="color" value="6" id="c6" onclick="selectColor(this.value)"> <label for="c6">Yellow</label><br>
-<input type="radio" name="color" value="7" id="c7" onclick="selectColor(this.value)"> <label for="c7">Light Gray</label><br>
-<input type="radio" name="color" value="8" id="c8" onclick="selectColor(this.value)"> <label for="c8">Gray</label><br>
-<input type="radio" name="color" value="9" id="c9" onclick="selectColor(this.value)"> <label for="c9">Dark Gray</label><br>
+<label><input type="radio" name="color" value="0" id="c0" onclick="selectColor(this.value)">Black</label><br>
+<label><input type="radio" name="color" value="1" id="c1" onclick="selectColor(this.value)">Red</label><br>
+<label><input type="radio" name="color" value="2" id="c2" onclick="selectColor(this.value)">Green</label><br>
+<label><input type="radio" name="color" value="3" id="c3" onclick="selectColor(this.value)">Blue</label><br>
+<label><input type="radio" name="color" value="4" id="c4" onclick="selectColor(this.value)">Cyan</label><br>
+<label><input type="radio" name="color" value="5" id="c5" onclick="selectColor(this.value)">Magenta</label><br>
+<label><input type="radio" name="color" value="6" id="c6" onclick="selectColor(this.value)">Yellow</label><br>
+<label><input type="radio" name="color" value="7" id="c7" onclick="selectColor(this.value)">Light Gray</label><br>
+<label><input type="radio" name="color" value="8" id="c8" onclick="selectColor(this.value)">Gray</label><br>
+<label><input type="radio" name="color" value="9" id="c9" onclick="selectColor(this.value)">Dark Gray</label><br>
 </p>
 </td>
 </tr>
 </table>
 
+</div>
 </body>
 </html>
