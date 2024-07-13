@@ -3213,7 +3213,7 @@ function setUpFileHandling() {  // File handling for saving and loading files; a
 
 
 function setUpProgramMenu() {  // Big revisions to file menu andling, November 2023
-   var search = location.search;
+   var search = decodeURIComponent(location.search);
    if (search === "?files=none" || search === "?files=") {
       programsToLoad = null;
       createMenu();
