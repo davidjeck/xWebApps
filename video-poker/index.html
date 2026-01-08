@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Video Poker</title>
+<style>
+    body, html {
+        background-color: #FFEECC;
+        margin: 0;
+        padding: 0;
+    }
+    #cards {
+        width: 512px;
+        height: 148px;
+        padding: 0 0 0 10px;
+        margin: 10px auto;
+        border: 2px solid #008800;
+        background-color: #CCFFCC;
+    }
+    .cardimg {
+        width: 100%;
+        height: 100%;
+    }
+    .cardholder {
+        margin: 10px 10px 10px 0;
+        padding: 0;
+        border: 1px solid black;
+        width: 90px;
+        height: 126px;
+        display: inline-block;
+    }
+    h2, h3, p {
+        color: #880000;
+        text-align: center;
+    }
+    button {
+       font-size: 120%;
+    }
+    .info {
+       font-size: 120%;
+    }
+    #money {
+       margin-right: 60px
+    }
+    #play, #payouts {
+       margin: 10px auto;
+    }
+    @media (width <= 560px) {
+       #cards {
+          margin: 0 auto;
+          padding: 0;
+          border: 1px solid #008800;
+          width: 94%;
+          height: auto;
+          aspect-ratio: 512 / 142; 
+          display: flex;
+       }
+       .cardholder {
+          margin: 7px 7px 7px 0;
+          padding: 0;
+          width: 18%;
+          height: auto;
+          aspect-ratio: 90 / 126;
+          flex: 1;
+       }
+       .cardholder:first-child {
+          margin-left: 7px;
+       }
+       .info {
+          display: block;
+          margin: 5px auto;
+       }
+       #money {
+          margin-right: 0;
+       }
+    }
+    @media (width <= 400px) {
+       .cardholder {
+          margin: 3px 3px 3px 0;
+       }
+       .cardholder:first-child {
+          margin-left: 3px;
+       }
+    }
+    @media (width <= 350px) {
+       .cardholder {
+          margin: 3px 3px 3px 0;
+          overflow: hidden;
+       }
+       .cardimg {
+          width: 180%;
+          height: 180%;
+       }
+    }
+</style>
+
+<script src="Cards.js"></script>
+
+<script>
+    
+    var hand;  // An array with 5 (undefined) elements.    
+    var faceUp;  // An array of 5 booleans.  faceUp[i] tells whether card #i is face up
+    
+    var deck;  // The deck of cards.  A new Deck will be created each time deal() is called.
+    var bet;   // Amount of the bet.
+    var money; // Amount of money the user has left.
+    
+    var discardingCards = false;  // Set to true during discard part of game, used in
+                                  // doClickOnCard() so that cards can only be flipped
+                                  // in that part of the game.
+    
+    
+    function initialize() {
+             // Create a hand of 5 cards, all face up, and showing a Royal Flush.
+             // Install an on-click listener for each card.  Also add a property
+             // named "index" to each image element to tell which card number
+             // in the had corresponds to that image.
+        hand = [];
+        faceUp = [];
+        var unusedCard = new Card();  // This is just for getting the face down image
+        for (var i = 0; i < 5; i = i + 1) {
+            faceUp[i] = true;
+            var image = document.getElementById( "c" + i );
+            image.src = unusedCard.getFaceDownImageURL();
+            image.onmousedown = doClickOnCard;
+            image.index = i;
+        }
+        document.getElementById("replaceBtn").disabled = true;
+        document.getElementById("dealBtn").disabled = false;
+        document.getElementById("bet").disabled = false;
+        document.getElementById("bet").value = 5;
+        money = 25;
+    }
+        
+    function doClickOnCard(evt) {
+           // When a card is clicked, if it is face up it is turned face down,
+           // and if it is face down it is turned face up.
+        evt.preventDefault();
+        if (discardingCards == false) {
+            return;  // Can't flip cards now.
+        }
+        var image = evt.target;  // This is the image element that was clicked.
+        var i = image.index;  // tells which location in the hand corresponds to the clicked card.
+        if ( faceUp[i] == true) {
+            faceUp[i] = false;
+            image.src = hand[i].getFaceDownImageURL();
+        }
+        else {
+            faceUp[i] = true;
+            image.src = hand[i].getImageURL();
+        }
+    }
+ 
+    function deal() {
+        discardingCards = true;
+        bet = Number(document.getElementById("bet").value);
+        if (bet > money) {
+            bet = money;
+            document.getElementById("bet").value = bet;
+        }
+        money = money - bet;
+        document.getElementById("bet").disabled = true;
+        document.getElementById("money").innerHTML = "$" + money;
+        document.getElementById("replaceBtn").disabled = false;
+        document.getElementById("dealBtn").disabled = true;
+        document.getElementById("head").innerHTML = "Click Cards to Discard,<br>then Click \"Done\"";
+        deck = new Deck();
+        for (var i = 0; i < 5; i++) {
+            hand[i] = deck.nextCard();
+            faceUp[i] = true;
+            document.getElementById("c" + i).src = hand[i].getImageURL();
+        }
+        document.getElementById("result").innerHTML = "&nbsp;";
+    }
+    
+    function replaceDiscards() {
+        discardingCards = false;
+        document.getElementById("replaceBtn").disabled = true;
+        document.getElementById("dealBtn").disabled = false;
+        document.getElementById("head").innerHTML = "Click 'Deal' For a New Hand";
+        for (var i = 0; i < 5; i++) {
+            if (faceUp[i] == false) {
+                hand[i] = deck.nextCard();
+                faceUp[i] = true;
+                document.getElementById("c" + i).src = hand[i].getImageURL();
+            }
+        }
+        var rank = computeRank(hand);
+        var payout = 0;
+        if (rank == "Royal flush") {
+            payout = 250;
+        }
+        else if (rank == "Straight flush") {
+            payout = 50;
+        }
+        else if (rank == "Four of a kind") {
+            payout = 25;
+        }
+        else if (rank == "Full house") {
+            payout = 9;
+        }
+        else if (rank == "Flush") {
+            payout = 6;
+        }
+        else if (rank == "Straight") {
+            payout = 4;
+        }
+        else if (rank == "Three of a kind") {
+            payout = 3;
+        }
+        else if (rank == "Two pairs") {
+            payout = 2;
+        }
+        else if (rank == "High pair") {
+            payout = 1;
+        }
+        else {
+            payout = 0;
+        }
+        var result;
+        if (payout == 0 && rank == "No hand") {
+            result = "Sorry, you lose your bet.  You have No Hand.";
+        }
+        else if (payout == 0) {
+            result = "Sorry, you lose your bet.  You have a Low Pair.";
+        }
+        else if (payout == 2 || payout == 3) {
+            result = "Your have " + rank + ".  You receive $" + (payout*bet) + "!";
+            money = money + payout*bet;
+        }
+        else {
+            result = "Your have a " + rank + ".  You receive $" + (payout*bet) + "!";
+            money = money + payout*bet;
+        }
+        document.getElementById("result").innerHTML = result;        
+        document.getElementById("money").innerHTML = "$" + money;
+        if (money == 0) {
+            document.getElementById("head").innerHTML = "YOU HAVE LOST ALL OF YOUR MONEY!  SORRY!";
+            document.getElementById("replaceBtn").disabled = true;
+            document.getElementById("dealBtn").disabled = true;
+            document.getElementById("bet").disabled = true;
+        }
+        else {
+            document.getElementById("head").innerHTML = "Choose Your Bet,<br>then Click Deal";
+            document.getElementById("replaceBtn").disabled = true;
+            document.getElementById("dealBtn").disabled = false;
+            document.getElementById("bet").disabled = false;
+        }
+    }
+    
+    window.onload=initialize
+</script>
+
+</head>
+
+<body>
+
+<h2>Video Poker</h2>
+
+<div id="play">
+
+<div id="cards">
+<div class="cardholder"><img id="c0" class="cardimg"></div><div class="cardholder"><img id="c1" class="cardimg"></div><div class="cardholder"><img id="c2" class="cardimg"></div><div class="cardholder"><img id="c3" class="cardimg"></div><div class="cardholder"><img id="c4" class="cardimg"></div>
+</div>
+
+<p>
+    <span class="info">You have <span id="money" style="color:green;">$25</span></span>
+    <span class="info">Your Bet: <select id="bet" style="font-size: 110%">
+        <option value="1">$1</option>
+        <option value="2">$2</option>
+        <option value="3">$3</option>
+        <option value="4">$4</option>
+        <option value="5">$5</option>
+        <option value="6">$6</option>
+        <option value="7">$7</option>
+        <option value="8">$8</option>
+        <option value="9">$9</option>
+        <option value="10">$10</option>
+    </select></span>
+</p>
+
+<h3 id="head">Choose your Bet,<br>then Click "Deal".</h3>
+    
+<p>
+    <button onclick="deal()" id="dealBtn">Deal</button>
+    <button onclick="replaceDiscards()" id="replaceBtn" style="margin-left:20px">Done</button>
+</p>
+
+<p id="result" style="font-weight:bold">&nbsp;</p>
+
+</div>
+
+<table id="payouts" bgcolor="white" cellspacing=0 cellpadding=3 border=2>
+<tr><th colspan=2 align=center bgcolor="black" style="color:white"><b>PAYOUTS</b></th></tr>
+<tr align=center bgcolor="black" style="color:white"><th><b>If Your Hand Is</b></th><th><b>Payout is Bet Times</b></th></tr>
+<tr align=center><td>Royal flush</td><td>250</td></tr>
+<tr align=center><td>Straight flush</td><td>50</td></tr>
+<tr align=center><td>Four of a kind</td><td>25</td></tr>
+<tr align=center><td>Full house</td><td>9</td></tr>
+<tr align=center><td>Flush</td><td>6</td></tr>
+<tr align=center><td>Straight</td><td>4</td></tr>
+<tr align=center><td>Three of a kind</td><td>3</td></tr>
+<tr align=center><td>Two pairs</td><td>2</td></tr>
+<tr align=center><td>High pair (Jacks or higher)</td><td>1</td></tr>
+<tr align=center><td>Low pair (Tens or lower)</td><td>0</td></tr>
+<tr align=center><td>No hand</td><td>0</td></tr>
+</table>
+
+</body>
+</html>

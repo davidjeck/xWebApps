@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Video Poker</title>
+<style>
+    body, html {
+        background-color: #FFE4C4;
+        margin: 0;
+        padding: 0;
+    }
+   #head {
+      font-size: 150%; 
+      font-weight: bold;
+   }
+   #head, #inst {
+      margin-left: 10px;
+      color: #660000;
+   }
+   canvas {
+      display: block;
+   }
+   #boardholder, #payouts, #score {
+      display: inline-block;
+      vertical-align: top;
+      margin: 10px;
+   }
+   #theboard {
+      float: left;
+   }
+   #cardholder {
+      display: inline-block;
+   }
+   #payouts {
+      font-size: 90%;
+   }
+   .scoreholder {
+      margin: 0 0 3px 0;
+   }
+   #score {
+      color: #660000;
+      font-size: 90%;
+      font-weight: bold;
+   }
+   #scorehead {
+      margin: 0 0 10px 0;
+      font-size: 130%;
+   }
+   #totalscore {
+      margin: 10px 0 0 0;
+      font-weight: bold;
+   }
+</style>
+
+<script src="PokerCards.js"></script>
+
+<script>
+
+// A poker solitaire game.  Goal: try to get a good poker hand in each row, column, and diagonal.
+
+let board; // the canvas that represents the board
+let g;  // graphics context for the board canvas
+
+let ranker;  // a PokerRank object, used for scoring hands
+
+let cardwidth, cardheight; // size at which a card is drawn
+let cardgap; // spacing between cards on the board
+
+let deck = [];  // a deck of 52 cards
+let cards = []; // a 5x5 array containing the cards on the board, with null for empty spaces
+let nextcard;   // index of next card to be played in deck array
+
+let scores; // object holding scores for each row, column, and diagonal.
+
+let gameover;   // set to true between games
+
+function startGame() {
+   gameover = false;
+   for (let i = 0; i < 25; i++) {  // shuffle randome cards into the first 25 spaces in deck
+       let r = Math.floor(Math.random() * 52);
+       let temp = deck[i];
+       deck[i] = deck[r];
+       deck[r] = temp;
+   }
+   for (let r = 0; r< 5; r++) {
+      for (let c = 0; c < 5; c++) {
+         cards[r][c] = null;
+      }
+   }
+   nextcard = 0;
+   document.getElementById("inst").innerHTML = "Click or tap the board to place Next Card";
+   for (let r = 1; r <= 5; r++) {
+      document.getElementById("r" + r + "-value").innerHTML = "No Cards in Hand (0 points)";
+   }
+   for (let c = 1; c <= 5; c++) {
+      document.getElementById("c" + c + "-value").innerHTML = "No Cards in Hand (0 points)";
+   }
+   scores = { "r1": 0, "r2": 0, "r3": 0, "r4": 0, "r5": 0, 
+                    "c1": 0, "c2": 0, "c3": 0, "c4": 0, "c5": 0, 
+                    "d1": 0, "d2": 0 };
+   document.getElementById("d1-value").innerHTML = "No Cards in Hand (0 points)";
+   document.getElementById("d2-value").innerHTML = "No Cards in Hand (0 points)";
+   document.getElementById("totalscore").innerHTML = "Total Score: 0 points";
+}
+
+function endGame() {
+   gameover = true;
+   document.getElementById("inst").innerHTML = "Click or tap board to start new game";
+}
+
+function drawCard(card,x,y) {
+    if (card.image === null) {
+        card.image = new Image(90,126);
+        card.image.onerror = () => { card.image = "failed"; drawCard(card,x,y); };
+        card.image.onload = () => { drawCard(card,x,y); };
+        let suit = card.getSuitAsString().charAt(0);
+        let value = card.getValue() == 10 ? "10" : card.getValueAsString().charAt(0);
+        card.image.src = "cards/" + suit + value + ".jpg";
+    }
+    else if (card.image === "failed") {
+        g.fillStyle = "#660000";
+        g.fillText(card.getValueAsString(),x+5,y+15);
+        g.fillText("of",x+5,y+30);
+        g.fillText(card.getSuitAsString(),x+5,y+45);
+    }
+    else if (cardwidth >= 60) {
+        g.drawImage(card.image, x, y, cardwidth, cardheight);
+    }
+    else {
+        let scale = cardwidth / 60;
+        g.drawImage(card.image, 0, 0, Math.round(90*scale), Math.round(126*scale), x, y, cardwidth, cardheight);
+    }
+}
+
+function drawBoard() {
+   let boardright = 6*cardgap + 5*cardwidth;
+   g.fillStyle = "#FFE4C4";
+   g.fillRect(boardright,0,board.width-boardright,board.height);
+   g.fillStyle = "green";
+   g.fillRect(0,0,boardright,board.height);
+   g.fillRect(boardright,0,2,board.height);
+   g.strokeStyle = "#660000";
+   g.strokeRect(1,1,boardright-1,board.height-1);
+   g.fillStyle = "#FFF8D8";
+   for (let r = 0; r < 5; r++) {
+      let y = cardgap + r*(cardgap+cardheight);
+      for (let c = 0; c < 5; c++) {
+         let x = cardgap+ c*(cardgap+cardwidth);
+         if (cards[r][c] === null) {
+             g.fillRect(x,y,cardwidth,cardheight);
+         }
+         else {
+             drawCard(cards[r][c],x,y);
+         }
+         g.strokeRect(x-1,y-1,cardwidth+2,cardheight+2);
+      }
+   }
+   let pos = boardright+cardgap;
+   if (gameover) {
+       g.fillStyle = "#660000";
+       g.fillRect(pos,cardgap,cardwidth,cardheight);
+   }
+   else {
+       drawCard(deck[nextcard],pos,cardgap);
+   }
+   g.strokeRect(pos-1,cardgap-1,cardwidth+2,cardheight+2);
+   g.font = "bold 14px serif";
+   g.fillStyle = "#660000";
+   if (cardwidth < 70) {
+       g.fillText("Next",boardright+cardgap,cardheight+cardgap+20);
+       g.fillText("Card",boardright+cardgap,cardheight+cardgap+40);
+   }
+   else {
+       g.fillText("Next Card",boardright+cardgap,cardheight+cardgap+20);      
+   }
+}
+
+function setSizes() {
+   let headspace = document.getElementById("header").getBoundingClientRect().bottom;
+   let widthAvail = window.innerWidth - 30;
+   let heightAvail = window.innerHeight - 30 - headspace;
+   let boardwidth, boardheight;
+   cardgap = 20;
+   cardwidth = 90;
+   cardheight = 126;
+   if (widthAvail < 700 || heightAvail < 750) {
+      let shrink = Math.min(widthAvail/700, heightAvail/750);
+      widthAvail = Math.round(widthAvail*shrink);
+      heightAvail = Math.round(heightAvail*shrink);
+      cardwidth = Math.round(cardwidth*shrink);
+      cardheight = Math.round(cardheight*shrink);
+      cardgap = Math.round(cardgap*shrink);
+   }
+   board.width = 6*cardwidth + 8*cardgap;
+   board.height = 5*cardheight + 6*cardgap;
+   drawBoard();
+}
+
+function updateScores(r,c) {
+   function addCards(...cards) {
+       ranker.clear();
+       cards.forEach( c => { if (c != null) ranker.add(c); } );
+   }
+   function setScore(id) {
+/*
+let cards = ranker.getCards();
+console.log("-------", id, "---------");
+let rank = ranker.getRank();
+console.log("hand type", rank >> 20, ranker.getDescription(), ranker.getLongDescription());
+for (let i = 0; i< cards.length; i++) {
+   let c = cards[i];
+   console.log(c.toString(), rank >> (4*(4-i)) & 15);
+}
+*/
+       let score = 0;
+       let hand = "No Hand";
+       switch (ranker.getHandType()) {
+          case PokerRank.PAIR: score = 1; hand = "Pair"; break;
+          case PokerRank.TWO_PAIR: score = 2; hand = "Two Pairs"; break;
+          case PokerRank.TRIPLE: score = 3; hand = "Three of a Kind"; break;
+          case PokerRank.STRAIGHT: score = 4; hand = "Straight"; break;
+          case PokerRank.FLUSH: score = 6; hand = "Flush"; break;
+          case PokerRank.FULL_HOUSE: score = 9; hand = "Full House"; break;
+          case PokerRank.FOUR_OF_A_KIND: score = 25; hand = "Four of a Kind"; break;
+          case PokerRank.STRAIGHT_FLUSH: score = 50; hand = "Straight Flush"; break;
+          case PokerRank.ROYAL_FLUSH: score = 250; hand = "Royal Flush"; break;
+       }
+       scores[id] = score;
+       document.getElementById(id + "-value").innerHTML = hand + " (" + score + " points)";
+   }
+   addCards( cards[r][0], cards[r][1], cards[r][2], cards[r][3], cards[r][4] );
+   setScore("r" + (r+1));
+   addCards( cards[0][c], cards[1][c], cards[2][c], cards[3][c], cards[4][c] );
+   setScore("c" + (c+1));
+   if (r === c) {
+      addCards( cards[0][0], cards[1][1], cards[2][2], cards[3][3], cards[4][4] );
+      setScore("d1");
+   }
+   if (r + c === 4) {
+      addCards( cards[0][4], cards[1][3], cards[2][2], cards[3][1], cards[4][0] );
+      setScore("d2");
+   }
+   let totalscore = scores.d1 + scores.d2;
+   for (let i = 1; i <= 5; i++) {
+      totalscore += scores['r' + i] + scores['c' + i];
+   }
+   document.getElementById("totalscore").innerHTML = "Total Score: " + totalscore + " points";
+   document.getElementById("inst").innerHTML = "Score is " + totalscore + "&nbsp;&nbsp;(see details below)";
+} 
+
+function doMouseDown(evt) {
+    if (gameover) {
+        startGame();
+        drawBoard();
+        return;
+    }
+    let boardrect = board.getBoundingClientRect();
+    let x = evt.clientX - boardrect.left - cardgap;
+    let y = evt.clientY - boardrect.top - cardgap;
+    let row = Math.floor( y / (cardheight + cardgap) );
+    let col = Math.floor( x / (cardwidth + cardgap) );
+    if (row < 0 || row >= 5 || col < 0 || col >= 5 || cards[row][col] != null) {
+       return;
+    }
+    cards[row][col] = deck[nextcard];
+    drawCard(cards[row][col], cardgap + col*(cardgap+cardwidth), cardgap + row*(cardgap+cardheight));
+    nextcard++;
+    updateScores(row,col);
+    if (nextcard === 25) {
+        endGame();
+    }
+    let pos = 7*cardgap + 5*cardwidth;
+    if (gameover) {
+        g.fillStyle = "#660000";
+        g.fillRect(pos,cardgap,cardwidth,cardheight);
+    }
+    else {
+        drawCard(deck[nextcard],pos,cardgap);
+    }
+}
+
+function init() {
+    board = document.getElementById("board");
+    g = board.getContext("2d", { alpha: false });
+    g.lineWidth = 2;
+    g.font = "bold 12px serif";
+    board.addEventListener("mousedown",doMouseDown);
+    for (let i = 0; i < 5; i++) {
+       cards.push([null,null,null,null,null]);
+    }
+    for (let s = 0; s < 5; s++) {
+        for (let v = 2; v <= 14; v++) {
+           let c = new PokerCard(v,s);
+           c.image = null;
+           deck.push(c);
+        }
+    }
+    ranker = new PokerRank();
+    startGame();
+    setSizes();
+    window.onresize = setSizes;
+}
+
+window.onload = init;
+
+</script>
+</head>
+<body>
+
+<noscript><h1>Sorry, this page requires JavaScript,<br>so it won't function in your browser.</h1></noscript>
+
+<p id="header"><span id="head">Poker Solitaire</span><br><span id="inst">Click or tap the board to place Next Card</span></p>
+
+<div id="theboard">
+    <div id="boardholder">
+       <canvas id="board" width="700" height="750"></canvas>
+    </div>
+</div>
+
+<div id="score">
+   <p id="scorehead">Scoring:</p>
+   <p>Try to get a good poker hand in<br>each row, column, and diagonal.</p>
+   <p id="r1" class="scoreholder">Row 1: <span id="r1-value">No Cards in Hand (0 points)</span></p>
+   <p id="r2" class="scoreholder">Row 2: <span id="r2-value">No Cards in Hand (0 points)</span></p>
+   <p id="r3" class="scoreholder">Row 3: <span id="r3-value">No Cards in Hand (0 points)</span></p>
+   <p id="r4" class="scoreholder">Row 4: <span id="r4-value">No Cards in Hand (0 points)</span></p>
+   <p id="r5" class="scoreholder">Row 5: <span id="r5-value">No Cards in Hand (0 points)</span></p>
+   <p id="c1" class="scoreholder">Column 1: <span id="c1-value">No Cards in Hand (0 points)</span></p>
+   <p id="c2" class="scoreholder">Column 2: <span id="c2-value">No Cards in Hand (0 points)</span></p>
+   <p id="c3" class="scoreholder">Column 3: <span id="c3-value">No Cards in Hand (0 points)</span></p>
+   <p id="c4" class="scoreholder">Column 4: <span id="c4-value">No Cards in Hand (0 points)</span></p>
+   <p id="c5" class="scoreholder">Column 5: <span id="c5-value">No Cards in Hand (0 points)</span></p>
+   <p id="d1" class="scoreholder">Diagonal 1: <span id="d1-value">No Cards in Hand (0 points)</span></p>
+   <p id="d2" class="scoreholder">Diagonal 2: <span id="d2-value">No Cards in Hand (0 points)</span></p>
+   <p id="totalscore">Total Score: 0 points</p>
+</div>
+
+<div id="payouts">
+    <table id="payouts" bgcolor="white" cellspacing=0 cellpadding=3 border=2>
+    <tr><th colspan=2 align=center bgcolor="#880000" style="color:white"><b>SCORES</b></th></tr>
+    <tr align=center bgcolor="#880000" style="color:white"><th><b>If a Hand Is</b></th><th><b>Score is</b></th></tr>
+    <tr align=center><td>Royal flush</td><td>250</td></tr>
+    <tr align=center><td>Straight flush</td><td>50</td></tr>
+    <tr align=center><td>Four of a kind</td><td>25</td></tr>
+    <tr align=center><td>Full house</td><td>9</td></tr>
+    <tr align=center><td>Flush</td><td>6</td></tr>
+    <tr align=center><td>Straight</td><td>4</td></tr>
+    <tr align=center><td>Three of a kind</td><td>3</td></tr>
+    <tr align=center><td>Two pairs</td><td>2</td></tr>
+    <tr align=center><td>Pair</td><td>1</td></tr>
+    <tr align=center><td>No hand</td><td>0</td></tr>
+    </table>
+</div>
+
+
+
+</body>
+</html>
+
